@@ -1,0 +1,7 @@
+google-cloud-bigquery
+igraph
+leidenalg
+numpy
+pandas
+plotly
+scipy

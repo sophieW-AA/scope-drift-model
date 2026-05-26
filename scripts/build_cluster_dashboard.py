@@ -26,6 +26,7 @@ import json
 import random
 import logging
 from collections import Counter
+from pathlib import Path
 
 import pandas as pd
 import igraph as ig
@@ -57,7 +58,7 @@ MIN_COMMUNITY_SIZE = {"macro": 300, "meso": 50, "micro": 50}
 # Max communities shown per level
 MAX_COMMUNITIES = {"macro": 25, "meso": 80, "micro": 80}
 
-OUTPUT_PATH = "clusters.html"
+OUTPUT_PATH = Path(__file__).resolve().parent.parent / "output" / "clusters.html"
 
 random.seed(42)
 logging.basicConfig(

@@ -23,6 +23,7 @@ import json
 import random
 import logging
 from collections import Counter, defaultdict
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -45,7 +46,7 @@ YEAR_END = 2025  # latest year
 BASELINE_YEARS = [2018, 2019, 2020]  # years that define "normal" scope
 TARGET_YEARS = [2021, 2022, 2023, 2024, 2025]  # years to measure drift
 
-OUTPUT_PATH = "2026\Scope drift oksana\claude\drift_dashboard.html"
+OUTPUT_PATH = Path(__file__).resolve().parent.parent / "output" / "drift_dashboard.html"
 
 random.seed(42)
 logging.basicConfig(

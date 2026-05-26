@@ -86,7 +86,7 @@ def _bootstrap_env_from_dotenv() -> None:
         pass
     candidates: list[Path] = []
     here = Path(__file__).resolve()
-    for i in range(8):
+    for i in range(min(8, len(here.parents))):
         candidates.append(here.parents[i] / ".env")
     candidates.append(Path.cwd() / ".env")
     seen = set()
@@ -143,7 +143,7 @@ MIN_COMMUNITY_SIZES = {
     "micro": max(25, MIN_COMMUNITY_SIZE // 4),
 }
 
-OUTPUT_DIR = Path(__file__).resolve().parent / "output"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 random.seed(42)
 
 logging.basicConfig(

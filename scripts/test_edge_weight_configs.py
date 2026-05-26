@@ -20,14 +20,16 @@ Outputs:
 """
 
 import os
+import sys
 import json
 import logging
 from pathlib import Path
 from collections import Counter, defaultdict
 from copy import deepcopy
 
-# Import functions from the main script
-from scope_drift_airak_global_1 import (
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from scope_drift import (
     get_top_frontiers_journals,
     get_frontiers_publication_ids,
     get_full_network_edges,
@@ -60,7 +62,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path(__file__).resolve().parent / "output"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Configuration definitions
