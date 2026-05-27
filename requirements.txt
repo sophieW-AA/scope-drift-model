@@ -4,4 +4,5 @@ leidenalg
 numpy
 pandas
 plotly
+scikit-learn
 scipy
