@@ -52,9 +52,18 @@ import pandas as pd
 from google.cloud import bigquery
 import igraph as ig
 import leidenalg
+import importlib.util
 
-from create_html_output import write_dashboard_html
+# Get the directory where this notebook is located (works on Windows & Linux)
+notebook_dir = Path().absolute()
+module_path = notebook_dir / "src" / "create_html_output.py"
 
+print(f"Loading module from: {module_path}")
+
+# Load scope_drift module
+spec = importlib.util.spec_from_file_location("create_html_output", module_path)
+create_html_output = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(create_html_output)
 
 def _merge_dotenv_file(path: Path) -> None:
     try:
@@ -109,7 +118,7 @@ _bootstrap_env_from_dotenv()
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-BQ_PROJECT = "ocean-breeze-tier-1"
+BQ_PROJECT = "ocean-tech-adv-analytics-p-usr"
 AIRAK_DATASET = "ocean-breeze-tier-1.airak"
 FRONTIERS_PUBLISHER_ID = 1563368095744
 
@@ -2029,7 +2038,7 @@ def main():
     log.info(f"Saved results to {output_path}")
 
     dash_path = os.path.join(OUTPUT_DIR, "scope_global_dashboard.html")
-    write_dashboard_html(dash_path, results)
+    create_html_output.write_dashboard_html(dash_path, results)
     log.info(f"Dashboard: {dash_path}")
 
     # Summary
