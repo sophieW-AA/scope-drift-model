@@ -117,10 +117,21 @@ TOP_N_JOURNALS = int(os.environ.get("TOP_N_JOURNALS", "5"))
 # Optionally specify exact journal IDs (comma-separated) instead of top N
 # e.g. JOURNAL_IDS=2405181685761,123456789
 JOURNAL_IDS_OVERRIDE = os.environ.get("JOURNAL_IDS", "").strip()
-YEAR_RANGE = (2023, 2025)  # Last 3 years
 
-# Network mode: "ego" (Frontiers + citations) or "full" (all papers in year range)
+# Configurable year range for network construction
+# e.g. START_YEAR=2020 END_YEAR=2025 for 5 years
+START_YEAR = int(os.environ.get("START_YEAR", "2021"))
+END_YEAR = int(os.environ.get("END_YEAR", "2025"))
+YEAR_RANGE = (START_YEAR, END_YEAR)
+
+# Network mode:
+#   "ego"    - Frontiers papers + their direct citations
+#   "full"   - Frontiers + related journals (journals that cite/are cited by Frontiers)
+#   "global" - ALL publications from ALL publishers in year range (requires significant resources)
 NETWORK_MODE = os.environ.get("NETWORK_MODE", "full").strip().lower()
+if NETWORK_MODE not in ("ego", "full", "global"):
+    print(f"[WARNING] Unknown NETWORK_MODE '{NETWORK_MODE}', defaulting to 'full'")
+    NETWORK_MODE = "full"
 
 # For the global network, we compute OOS based on primary cluster membership:
 # 1. Identify each journal's "primary clusters" — the smallest set of communities
@@ -939,6 +950,123 @@ def get_full_network_edges(
     return df_edges, final_nodes, all_journal_ids
 
 
+def get_global_network_edges() -> tuple[pd.DataFrame, set[int]]:
+    """
+    Build a global citation network including ALL publications from ALL publishers
+    within the configured year range.
+
+    WARNING: This can be extremely large. Depending on the year range:
+    - 1 year: ~3-5M papers, ~50M+ edges
+    - 3 years: ~10-15M papers, ~200M+ edges
+    - 5 years: ~15-25M papers, ~500M+ edges
+
+    Consider running on a VM with sufficient memory (64GB+ recommended).
+    """
+    log.info("=" * 60)
+    log.info("Building GLOBAL citation network (ALL publishers)")
+    log.info(f"  Year range: {YEAR_RANGE[0]} - {YEAR_RANGE[1]}")
+    log.info("=" * 60)
+
+    # Step 1: Count total publications to estimate scale
+    q_count = f"""
+    SELECT COUNT(*) as cnt
+    FROM `{AIRAK_DATASET}.Publication`
+    WHERE PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
+      AND JournalId IS NOT NULL
+    """
+    df_count = query_df(q_count)
+    total_pubs = df_count["cnt"].iloc[0]
+    log.info(f"  Total publications in range: {total_pubs:,}")
+
+    if total_pubs > 50_000_000:
+        log.warning(
+            f"  WARNING: {total_pubs:,} publications is very large. "
+            "Consider narrowing the year range."
+        )
+
+    # Step 2: Fetch all publication IDs in batches by year
+    log.info("  Fetching publication IDs by year...")
+    all_pub_ids = set()
+
+    for year in range(YEAR_RANGE[0], YEAR_RANGE[1] + 1):
+        q_year = f"""
+        SELECT PublicationId
+        FROM `{AIRAK_DATASET}.Publication`
+        WHERE PublishedYear = {year}
+          AND JournalId IS NOT NULL
+        """
+        df_year = query_df(q_year)
+        year_count = len(df_year)
+        all_pub_ids.update(df_year["PublicationId"].tolist())
+        log.info(f"    {year}: {year_count:,} papers (total so far: {len(all_pub_ids):,})")
+        del df_year
+
+    log.info(f"  Total papers: {len(all_pub_ids):,}")
+
+    # Step 3: Fetch citations in batches
+    log.info("  Fetching citations (this may take a while)...")
+    pub_ids_list = list(all_pub_ids)
+    batch_size = 100000  # Larger batches for efficiency
+    all_edges = []
+
+    n_batches = (len(pub_ids_list) + batch_size - 1) // batch_size
+    log.info(f"  Processing {n_batches} batches of {batch_size:,} papers each...")
+
+    for i in range(0, len(pub_ids_list), batch_size):
+        batch = pub_ids_list[i : i + batch_size]
+        batch_str = ",".join(str(x) for x in batch)
+        batch_num = i // batch_size + 1
+
+        if batch_num % 10 == 1 or batch_num == n_batches:
+            log.info(f"    Batch {batch_num}/{n_batches}...")
+
+        # Get citations where source is in batch and target is in year range
+        q_edges = f"""
+        SELECT pc.PublicationId as src, pc.CitedPublicationId as tgt
+        FROM `{AIRAK_DATASET}.PublicationCitation` pc
+        JOIN `{AIRAK_DATASET}.Publication` p ON pc.CitedPublicationId = p.PublicationId
+        WHERE pc.PublicationId IN ({batch_str})
+          AND p.PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
+          AND p.JournalId IS NOT NULL
+        """
+        df_batch = query_df(q_edges)
+        if len(df_batch) > 0:
+            all_edges.append(df_batch)
+        del df_batch
+
+    # Combine all edges
+    log.info("  Combining edge batches...")
+    if all_edges:
+        df_edges = pd.concat(all_edges, ignore_index=True).drop_duplicates()
+    else:
+        df_edges = pd.DataFrame(columns=["src", "tgt"])
+    del all_edges
+
+    log.info(f"  Total edges: {len(df_edges):,}")
+
+    # Get final node set (nodes that actually have edges)
+    final_nodes = set(df_edges["src"]) | set(df_edges["tgt"])
+    log.info(f"  Connected nodes: {len(final_nodes):,}")
+
+    # Collect all journal IDs present in the network
+    log.info("  Identifying journals in network...")
+    nodes_str = ",".join(str(x) for x in list(final_nodes)[:100000])  # Sample for journal IDs
+    q_journals = f"""
+    SELECT DISTINCT JournalId
+    FROM `{AIRAK_DATASET}.Publication`
+    WHERE PublicationId IN ({nodes_str})
+    """
+    df_journals = query_df(q_journals)
+    all_journal_ids = set(df_journals["JournalId"].dropna().astype(int).tolist())
+    log.info(f"  Journals in network: {len(all_journal_ids):,}")
+
+    log.info("=" * 60)
+    log.info(f"GLOBAL NETWORK: {len(final_nodes):,} nodes, {len(df_edges):,} edges")
+    log.info("=" * 60)
+
+    return df_edges, final_nodes, all_journal_ids
+
+
 # ---------------------------------------------------------------------------
 # Step 3c: Bibliographic coupling edges (Phase 2.1)
 # ---------------------------------------------------------------------------
@@ -1674,7 +1802,11 @@ def main():
     frontiers_pub_ids = get_frontiers_publication_ids(journal_ids)
 
     # Step 3: Build network based on mode
-    if NETWORK_MODE == "full":
+    if NETWORK_MODE == "global":
+        # Global network: ALL publications from ALL publishers in year range
+        df_edges, final_nodes, all_journal_ids = get_global_network_edges()
+        log.info(f"  Frontiers papers in global network: {len(frontiers_pub_ids & final_nodes):,}")
+    elif NETWORK_MODE == "full":
         # Full network: Frontiers + related journals (creates connected network)
         df_edges, final_nodes, all_journal_ids = get_full_network_edges(
             frontiers_pub_ids, journal_ids
