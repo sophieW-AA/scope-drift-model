@@ -65,6 +65,7 @@ spec = importlib.util.spec_from_file_location("create_html_output", module_path)
 create_html_output = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(create_html_output)
 
+
 def _merge_dotenv_file(path: Path) -> None:
     try:
         raw = path.read_text(encoding="utf-8")
@@ -151,9 +152,10 @@ PRIMARY_CLUSTER_COVERAGE = float(os.environ.get("PRIMARY_CLUSTER_COVERAGE", "0.8
 
 LEIDEN_RESOLUTIONS = {
     # Targets aligned to Clarivate citation topics: 10 macro, 326 meso, 2478 micro
-    "macro": 0.00000008,  # Target ~10 communities (Clarivate: 10)
-    "meso": 0.000006,  # Target ~326 communities (Clarivate: 326)
-    "micro": 0.00007,  # Target ~2478 communities (Clarivate: 2478)
+    # Configurable via environment variables (e.g. LEIDEN_RESOLUTION_MESO=0.00003)
+    "macro": float(os.environ.get("LEIDEN_RESOLUTION_MACRO", "0.00000008")),
+    "meso": float(os.environ.get("LEIDEN_RESOLUTION_MESO", "0.000006")),
+    "micro": float(os.environ.get("LEIDEN_RESOLUTION_MICRO", "0.00007")),
 }
 # Run all three resolutions by default; set MULTI_RESOLUTION=false for single-level
 MULTI_RESOLUTION = os.environ.get("MULTI_RESOLUTION", "true").strip().lower() in (
@@ -172,6 +174,22 @@ if JOURNAL_DRIFT_LEVEL not in LEIDEN_RESOLUTIONS:
 USE_CLARIVATE_TOPICS = os.environ.get(
     "USE_CLARIVATE_TOPICS", "false"
 ).strip().lower() in ("1", "true", "yes")
+
+# Topic matching method: "tfidf" (fast, title-only) or "gpt" (accurate, title+abstract)
+# GPT method requires OPENAI_API_KEY to be set
+TOPIC_MATCHING_METHOD = os.environ.get("TOPIC_MATCHING_METHOD", "tfidf").strip().lower()
+if TOPIC_MATCHING_METHOD not in ("tfidf", "gpt"):
+    print(
+        f"[WARNING] Unknown TOPIC_MATCHING_METHOD '{TOPIC_MATCHING_METHOD}', defaulting to 'tfidf'"
+    )
+    TOPIC_MATCHING_METHOD = "tfidf"
+
+# GPT matching config
+GPT_BATCH_SIZE = int(os.environ.get("GPT_BATCH_SIZE", "10"))  # Papers per API call
+GPT_MAX_ABSTRACT_CHARS = int(os.environ.get("GPT_MAX_ABSTRACT_CHARS", "500"))
+GPT_RATE_LIMIT_DELAY = float(
+    os.environ.get("GPT_RATE_LIMIT_DELAY", "0.5")
+)  # Seconds between calls
 
 MIN_COMMUNITY_SIZE = int(os.environ.get("MIN_COMMUNITY_SIZE", "100"))
 # Per-level min sizes (micro needs smaller threshold)
@@ -218,6 +236,15 @@ TEMPORAL_DECAY_TAU = float(os.environ.get("TEMPORAL_DECAY_TAU", "5.0"))
 BC_MIN_SHARED_REFS = int(os.environ.get("BC_MIN_SHARED_REFS", "3"))
 # 2.3 Weight multiplier for same-journal citations (journal self-citation discount)
 SELF_CITE_JOURNAL_WEIGHT = float(os.environ.get("SELF_CITE_JOURNAL_WEIGHT", "0.5"))
+# 2.4 Weight transform: "none", "log", "sqrt", or "power:X" (e.g. "power:0.3")
+#     Transforms spread out the weight distribution for better clustering
+WEIGHT_TRANSFORM = os.environ.get("WEIGHT_TRANSFORM", "none").strip().lower()
+# 2.5 Edge weight threshold: remove edges below this weight (after transform)
+#     Higher values = sparser graph with clearer community boundaries
+EDGE_WEIGHT_THRESHOLD = float(os.environ.get("EDGE_WEIGHT_THRESHOLD", "0.0"))
+# 2.6 Weight contrast: raise weights to this power AFTER transform to amplify differences
+#     Values > 1 amplify strong edges, < 1 compresses (use with threshold)
+WEIGHT_CONTRAST = float(os.environ.get("WEIGHT_CONTRAST", "1.0"))
 
 LLM_SYSTEM = """You label scientific publication clusters for an analytics dashboard.
 Use UK English. Respond with ONLY a single JSON object, no markdown fences.
@@ -426,7 +453,7 @@ def _match_to_clarivate_topic(
     titles: list[str], matcher: dict
 ) -> tuple[str, dict, float]:
     """
-    Match a list of paper titles to the nearest Clarivate topic.
+    Match a list of paper titles to the nearest Clarivate topic using TF-IDF.
     Returns (label, topic_info, similarity_score).
     """
     if not matcher or not titles:
@@ -454,19 +481,361 @@ def _match_to_clarivate_topic(
     )
 
 
+# ---------------------------------------------------------------------------
+# GPT-based topic matching
+# ---------------------------------------------------------------------------
+GPT_TOPIC_SYSTEM = """You are a scientific publication classifier. Your task is to assign research papers to the most appropriate Clarivate Citation Topic based on their title and abstract.
+
+You will be given:
+1. A list of valid Meso-level topic names to choose from
+2. One or more papers with their title and abstract
+
+For each paper, respond with ONLY a JSON object mapping paper_id to the best matching topic name. Choose the single most appropriate topic from the provided list. If no topic is a good match, use "Unclassified".
+
+Example response format:
+{"1": "Immunology", "2": "Neuroscience", "3": "Pharmacology & Toxicology"}
+
+Respond with ONLY the JSON object, no explanation or markdown fences."""
+
+
+def _build_meso_topic_list(topics_df: pd.DataFrame) -> tuple[list[str], dict]:
+    """
+    Build a list of unique Meso topic names and a lookup from name to full info.
+    Returns (topic_names_list, name_to_info_dict).
+    """
+    if topics_df.empty:
+        return [], {}
+
+    unique_meso = topics_df.drop_duplicates(subset=["Meso ID"])
+    topic_names = []
+    name_to_info = {}
+
+    for _, row in unique_meso.iterrows():
+        name = str(row.get("Meso Topic", "")).strip()
+        if name and name not in name_to_info:
+            topic_names.append(name)
+            name_to_info[name] = {
+                "meso_id": row.get("Meso ID"),
+                "macro_id": row.get("Macro ID"),
+                "meso_topic": name,
+                "macro_topic": row.get("Macro Topic"),
+            }
+
+    return topic_names, name_to_info
+
+
+def _call_openai_for_topics(user_prompt: str, system_prompt: str = None) -> str:
+    """
+    Call OpenAI API with a custom system prompt for topic classification.
+    """
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+
+    body = {
+        "model": OPENAI_MODEL,
+        "max_tokens": 1000,
+        "temperature": 0.1,  # Low temperature for consistent classification
+        "messages": [
+            {"role": "system", "content": system_prompt or GPT_TOPIC_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            choices = data.get("choices") or []
+            if not choices:
+                raise RuntimeError(f"Unexpected OpenAI response: {data!r:.500}")
+            return choices[0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < max_retries - 1:
+                # Rate limited - wait and retry
+                wait_time = (attempt + 1) * 5
+                log.warning(f"Rate limited, waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
+            else:
+                raise
+
+
+def _match_papers_to_topics_gpt(
+    papers: list[dict],
+    topic_names: list[str],
+    name_to_info: dict,
+) -> list[tuple[str, dict, float]]:
+    """
+    Use GPT to match a batch of papers to Clarivate topics.
+
+    Args:
+        papers: List of dicts with 'id', 'title', 'abstract' keys
+        topic_names: List of valid Meso topic names
+        name_to_info: Dict mapping topic name to full topic info
+
+    Returns:
+        List of (label, topic_info, confidence) tuples, one per paper
+    """
+    if not papers:
+        return []
+
+    # Build the prompt
+    topic_list_str = "\n".join(f"- {name}" for name in sorted(topic_names))
+
+    papers_str = ""
+    for p in papers:
+        title = _truncate(p.get("title", ""), 300)
+        abstract = _truncate(p.get("abstract", ""), GPT_MAX_ABSTRACT_CHARS)
+        papers_str += f"\n\nPaper {p['id']}:\nTitle: {title}"
+        if abstract:
+            papers_str += f"\nAbstract: {abstract}"
+
+    user_prompt = f"""Available Meso-level topics:
+{topic_list_str}
+
+Papers to classify:{papers_str}
+
+Assign each paper to the single most appropriate topic from the list above."""
+
+    try:
+        response = _call_openai_for_topics(user_prompt)
+        result_dict = _extract_json_object(response)
+
+        results = []
+        for p in papers:
+            pid = str(p["id"])
+            assigned_topic = result_dict.get(pid, "Unclassified")
+
+            # Validate the topic exists
+            if assigned_topic in name_to_info:
+                topic_info = name_to_info[assigned_topic]
+                results.append(
+                    (assigned_topic, topic_info, 1.0)
+                )  # GPT confidence = 1.0
+            elif assigned_topic == "Unclassified":
+                results.append(("Unclassified", None, 0.0))
+            else:
+                # GPT returned an invalid topic name - try fuzzy match
+                log.warning(
+                    f"GPT returned unknown topic '{assigned_topic}', marking as Unclassified"
+                )
+                results.append(("Unclassified", None, 0.0))
+
+        return results
+
+    except Exception as e:
+        log.error(f"GPT topic matching failed: {e}")
+        # Return unclassified for all papers in batch
+        return [("Unclassified", None, 0.0) for _ in papers]
+
+
+def assign_papers_to_clarivate_topics_gpt(
+    node_ids: list[int],
+    node_lookup: dict,
+    topics_df: pd.DataFrame,
+) -> dict:
+    """
+    Assign each paper to a Clarivate citation topic using GPT on title + abstract.
+    Processes papers in batches for efficiency.
+
+    Returns dict with membership arrays and topic lookups (same structure as TF-IDF version).
+    """
+    log.info("Assigning papers to Clarivate topics using GPT (title + abstract)...")
+    log.info(
+        f"  Batch size: {GPT_BATCH_SIZE}, Rate limit delay: {GPT_RATE_LIMIT_DELAY}s"
+    )
+
+    # Build topic lookup
+    topic_names, name_to_info = _build_meso_topic_list(topics_df)
+    if not topic_names:
+        log.error("No Meso topics found in Clarivate data")
+        return None
+
+    log.info(f"  {len(topic_names)} Meso topics available for classification")
+
+    # Build ID mappings
+    macro_to_idx = {}
+    meso_to_idx = {}
+
+    for name, info in name_to_info.items():
+        macro_id = info["macro_id"]
+        meso_id = info["meso_id"]
+        if macro_id not in macro_to_idx:
+            macro_to_idx[macro_id] = len(macro_to_idx)
+        if meso_id not in meso_to_idx:
+            meso_to_idx[meso_id] = len(meso_to_idx)
+
+    # Prepare papers for classification
+    papers_to_classify = []
+    paper_indices = []  # Track which node_ids index each paper corresponds to
+
+    for idx, pid in enumerate(node_ids):
+        meta = node_lookup.get(pid, {})
+        title = str(meta.get("Title", "")).strip()
+        abstract = str(meta.get("Abstract", "")).strip()
+
+        if title:  # Only classify papers with titles
+            papers_to_classify.append(
+                {
+                    "id": len(papers_to_classify),
+                    "node_idx": idx,
+                    "pid": pid,
+                    "title": title,
+                    "abstract": abstract,
+                }
+            )
+
+    log.info(f"  {len(papers_to_classify):,} papers with titles to classify")
+
+    # Initialize result arrays
+    macro_membership = [-1] * len(node_ids)
+    meso_membership = [-1] * len(node_ids)
+    micro_membership = [-1] * len(node_ids)  # Will be same as meso for GPT method
+    paper_topics = [None] * len(node_ids)
+
+    n_matched = 0
+    n_batches = (len(papers_to_classify) + GPT_BATCH_SIZE - 1) // GPT_BATCH_SIZE
+
+    # Process in batches
+    for batch_num, i in enumerate(range(0, len(papers_to_classify), GPT_BATCH_SIZE)):
+        batch = papers_to_classify[i : i + GPT_BATCH_SIZE]
+
+        if batch_num % 10 == 0:
+            log.info(f"  Processing batch {batch_num + 1}/{n_batches}...")
+
+        # Call GPT for this batch
+        results = _match_papers_to_topics_gpt(
+            [
+                {"id": p["id"], "title": p["title"], "abstract": p["abstract"]}
+                for p in batch
+            ],
+            topic_names,
+            name_to_info,
+        )
+
+        # Store results
+        for paper, (label, topic_info, confidence) in zip(batch, results):
+            node_idx = paper["node_idx"]
+
+            if topic_info:
+                macro_id = topic_info["macro_id"]
+                meso_id = topic_info["meso_id"]
+
+                macro_membership[node_idx] = macro_to_idx.get(macro_id, -1)
+                meso_membership[node_idx] = meso_to_idx.get(meso_id, -1)
+                micro_membership[node_idx] = meso_to_idx.get(
+                    meso_id, -1
+                )  # Use meso for micro
+
+                paper_topics[node_idx] = {
+                    "macro_id": macro_id,
+                    "meso_id": meso_id,
+                    "micro_id": meso_id,
+                    "macro_topic": topic_info.get("macro_topic"),
+                    "meso_topic": label,
+                    "micro_topic": label,
+                    "similarity": confidence,
+                    "method": "gpt",
+                }
+                n_matched += 1
+
+        # Rate limit delay
+        if batch_num < n_batches - 1:
+            time.sleep(GPT_RATE_LIMIT_DELAY)
+
+    # Remap -1 (unmatched) to dedicated "Unclassified" cluster
+    unclassified_macro = len(macro_to_idx)
+    unclassified_meso = len(meso_to_idx)
+
+    macro_membership = [unclassified_macro if x == -1 else x for x in macro_membership]
+    meso_membership = [unclassified_meso if x == -1 else x for x in meso_membership]
+    micro_membership = [unclassified_meso if x == -1 else x for x in micro_membership]
+
+    n_unmatched = len(node_ids) - n_matched
+    log.info(f"GPT assigned {n_matched:,} papers to Clarivate topics")
+    log.info(
+        f"Unmatched papers: {n_unmatched:,} ({100*n_unmatched/len(node_ids):.1f}%)"
+    )
+
+    # Build reverse lookups
+    idx_to_macro = {v: k for k, v in macro_to_idx.items()}
+    idx_to_meso = {v: k for k, v in meso_to_idx.items()}
+
+    idx_to_macro[unclassified_macro] = "Unclassified"
+    idx_to_meso[unclassified_meso] = "Unclassified"
+
+    # Build topic name lookups
+    macro_names = {}
+    meso_names = {}
+    for name, info in name_to_info.items():
+        macro_names[info["macro_id"]] = info.get("macro_topic", "Unknown")
+        meso_names[info["meso_id"]] = name
+    macro_names["Unclassified"] = "Unclassified"
+    meso_names["Unclassified"] = "Unclassified"
+
+    return {
+        "macro_membership": macro_membership,
+        "meso_membership": meso_membership,
+        "micro_membership": micro_membership,
+        "paper_topics": paper_topics,
+        "macro_to_idx": macro_to_idx,
+        "meso_to_idx": meso_to_idx,
+        "micro_to_idx": meso_to_idx,  # Same as meso for GPT method
+        "idx_to_macro": idx_to_macro,
+        "idx_to_meso": idx_to_meso,
+        "idx_to_micro": idx_to_meso,
+        "macro_names": macro_names,
+        "meso_names": meso_names,
+        "micro_names": meso_names,
+        "n_matched": n_matched,
+        "n_unmatched": n_unmatched,
+        "method": "gpt",
+    }
+
+
 def assign_papers_to_clarivate_topics(
     node_ids: list[int],
     node_lookup: dict,
 ) -> dict:
     """
-    Assign each paper to a Clarivate citation topic based on title matching.
+    Assign each paper to a Clarivate citation topic.
+
+    Method is controlled by TOPIC_MATCHING_METHOD env var:
+      - "tfidf": Fast TF-IDF matching on title only (default)
+      - "gpt": GPT-based matching on title + abstract (more accurate, requires OPENAI_API_KEY)
+
     Returns dict with membership arrays for macro, meso, and micro levels,
     plus lookup tables for topic info.
     """
-    log.info("Assigning papers to Clarivate citation topics...")
+    log.info(
+        f"Assigning papers to Clarivate citation topics (method: {TOPIC_MATCHING_METHOD})..."
+    )
 
-    # Load topics and build matcher
+    # Load topics
     topics_df = load_clarivate_topics()
+
+    # Use GPT method if configured and API key is available
+    if TOPIC_MATCHING_METHOD == "gpt":
+        if not _openai_configured():
+            log.warning(
+                "GPT method requested but OPENAI_API_KEY not set — falling back to TF-IDF"
+            )
+        else:
+            return assign_papers_to_clarivate_topics_gpt(
+                node_ids, node_lookup, topics_df
+            )
+
+    # TF-IDF method (default)
     matcher = _build_topic_matcher(topics_df)
 
     if matcher is None:
@@ -533,6 +902,7 @@ def assign_papers_to_clarivate_topics(
                     "meso_topic": topic_info["meso_topic"],
                     "micro_topic": topic_info["micro_topic"],
                     "similarity": round(score, 4),
+                    "method": "tfidf",
                 }
             )
             n_matched += 1
@@ -599,6 +969,7 @@ def assign_papers_to_clarivate_topics(
         "micro_names": micro_names,
         "n_matched": n_matched,
         "n_unmatched": n_unmatched,
+        "method": "tfidf",
     }
 
 
@@ -874,12 +1245,12 @@ def get_full_network_edges(
       AND p2.PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
       AND p1.JournalId NOT IN ({frontiers_ids_str})
     GROUP BY j.JournalId, j.DisplayName
-    HAVING citations >= 500
+    HAVING citations >= 50
     ORDER BY citations DESC
     LIMIT 150
     """
     df_citing = query_df(q_citing)
-    log.info(f"  Found {len(df_citing)} journals citing Frontiers (>=500 citations)")
+    log.info(f"  Found {len(df_citing)} journals citing Frontiers (>=50 citations)")
 
     # Count citations FROM Frontiers journals (who they cite)
     log.info("  Finding journals cited by Frontiers...")
@@ -894,12 +1265,12 @@ def get_full_network_edges(
       AND p2.PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
       AND p2.JournalId NOT IN ({frontiers_ids_str})
     GROUP BY j.JournalId, j.DisplayName
-    HAVING citations >= 500
+    HAVING citations >= 50
     ORDER BY citations DESC
     LIMIT 150
     """
     df_cited = query_df(q_cited)
-    log.info(f"  Found {len(df_cited)} journals cited by Frontiers (>=500 citations)")
+    log.info(f"  Found {len(df_cited)} journals cited by Frontiers (>=50 citations)")
 
     # Combine into set of related journals
     related_journal_ids = set(df_citing["JournalId"].tolist()) | set(
@@ -993,77 +1364,33 @@ def get_global_network_edges() -> tuple[pd.DataFrame, set[int]]:
             "Consider narrowing the year range."
         )
 
-    # Step 2: Fetch all publication IDs in batches by year
-    log.info("  Fetching publication IDs by year...")
-    all_pub_ids = set()
-
-    for year in range(YEAR_RANGE[0], YEAR_RANGE[1] + 1):
-        q_year = f"""
-        SELECT PublicationId
-        FROM `{AIRAK_DATASET}.Publication`
-        WHERE PublishedYear = {year}
-          AND JournalId IS NOT NULL
-        """
-        df_year = query_df(q_year)
-        year_count = len(df_year)
-        all_pub_ids.update(df_year["PublicationId"].tolist())
-        log.info(f"    {year}: {year_count:,} papers (total so far: {len(all_pub_ids):,})")
-        del df_year
-
-    log.info(f"  Total papers: {len(all_pub_ids):,}")
-
-    # Step 3: Fetch citations in batches
-    log.info("  Fetching citations (this may take a while)...")
-    pub_ids_list = list(all_pub_ids)
-    batch_size = 100000  # Larger batches for efficiency
-    all_edges = []
-
-    n_batches = (len(pub_ids_list) + batch_size - 1) // batch_size
-    log.info(f"  Processing {n_batches} batches of {batch_size:,} papers each...")
-
-    for i in range(0, len(pub_ids_list), batch_size):
-        batch = pub_ids_list[i : i + batch_size]
-        batch_str = ",".join(str(x) for x in batch)
-        batch_num = i // batch_size + 1
-
-        if batch_num % 10 == 1 or batch_num == n_batches:
-            log.info(f"    Batch {batch_num}/{n_batches}...")
-
-        # Get citations where source is in batch and target is in year range
-        q_edges = f"""
-        SELECT pc.PublicationId as src, pc.CitedPublicationId as tgt
-        FROM `{AIRAK_DATASET}.PublicationCitation` pc
-        JOIN `{AIRAK_DATASET}.Publication` p ON pc.CitedPublicationId = p.PublicationId
-        WHERE pc.PublicationId IN ({batch_str})
-          AND p.PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
-          AND p.JournalId IS NOT NULL
-        """
-        df_batch = query_df(q_edges)
-        if len(df_batch) > 0:
-            all_edges.append(df_batch)
-        del df_batch
-
-    # Combine all edges
-    log.info("  Combining edge batches...")
-    if all_edges:
-        df_edges = pd.concat(all_edges, ignore_index=True).drop_duplicates()
-    else:
-        df_edges = pd.DataFrame(columns=["src", "tgt"])
-    del all_edges
-
+    # Step 2: Fetch all citations where both source and target are in year range
+    # This is more efficient than batching by publication IDs
+    log.info("  Fetching all citations (single query with JOINs)...")
+    q_edges = f"""
+    SELECT pc.PublicationId as src, pc.CitedPublicationId as tgt
+    FROM `{AIRAK_DATASET}.PublicationCitation` pc
+    JOIN `{AIRAK_DATASET}.Publication` p1 ON pc.PublicationId = p1.PublicationId
+    JOIN `{AIRAK_DATASET}.Publication` p2 ON pc.CitedPublicationId = p2.PublicationId
+    WHERE p1.PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
+      AND p2.PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
+      AND p1.JournalId IS NOT NULL
+      AND p2.JournalId IS NOT NULL
+    """
+    df_edges = query_df(q_edges)
     log.info(f"  Total edges: {len(df_edges):,}")
 
     # Get final node set (nodes that actually have edges)
     final_nodes = set(df_edges["src"]) | set(df_edges["tgt"])
     log.info(f"  Connected nodes: {len(final_nodes):,}")
 
-    # Collect all journal IDs present in the network
+    # Get all journal IDs in the year range (simpler than querying by node IDs)
     log.info("  Identifying journals in network...")
-    nodes_str = ",".join(str(x) for x in list(final_nodes)[:100000])  # Sample for journal IDs
     q_journals = f"""
     SELECT DISTINCT JournalId
     FROM `{AIRAK_DATASET}.Publication`
-    WHERE PublicationId IN ({nodes_str})
+    WHERE PublishedYear BETWEEN {YEAR_RANGE[0]} AND {YEAR_RANGE[1]}
+      AND JournalId IS NOT NULL
     """
     df_journals = query_df(q_journals)
     all_journal_ids = set(df_journals["JournalId"].dropna().astype(int).tolist())
@@ -1272,7 +1599,74 @@ def merge_edge_lists(df_direct: pd.DataFrame, df_bc: pd.DataFrame) -> pd.DataFra
         f"Merged: {len(merged):,}  "
         f"Weight mean={merged['weight'].mean():.3f} max={merged['weight'].max():.3f}"
     )
+
+    # Apply weight transform if configured
+    merged = apply_weight_transform(merged)
+
     return merged
+
+
+def apply_weight_transform(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Apply transforms to edge weights to spread out the distribution and
+    create clearer community boundaries.
+
+    Steps:
+    1. Base transform (log, sqrt, power) - spreads distribution
+    2. Threshold - removes weak edges
+    3. Contrast - amplifies differences between strong/weak edges
+    4. Normalize to [0,1] range
+    """
+    n_original = len(df)
+    w = df["weight"].copy()
+    original_stats = (
+        f"mean={w.mean():.4f}, std={w.std():.4f}, min={w.min():.4f}, max={w.max():.4f}"
+    )
+    log.info(f"Weight transform — Before: {original_stats}, edges: {n_original:,}")
+
+    # Step 1: Base transform
+    if WEIGHT_TRANSFORM == "log":
+        df["weight"] = np.log1p(w)
+        log.info(f"  Applied log transform")
+    elif WEIGHT_TRANSFORM == "sqrt":
+        df["weight"] = np.sqrt(w)
+        log.info(f"  Applied sqrt transform")
+    elif WEIGHT_TRANSFORM.startswith("power:"):
+        try:
+            exponent = float(WEIGHT_TRANSFORM.split(":")[1])
+            df["weight"] = np.power(w, exponent)
+            log.info(f"  Applied power({exponent}) transform")
+        except (IndexError, ValueError):
+            log.warning(f"  Invalid power transform '{WEIGHT_TRANSFORM}', skipping")
+    elif WEIGHT_TRANSFORM not in ("none", ""):
+        log.warning(f"  Unknown weight transform '{WEIGHT_TRANSFORM}', skipping")
+
+    # Step 2: Remove edges below threshold
+    if EDGE_WEIGHT_THRESHOLD > 0:
+        before_thresh = len(df)
+        df = df[df["weight"] >= EDGE_WEIGHT_THRESHOLD].copy()
+        removed = before_thresh - len(df)
+        log.info(
+            f"  Threshold {EDGE_WEIGHT_THRESHOLD}: removed {removed:,} weak edges ({100*removed/before_thresh:.1f}%)"
+        )
+
+    # Step 3: Apply contrast (amplify differences)
+    if WEIGHT_CONTRAST != 1.0 and len(df) > 0:
+        # Normalize to [0,1] first, then apply contrast, then scale back
+        w_min, w_max = df["weight"].min(), df["weight"].max()
+        if w_max > w_min:
+            normalized = (df["weight"] - w_min) / (w_max - w_min)
+            df["weight"] = (
+                np.power(normalized, WEIGHT_CONTRAST) * (w_max - w_min) + w_min
+            )
+            log.info(f"  Applied contrast factor {WEIGHT_CONTRAST}")
+
+    # Final stats
+    if len(df) > 0:
+        final_stats = f"mean={df['weight'].mean():.4f}, std={df['weight'].std():.4f}, min={df['weight'].min():.4f}, max={df['weight'].max():.4f}"
+        log.info(f"Weight transform — After:  {final_stats}, edges: {len(df):,}")
+
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -1307,9 +1701,11 @@ def get_node_metadata(
           j.DisplayName AS JournalName,
           j.PublisherId,
           CASE WHEN j.JournalId IN ({frontiers_ids_str}) THEN TRUE ELSE FALSE END AS IsFrontiers,
-          COALESCE(p.Title, '') AS Title
+          COALESCE(p.Title, '') AS Title,
+          COALESCE(pa.Abstract, '') AS Abstract
         FROM `{AIRAK_DATASET}.Publication` p
         LEFT JOIN `{AIRAK_DATASET}.Journal` j ON p.JournalId = j.JournalId
+        LEFT JOIN `{AIRAK_DATASET}.PublicationAbstract` pa ON p.PublicationId = pa.PublicationId
         WHERE p.PublicationId IN ({ids_str})
         """
 
@@ -1814,7 +2210,9 @@ def main():
     if NETWORK_MODE == "global":
         # Global network: ALL publications from ALL publishers in year range
         df_edges, final_nodes, all_journal_ids = get_global_network_edges()
-        log.info(f"  Frontiers papers in global network: {len(frontiers_pub_ids & final_nodes):,}")
+        log.info(
+            f"  Frontiers papers in global network: {len(frontiers_pub_ids & final_nodes):,}"
+        )
     elif NETWORK_MODE == "full":
         # Full network: Frontiers + related journals (creates connected network)
         df_edges, final_nodes, all_journal_ids = get_full_network_edges(
