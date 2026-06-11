@@ -228,7 +228,8 @@ def main():
         titles_path,
         sep="\t",
         header=None,
-        names=["pub_no", "title"],
+        names=["pub_no", "flag", "journal", "date", "title"],
+        on_bad_lines="warn",
     )
 
     print("Loading citation links...")
