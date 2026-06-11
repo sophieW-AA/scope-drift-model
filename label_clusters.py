@@ -4,8 +4,13 @@ label_clusters.py
 Labels CWTS classification output using OpenAI API.
 
 Reads:
-    cwts_output/classification.txt
-    cwts_output/pub_metadata.txt
+    cwts_output/classification.txt  — int_id, micro, meso, macro cluster assignments
+    cwts_output/pub_metadata.txt    — int_id, airak_pub_id, is_frontiers, journal, date, title
+    cwts_output/cit_links.txt       — int_id1, int_id2, weight
+
+The int_id column (0..N-1) is used by the CWTS Java tool. The airak_pub_id
+column contains the original BigQuery PublicationId, enabling joins with
+taxonomy tables (e.g. aa_taxonomy.article_taxonomy_scores_current).
 
 Writes:
     cwts_output/micro_labels.csv
@@ -220,15 +225,15 @@ def main():
         classif_path,
         sep="\t",
         header=None,
-        names=["pub_no", "micro", "meso", "macro"],
+        names=["int_id", "micro", "meso", "macro"],
     )
 
-    print("Loading titles...")
+    print("Loading metadata...")
     titles = pd.read_csv(
         titles_path,
         sep="\t",
         header=None,
-        names=["pub_no", "flag", "journal", "date", "title"],
+        names=["int_id", "pub_id", "flag", "journal", "date", "title"],
         on_bad_lines="warn",
     )
 
@@ -237,23 +242,24 @@ def main():
         cit_links_path,
         sep="\t",
         header=None,
-        names=["pub_no1", "pub_no2", "weight"],
+        names=["int_id1", "int_id2", "weight"],
     )
 
     print("Calculating citation counts...")
-    # Group by pub_no1 and sum the weights to get the total citation/link strength for each paper.
-    # Since the CWTS network is symmetricized, the degree (sum of weights) of pub_no1 is
+    # Group by int_id1 and sum the weights to get the total citation/link strength for each paper.
+    # Since the CWTS network is symmetricized, the degree (sum of weights) of int_id1 is
     # a perfect proxy for overall citation impact inside the network.
     cit_counts = (
-        cit_links.groupby("pub_no1")["weight"]
+        cit_links.groupby("int_id1")["weight"]
         .sum()
         .reset_index()
-        .rename(columns={"pub_no1": "pub_no", "weight": "citation_count"})
+        .rename(columns={"int_id1": "int_id", "weight": "citation_count"})
     )
 
     # Merge classification, titles, and citation counts
-    merged = classif.merge(titles, on="pub_no")
-    merged = merged.merge(cit_counts, on="pub_no", how="left")
+    # int_id is the CWTS sequential ID; pub_id is the airak PublicationId for taxonomy joins
+    merged = classif.merge(titles, on="int_id")
+    merged = merged.merge(cit_counts, on="int_id", how="left")
     merged["citation_count"] = merged["citation_count"].fillna(0)
 
     print(f"Merged: {len(merged):,} publications")

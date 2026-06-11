@@ -5,8 +5,10 @@ Visualises how the research focus of each cluster shifts over time using
 Jensen-Shannon divergence on sub-cluster composition.
 
 Reads from the same output directory as label_clusters.py:
-    cwts_output/classification.txt   — pub_no | micro | meso | macro
-    cwts_output/pub_metadata.txt     — pub_no | is_frontiers | journal | pub_date | title
+    cwts_output/classification.txt   — int_id | micro | meso | macro
+    cwts_output/pub_metadata.txt     — int_id | pub_id | is_frontiers | journal | pub_date | title
+
+int_id is the CWTS sequential ID; pub_id is the airak PublicationId.
 
 Output:
     cwts_output/scope_drift_Y.html   (yearly, default)
@@ -68,14 +70,14 @@ def load_data() -> pd.DataFrame:
 
     classif = pd.read_csv(
         classif_path, sep="\t", header=None,
-        names=["pub_no", "micro", "meso", "macro"],
+        names=["int_id", "micro", "meso", "macro"],
     )
     meta = pd.read_csv(
         meta_path, sep="\t", header=None,
-        names=["pub_no", "is_frontiers", "journal", "pub_date", "title"],
+        names=["int_id", "pub_id", "is_frontiers", "journal", "pub_date", "title"],
     )
 
-    merged = classif.merge(meta, on="pub_no", how="left")
+    merged = classif.merge(meta, on="int_id", how="left")
     print(f"Loaded: {len(merged):,} publications")
     return merged
 

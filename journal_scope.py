@@ -9,9 +9,12 @@ A paper is classified as Out-of-Scope when it falls outside the journal's
 together account for at least SCOPE_THRESHOLD of the journal's total papers.
 
 Reads:
-    cwts_output/classification.txt   (pub_no TAB micro TAB meso TAB macro)
-    cwts_output/pub_titles.txt       (pub_no TAB title)
-    cwts_output/journal_papers.txt   (pub_no TAB journal)   ← join key
+    cwts_output/classification.txt   (int_id TAB micro TAB meso TAB macro)
+    cwts_output/pub_titles.txt       (int_id TAB title)
+    cwts_output/journal_papers.txt   (int_id TAB journal)   ← join key
+
+int_id is the CWTS sequential ID. To get airak PublicationId for taxonomy
+joins, use pub_metadata.txt which contains both int_id and pub_id.
 
 Writes:
     cwts_output/journal_scope.csv    journal-level summary + OOS rates
@@ -155,7 +158,7 @@ def main():
         classif_path,
         sep="\t",
         header=None,
-        names=["pub_no", "micro", "meso", "macro"],
+        names=["int_id", "micro", "meso", "macro"],
     )
 
     print("Loading titles...")
@@ -163,7 +166,7 @@ def main():
         titles_path,
         sep="\t",
         header=None,
-        names=["pub_no", "title"],
+        names=["int_id", "title"],
     )
 
     print("Loading journal assignments...")
@@ -171,15 +174,15 @@ def main():
         core_path,
         sep="\t",
         header=None,
-        names=["pub_no", "is_frontiers", "journal"],
+        names=["int_id", "is_frontiers", "journal"],
     )
 
     if TARGET_JOURNALS:
         core = core[core["journal"].isin(TARGET_JOURNALS)]
 
     # ── Merge ────────────────────────────────────────────────────────────────
-    df = classif.merge(titles, on="pub_no", how="inner").merge(
-        core[["pub_no", "journal"]], on="pub_no", how="inner"
+    df = classif.merge(titles, on="int_id", how="inner").merge(
+        core[["int_id", "journal"]], on="int_id", how="inner"
     )
     print(
         f"Merged: {len(df):,} publications across {df['journal'].nunique():,} journals"
@@ -234,7 +237,7 @@ def main():
         for _, row in group.iterrows():
             paper_flags.append(
                 {
-                    "pub_no": row["pub_no"],
+                    "int_id": row["int_id"],
                     "journal": journal,
                     "micro": row["micro"],
                     "meso": row["meso"],

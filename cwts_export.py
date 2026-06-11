@@ -3,11 +3,16 @@ cwts_export.py
 ==============
 Standalone script: pull the citation network from BigQuery, apply edge
 weights (temporal decay + journal self-citation discount + optional
-bibliographic coupling), then write the two text files required by the
+bibliographic coupling), then write the text files required by the
 CWTS publicationclassification Java tool:
 
-    pubs.txt       — <int_pub_id>  <core_pub>
-    cit_links.txt  — <int_pub_id1> <int_pub_id2> <weight>
+    pubs.txt         — <int_id>  <core_pub>           (sequential 0..N-1 for CWTS)
+    cit_links.txt    — <int_id1> <int_id2> <weight>   (sequential IDs for CWTS)
+    pub_metadata.txt — <int_id> <airak_pub_id> <is_frontiers> <journal> <date> <title>
+
+The int_id column (0..N-1) is used by the CWTS Java tool and appears in
+classification.txt output. The airak_pub_id column contains the original
+BigQuery PublicationId, enabling joins with taxonomy tables.
 
 Usage
 -----
@@ -490,10 +495,11 @@ def write_cwts_files(
 ) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sorted_pids = sorted(final_nodes)
+    # CWTS requires sequential integer IDs starting from 0
     pid_to_int = {pid: i for i, pid in enumerate(sorted_pids)}
     log.info(f"Writing CWTS files to {OUTPUT_DIR}/  ({len(sorted_pids):,} nodes)...")
 
-    # pubs.txt  — unchanged, required by CWTS Java tool
+    # pubs.txt — sequential integers for CWTS tool compatibility
     pubs_path = OUTPUT_DIR / "pubs.txt"
     with open(pubs_path, "w") as f:
         for pid in sorted_pids:
@@ -503,11 +509,12 @@ def write_cwts_files(
     )
     log.info(f"  pubs.txt       : {len(sorted_pids):,} rows  ({n_core:,} core)")
 
-    # pub_metadata.txt — single sidecar for all downstream scripts
-    # columns: int_pub_id | is_frontiers | journal_name | pub_date | title
+    # pub_metadata.txt — includes BOTH int_id (for CWTS join) AND airak_pub_id (for taxonomy join)
+    # columns: int_id | airak_pub_id | is_frontiers | journal_name | pub_date | title
     meta_path = OUTPUT_DIR / "pub_metadata.txt"
     with open(meta_path, "w", encoding="utf-8") as f:
         for pid in sorted_pids:
+            int_id = pid_to_int[pid]
             m = node_lookup.get(pid, {})
             is_front = 1 if m.get("IsFrontiers") else 0
             journal = (
@@ -519,12 +526,12 @@ def write_cwts_files(
                 m.get("PublishedDate") or f"{m.get('PublishedYear', '')}-01-01"
             ).strip()
             title = (m.get("Title") or "").replace("\t", " ").replace("\n", " ").strip()
-            f.write(f"{pid_to_int[pid]}\t{is_front}\t{journal}\t{date}\t{title}\n")
+            f.write(f"{int_id}\t{pid}\t{is_front}\t{journal}\t{date}\t{title}\n")
     log.info(
-        f"  pub_metadata.txt: is_frontiers | journal | date | title ({len(sorted_pids):,} rows)"
+        f"  pub_metadata.txt: int_id | airak_pub_id | is_frontiers | journal | date | title ({len(sorted_pids):,} rows)"
     )
 
-    # cit_links.txt — CWTS requires each undirected edge stored in BOTH directions
+    # cit_links.txt — CWTS requires sequential int IDs, each undirected edge in BOTH directions
     df = df_edges.copy()
     df["src_int"] = df["src"].map(pid_to_int)
     df["tgt_int"] = df["tgt"].map(pid_to_int)
