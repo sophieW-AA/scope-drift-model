@@ -43,6 +43,9 @@ import numpy as np
 import pandas as pd
 from google.cloud import bigquery
 
+from datetime import datetime
+
+
 # ---------------------------------------------------------------------------
 # Config — mirrors scope_drift_airak_global.py so results are comparable
 # ---------------------------------------------------------------------------
@@ -53,11 +56,11 @@ FRONTIERS_PUBLISHER_ID = 1563368095744
 TOP_N_JOURNALS = int(os.environ.get("TOP_N_JOURNALS", "5"))
 JOURNAL_IDS_OVERRIDE = os.environ.get("JOURNAL_IDS", "").strip()
 
-START_YEAR = int(os.environ.get("START_YEAR", "2021"))
-END_YEAR = int(os.environ.get("END_YEAR", "2025"))
+START_YEAR = int(os.environ.get("START_YEAR", "2020"))
+END_YEAR = int(os.environ.get("END_YEAR", "2026"))
 YEAR_RANGE = (START_YEAR, END_YEAR)
 
-NETWORK_MODE = os.environ.get("NETWORK_MODE", "full").strip().lower()
+NETWORK_MODE = os.environ.get("NETWORK_MODE", "global").strip().lower()
 if NETWORK_MODE not in ("ego", "full", "global"):
     print(f"[WARNING] Unknown NETWORK_MODE '{NETWORK_MODE}', defaulting to 'full'")
     NETWORK_MODE = "full"
@@ -79,11 +82,36 @@ MAX_EXTERNAL_PAPERS = int(os.environ.get("MAX_EXTERNAL_PAPERS", "50000"))
 
 OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", "cwts_output"))
 
+LOG_DIR = Path("cwts_logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_DIR / f"cwts_export{datetime.now().strftime("%Y%m%d_%H%M%S")}.log", mode="w"),
+        logging.StreamHandler(),
+    ],
 )
 log = logging.getLogger(__name__)
-
+log.info("=" * 60)
+log.info("Configuration")
+log.info("=" * 60)
+log.info(f"  BQ_PROJECT              : {BQ_PROJECT}")
+log.info(f"  AIRAK_DATASET           : {AIRAK_DATASET}")
+log.info(f"  NETWORK_MODE            : {NETWORK_MODE}")
+log.info(f"  START_YEAR              : {START_YEAR}")
+log.info(f"  END_YEAR                : {END_YEAR}")
+log.info(f"  TOP_N_JOURNALS          : {TOP_N_JOURNALS}")
+log.info(f"  JOURNAL_IDS_OVERRIDE    : {JOURNAL_IDS_OVERRIDE or '(none)'}")
+log.info(f"  ENABLE_EDGE_WEIGHTS     : {ENABLE_EDGE_WEIGHTS}")
+log.info(f"  TEMPORAL_DECAY_TAU      : {TEMPORAL_DECAY_TAU}")
+log.info(f"  SELF_CITE_JOURNAL_WEIGHT: {SELF_CITE_JOURNAL_WEIGHT}")
+log.info(f"  ENABLE_BC_EDGES         : {ENABLE_BC_EDGES}")
+log.info(f"  BC_MIN_SHARED_REFS      : {BC_MIN_SHARED_REFS}")
+log.info(f"  MAX_EXTERNAL_PAPERS     : {MAX_EXTERNAL_PAPERS}")
+log.info(f"  OUTPUT_DIR              : {OUTPUT_DIR}")
+log.info("=" * 60)
 
 # ---------------------------------------------------------------------------
 # BigQuery helpers
@@ -564,6 +592,7 @@ def write_cwts_files(
 # Main
 # ---------------------------------------------------------------------------
 def main():
+    
     log.info("=" * 60)
     log.info("CWTS Export — Edge Weight Builder")
     log.info(
