@@ -53,6 +53,9 @@ JOURNAL_IDS_OVERRIDE = os.environ.get("JOURNAL_IDS", "").strip()
 
 START_YEAR = int(os.environ.get("START_YEAR", "2020"))
 END_YEAR = int(os.environ.get("END_YEAR", "2026"))
+RUN_TIMESTAMP = os.environ.get(
+    "RUN_TIMESTAMP", datetime.now().strftime("%Y%m%d_%H%M%S")
+)
 YEAR_RANGE = (START_YEAR, END_YEAR)
 
 NETWORK_MODE = os.environ.get("NETWORK_MODE", "global").strip().lower()
@@ -62,7 +65,7 @@ if NETWORK_MODE not in ("ego", "full", "global"):
 
 ENABLE_EDGE_WEIGHTS = os.environ.get("ENABLE_EDGE_WEIGHTS", "true").lower() in (
     "1",
-    "true",s
+    "true",
     "yes",
 )
 TEMPORAL_DECAY_TAU = float(os.environ.get("TEMPORAL_DECAY_TAU", "5.0"))
@@ -84,7 +87,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(LOG_DIR / f"cwts_export{datetime.now().strftime("%Y%m%d_%H%M%S")}.log", mode="w"),
+        logging.FileHandler(
+            LOG_DIR / f"cwts_export{RUN_TIMESTAMP}.log",
+            mode="w",
+        ),
         logging.StreamHandler(),
     ],
 )
@@ -107,6 +113,7 @@ log.info(f"  BC_MIN_SHARED_REFS      : {BC_MIN_SHARED_REFS}")
 log.info(f"  MAX_EXTERNAL_PAPERS     : {MAX_EXTERNAL_PAPERS}")
 log.info(f"  OUTPUT_DIR              : {OUTPUT_DIR}")
 log.info("=" * 60)
+
 
 # ---------------------------------------------------------------------------
 # BigQuery helpers
@@ -334,7 +341,9 @@ def get_full_network_edges(
 # ---------------------------------------------------------------------------
 # Step 4: Node metadata
 # ---------------------------------------------------------------------------
-def get_node_metadata(node_ids: set[int], frontiers_journal_ids: list[int]) -> dataframe:
+def get_node_metadata(
+    node_ids: set[int], frontiers_journal_ids: list[int]
+) -> pd.DataFrame:
     log.info(f"Fetching metadata for {len(node_ids):,} nodes...")
     ids_list = list(node_ids)
     batch_sz = 20_000
@@ -364,7 +373,7 @@ def get_node_metadata(node_ids: set[int], frontiers_journal_ids: list[int]) -> d
     df_meta = pd.concat(all_meta, ignore_index=True)
     n_core = int(df_meta["IsFrontiers"].sum())
     log.info(f"  {len(df_meta):,} nodes ({n_core:,} Frontiers core)")
-    return df_meta.set_index("PublicationId") 
+    return df_meta.set_index("PublicationId")
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +382,7 @@ def get_node_metadata(node_ids: set[int], frontiers_journal_ids: list[int]) -> d
 def apply_edge_weights(df_edges: pd.DataFrame, node_lookup: dict) -> pd.DataFrame:
     log.info("Applying edge weights (temporal decay + self-citation discount)...")
     end_year = YEAR_RANGE[1]
-    
+
     pub_years = node_lookup["PublishedYear"].fillna(end_year).to_dict()
     pub_journals = node_lookup["JournalId"].to_dict()
 
@@ -512,53 +521,98 @@ BQ_DEST_PROJECT = "ocean-tech-adv-analytics-c-tfs"
 BQ_DEST_DATASET = "scope_drift_raw"
 
 
+# ---------------------------------------------------------------------------
+# Step 6: Write CWTS input files (text files + BigQuery upload)
+# ---------------------------------------------------------------------------
 def write_cwts_files(
     df_edges: pd.DataFrame,
     final_nodes: set[int],
     node_lookup: dict,
+    upload_to_bq: bool = True,
 ) -> None:
+    """
+    Write CWTS output files and optionally upload to BigQuery.
+
+    Outputs:
+      1. pubs.txt - int_id, core_pub (always 1)
+      2. pub_metadata.txt - int_id, pub_id, is_frontiers, journal, date, title
+      3. cit_links.txt - int_id1, int_id2, weight (edges in both directions)
+    """
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sorted_pids = sorted(final_nodes)
     pid_to_int = {pid: i for i, pid in enumerate(sorted_pids)}
-    log.info(
-        f"Uploading CWTS tables to "
-        f"{BQ_DEST_PROJECT}.{BQ_DEST_DATASET}  ({len(sorted_pids):,} nodes)..."
+    timestamp = RUN_TIMESTAMP
+
+    log.info(f"Writing CWTS files to {OUTPUT_DIR}/  ({len(sorted_pids):,} nodes)...")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 1. pubs.txt
+    # ═══════════════════════════════════════════════════════════════════════
+    pubs_df = pd.DataFrame(
+        {"int_id": [pid_to_int[pid] for pid in sorted_pids], "core_pub": 1}
     )
 
-    # --- pubs ---
-    n_core = int(node_lookup["IsFrontiers"].reindex(sorted_pids).sum())
-    pubs = pd.DataFrame({
-        "int_pub_id": [pid_to_int[pid] for pid in sorted_pids],
-        "core_pub": 1
-    })
-    pubs.to_gbq(
-        f"{BQ_DEST_DATASET}.pubs_raw{datetime.now().strftime("%Y%m%d_%H%M%S")}",
-        project_id=BQ_DEST_PROJECT,
-        if_exists="replace",
+    # Write text file
+    pubs_path = OUTPUT_DIR / "pubs.txt"
+    pubs_df.to_csv(pubs_path, sep="\t", index=False, header=False)
+    n_core = sum(
+        1 for pid in sorted_pids if node_lookup.get(pid, {}).get("IsFrontiers")
     )
-    log.info(f"  pubs_raw        : {len(pubs):,} rows  ({n_core:,} core)")
+    log.info(f"  pubs.txt        : {len(pubs_df):,} rows  ({n_core:,} Frontiers)")
 
-    # --- pub_metadata ---
-    meta_subset = node_lookup.reindex(sorted_pids)
-    pub_metadata = pd.DataFrame({
-        "int_pub_id":   [pid_to_int[pid] for pid in sorted_pids],
-        "pub_id":       sorted_pids,
-        "is_frontiers": meta_subset["IsFrontiers"].fillna(False).astype(int).values,
-        "journal_name": meta_subset["JournalName"].fillna(
-                            meta_subset["JournalId"].astype(str)
-                        ).str.strip().values,
-        "pub_date":     meta_subset["PublishedDate"].fillna(
-                            meta_subset["PublishedYear"].astype(str) + "-01-01"
-                        ).astype(str).str.strip().values,
-        "title":        meta_subset["Title"].fillna("").str.replace("\n", " ").str.strip().values,
-    })
-    pub_metadata.to_gbq(
-        f"{BQ_DEST_DATASET}.pub_metadata_raw{datetime.now().strftime("%Y%m%d_%H%M%S")}",
-        project_id=BQ_DEST_PROJECT,
-        if_exists="replace",
+    # Upload to BigQuery
+    if upload_to_bq:
+        pubs_df.to_gbq(
+            f"{BQ_DEST_DATASET}.pubs_raw_{timestamp}",
+            project_id=BQ_DEST_PROJECT,
+            if_exists="replace",
+        )
+        log.info(f"  → BigQuery: {BQ_DEST_DATASET}.pubs_raw_{timestamp}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 2. pub_metadata.txt
+    # ═══════════════════════════════════════════════════════════════════════
+    meta_rows = []
+    for pid in sorted_pids:
+        m = node_lookup.get(pid, {})
+        meta_rows.append(
+            {
+                "int_id": pid_to_int[pid],
+                "pub_id": pid,
+                "is_frontiers": 1 if m.get("IsFrontiers") else 0,
+                "journal": (m.get("JournalName") or str(m.get("JournalId", "")))
+                .replace("\t", " ")
+                .strip(),
+                "date": str(
+                    m.get("PublishedDate") or f"{m.get('PublishedYear', '')}-01-01"
+                ).strip(),
+                "title": (m.get("Title") or "")
+                .replace("\t", " ")
+                .replace("\n", " ")
+                .strip(),
+            }
+        )
+    pub_metadata_df = pd.DataFrame(meta_rows)
+
+    # Write text file
+    meta_path = OUTPUT_DIR / "pub_metadata.txt"
+    pub_metadata_df.to_csv(
+        meta_path, sep="\t", index=False, header=False, encoding="utf-8"
     )
-    log.info(f"  pub_metadata_raw: {len(pub_metadata):,} rows")
+    log.info(f"  pub_metadata.txt: {len(pub_metadata_df):,} rows")
 
-    # --- cit_links ---
+    # Upload to BigQuery
+    if upload_to_bq:
+        pub_metadata_df.to_gbq(
+            f"{BQ_DEST_DATASET}.pub_metadata_raw_{timestamp}",
+            project_id=BQ_DEST_PROJECT,
+            if_exists="replace",
+        )
+        log.info(f"  → BigQuery: {BQ_DEST_DATASET}.pub_metadata_raw_{timestamp}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 3. cit_links.txt
+    # ═══════════════════════════════════════════════════════════════════════
     df = df_edges.copy()
     df["src_int"] = df["src"].map(pid_to_int)
     df["tgt_int"] = df["tgt"].map(pid_to_int)
@@ -573,26 +627,39 @@ def write_cwts_files(
 
     # Both directions (A→B and B→A)
     df_rev = df.rename(columns={"src_int": "tgt_int", "tgt_int": "src_int"})
-    cits = (
+    cit_links_df = (
         pd.concat([df, df_rev[["src_int", "tgt_int", "weight"]]], ignore_index=True)
         .sort_values(["src_int", "tgt_int"])
-        .rename(columns={"src_int": "int_pub_id1", "tgt_int": "int_pub_id2"})
         .reset_index(drop=True)
     )
-    cits.to_gbq(
-        f"{BQ_DEST_DATASET}.cit_links_raw{datetime.now().strftime("%Y%m%d_%H%M%S")}",
-        project_id=BQ_DEST_PROJECT,
-        if_exists="replace",
+
+    # Write text file
+    links_path = OUTPUT_DIR / "cit_links.txt"
+    cit_links_df.to_csv(
+        links_path, sep="\t", index=False, header=False, float_format="%.6f"
     )
     log.info(
-        f"  cit_links_raw   : {len(cits):,} rows  ({len(df):,} unique pairs × 2 directions)"
+        f"  cit_links.txt   : {len(cit_links_df):,} rows  ({len(df):,} unique × 2 directions)"
     )
+
+    # Upload to BigQuery
+    if upload_to_bq:
+        cit_links_bq = cit_links_df.rename(
+            columns={"src_int": "int_id1", "tgt_int": "int_id2"}
+        )
+        cit_links_bq.to_gbq(
+            f"{BQ_DEST_DATASET}.cit_links_raw_{timestamp}",
+            project_id=BQ_DEST_PROJECT,
+            if_exists="replace",
+        )
+        log.info(f"  → BigQuery: {BQ_DEST_DATASET}.cit_links_raw_{timestamp}")
+
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    
+
     log.info("=" * 60)
     log.info("CWTS Export — Edge Weight Builder")
     log.info(
