@@ -1848,7 +1848,7 @@ def merge_small_communities(
 
     new_membership = list(membership)
     iteration = 0
-    max_iterations = 100
+    max_iterations = 50
 
     while iteration < max_iterations:
         iteration += 1

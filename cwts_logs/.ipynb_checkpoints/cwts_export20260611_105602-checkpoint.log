@@ -1,0 +1,36 @@
+2026-06-11 10:56:02,416 [INFO] ============================================================
+2026-06-11 10:56:02,416 [INFO] Configuration
+2026-06-11 10:56:02,416 [INFO] ============================================================
+2026-06-11 10:56:02,416 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-p-usr
+2026-06-11 10:56:02,416 [INFO]   AIRAK_DATASET           : ocean-breeze-tier-1.airak
+2026-06-11 10:56:02,416 [INFO]   NETWORK_MODE            : full
+2026-06-11 10:56:02,416 [INFO]   START_YEAR              : 2026
+2026-06-11 10:56:02,416 [INFO]   END_YEAR                : 2026
+2026-06-11 10:56:02,416 [INFO]   TOP_N_JOURNALS          : 5
+2026-06-11 10:56:02,416 [INFO]   JOURNAL_IDS_OVERRIDE    : (none)
+2026-06-11 10:56:02,416 [INFO]   ENABLE_EDGE_WEIGHTS     : True
+2026-06-11 10:56:02,416 [INFO]   TEMPORAL_DECAY_TAU      : 5.0
+2026-06-11 10:56:02,416 [INFO]   SELF_CITE_JOURNAL_WEIGHT: 0.5
+2026-06-11 10:56:02,416 [INFO]   ENABLE_BC_EDGES         : True
+2026-06-11 10:56:02,417 [INFO]   BC_MIN_SHARED_REFS      : 3
+2026-06-11 10:56:02,417 [INFO]   MAX_EXTERNAL_PAPERS     : 50000
+2026-06-11 10:56:02,417 [INFO]   OUTPUT_DIR              : cwts_output
+2026-06-11 10:56:02,417 [INFO] ============================================================
+2026-06-11 10:56:02,417 [INFO] ============================================================
+2026-06-11 10:56:02,417 [INFO] CWTS Export — Edge Weight Builder
+2026-06-11 10:56:02,417 [INFO]   Mode: FULL  |  Years: 2026-2026
+2026-06-11 10:56:02,417 [INFO]   Edge weights: ON
+2026-06-11 10:56:02,417 [INFO] ============================================================
+2026-06-11 10:56:02,417 [INFO] Fetching top 5 Frontiers journals by publication count...
+2026-06-11 10:56:04,598 [INFO]   Journal IDs: [3315714752512, 2826088480769, 2379411881984, 2405181685761, 2972117368834]
+2026-06-11 10:56:04,598 [INFO] Fetching Frontiers publication IDs...
+2026-06-11 10:56:06,599 [INFO]   16,222 Frontiers publications
+2026-06-11 10:56:06,599 [INFO] Building full network (Frontiers + related journals)...
+2026-06-11 10:56:06,599 [INFO]   Finding journals citing Frontiers...
+2026-06-11 10:56:08,559 [INFO]   Finding journals cited by Frontiers...
+2026-06-11 10:56:10,743 [INFO]   5 journals in network (0 related + 5 Frontiers)
+2026-06-11 10:56:12,649 [INFO]   16,222 publications
+2026-06-11 10:56:12,651 [INFO]   Citation batch 1/1...
+2026-06-11 10:56:15,106 [INFO]   40 edges, 78 nodes
+2026-06-11 10:56:15,106 [INFO] Fetching metadata for 78 nodes...
+2026-06-11 10:56:15,106 [INFO]   Metadata batch 1/1...
