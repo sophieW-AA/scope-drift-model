@@ -3,16 +3,11 @@ cwts_export.py
 ==============
 Standalone script: pull the citation network from BigQuery, apply edge
 weights (temporal decay + journal self-citation discount + optional
-bibliographic coupling), then write the text files required by the
+bibliographic coupling), then write the two text files required by the
 CWTS publicationclassification Java tool:
 
-    pubs.txt         — <int_id>  <core_pub>           (sequential 0..N-1 for CWTS)
-    cit_links.txt    — <int_id1> <int_id2> <weight>   (sequential IDs for CWTS)
-    pub_metadata.txt — <int_id> <airak_pub_id> <is_frontiers> <journal> <date> <title>
-
-The int_id column (0..N-1) is used by the CWTS Java tool and appears in
-classification.txt output. The airak_pub_id column contains the original
-BigQuery PublicationId, enabling joins with taxonomy tables.
+    pubs.txt       — <int_pub_id>  <core_pub>
+    cit_links.txt  — <int_pub_id1> <int_pub_id2> <weight>
 
 Usage
 -----
@@ -67,7 +62,7 @@ if NETWORK_MODE not in ("ego", "full", "global"):
 
 ENABLE_EDGE_WEIGHTS = os.environ.get("ENABLE_EDGE_WEIGHTS", "true").lower() in (
     "1",
-    "true",
+    "true",s
     "yes",
 )
 TEMPORAL_DECAY_TAU = float(os.environ.get("TEMPORAL_DECAY_TAU", "5.0"))
@@ -339,7 +334,7 @@ def get_full_network_edges(
 # ---------------------------------------------------------------------------
 # Step 4: Node metadata
 # ---------------------------------------------------------------------------
-def get_node_metadata(node_ids: set[int], frontiers_journal_ids: list[int]) -> dict:
+def get_node_metadata(node_ids: set[int], frontiers_journal_ids: list[int]) -> dataframe:
     log.info(f"Fetching metadata for {len(node_ids):,} nodes...")
     ids_list = list(node_ids)
     batch_sz = 20_000
@@ -369,7 +364,7 @@ def get_node_metadata(node_ids: set[int], frontiers_journal_ids: list[int]) -> d
     df_meta = pd.concat(all_meta, ignore_index=True)
     n_core = int(df_meta["IsFrontiers"].sum())
     log.info(f"  {len(df_meta):,} nodes ({n_core:,} Frontiers core)")
-    return df_meta.set_index("PublicationId").to_dict("index")
+    return df_meta.set_index("PublicationId") 
 
 
 # ---------------------------------------------------------------------------
@@ -378,11 +373,9 @@ def get_node_metadata(node_ids: set[int], frontiers_journal_ids: list[int]) -> d
 def apply_edge_weights(df_edges: pd.DataFrame, node_lookup: dict) -> pd.DataFrame:
     log.info("Applying edge weights (temporal decay + self-citation discount)...")
     end_year = YEAR_RANGE[1]
-    pub_years = {
-        pid: (meta.get("PublishedYear") or end_year)
-        for pid, meta in node_lookup.items()
-    }
-    pub_journals = {pid: meta.get("JournalId") for pid, meta in node_lookup.items()}
+    
+    pub_years = node_lookup["PublishedYear"].fillna(end_year).to_dict()
+    pub_journals = node_lookup["JournalId"].to_dict()
 
     df = df_edges.copy()
     df["tgt_year"] = df["tgt"].map(pub_years).fillna(end_year)
@@ -513,80 +506,87 @@ def merge_edges(df_direct: pd.DataFrame, df_bc: pd.DataFrame) -> pd.DataFrame:
     return merged
 
 
+# Step 6: Upload CWTS tables to BigQuery
 # ---------------------------------------------------------------------------
-# Step 6: Write CWTS input files
-# ---------------------------------------------------------------------------
+BQ_DEST_PROJECT = "ocean-tech-adv-analytics-c-tfs"
+BQ_DEST_DATASET = "scope_drift_raw"
+
+
 def write_cwts_files(
     df_edges: pd.DataFrame,
     final_nodes: set[int],
     node_lookup: dict,
 ) -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sorted_pids = sorted(final_nodes)
-    # CWTS requires sequential integer IDs starting from 0
     pid_to_int = {pid: i for i, pid in enumerate(sorted_pids)}
-    log.info(f"Writing CWTS files to {OUTPUT_DIR}/  ({len(sorted_pids):,} nodes)...")
-
-    # pubs.txt — sequential integers for CWTS tool compatibility
-    pubs_path = OUTPUT_DIR / "pubs.txt"
-    with open(pubs_path, "w") as f:
-        for pid in sorted_pids:
-            f.write(f"{pid_to_int[pid]}\t1\n")
-    n_core = sum(
-        1 for pid in sorted_pids if node_lookup.get(pid, {}).get("IsFrontiers")
-    )
-    log.info(f"  pubs.txt       : {len(sorted_pids):,} rows  ({n_core:,} core)")
-
-    # pub_metadata.txt — includes BOTH int_id (for CWTS join) AND airak_pub_id (for taxonomy join)
-    # columns: int_id | airak_pub_id | is_frontiers | journal_name | pub_date | title
-    meta_path = OUTPUT_DIR / "pub_metadata.txt"
-    with open(meta_path, "w", encoding="utf-8") as f:
-        for pid in sorted_pids:
-            int_id = pid_to_int[pid]
-            m = node_lookup.get(pid, {})
-            is_front = 1 if m.get("IsFrontiers") else 0
-            journal = (
-                (m.get("JournalName") or str(m.get("JournalId", "")))
-                .replace("\t", " ")
-                .strip()
-            )
-            date = str(
-                m.get("PublishedDate") or f"{m.get('PublishedYear', '')}-01-01"
-            ).strip()
-            title = (m.get("Title") or "").replace("\t", " ").replace("\n", " ").strip()
-            f.write(f"{int_id}\t{pid}\t{is_front}\t{journal}\t{date}\t{title}\n")
     log.info(
-        f"  pub_metadata.txt: int_id | airak_pub_id | is_frontiers | journal | date | title ({len(sorted_pids):,} rows)"
+        f"Uploading CWTS tables to "
+        f"{BQ_DEST_PROJECT}.{BQ_DEST_DATASET}  ({len(sorted_pids):,} nodes)..."
     )
 
-    # cit_links.txt — CWTS requires sequential int IDs, each undirected edge in BOTH directions
+    # --- pubs ---
+    n_core = int(node_lookup["IsFrontiers"].reindex(sorted_pids).sum())
+    pubs = pd.DataFrame({
+        "int_pub_id": [pid_to_int[pid] for pid in sorted_pids],
+        "core_pub": 1
+    })
+    pubs.to_gbq(
+        f"{BQ_DEST_DATASET}.pubs_raw{datetime.now().strftime("%Y%m%d_%H%M%S")}",
+        project_id=BQ_DEST_PROJECT,
+        if_exists="replace",
+    )
+    log.info(f"  pubs_raw        : {len(pubs):,} rows  ({n_core:,} core)")
+
+    # --- pub_metadata ---
+    meta_subset = node_lookup.reindex(sorted_pids)
+    pub_metadata = pd.DataFrame({
+        "int_pub_id":   [pid_to_int[pid] for pid in sorted_pids],
+        "pub_id":       sorted_pids,
+        "is_frontiers": meta_subset["IsFrontiers"].fillna(False).astype(int).values,
+        "journal_name": meta_subset["JournalName"].fillna(
+                            meta_subset["JournalId"].astype(str)
+                        ).str.strip().values,
+        "pub_date":     meta_subset["PublishedDate"].fillna(
+                            meta_subset["PublishedYear"].astype(str) + "-01-01"
+                        ).astype(str).str.strip().values,
+        "title":        meta_subset["Title"].fillna("").str.replace("\n", " ").str.strip().values,
+    })
+    pub_metadata.to_gbq(
+        f"{BQ_DEST_DATASET}.pub_metadata_raw{datetime.now().strftime("%Y%m%d_%H%M%S")}",
+        project_id=BQ_DEST_PROJECT,
+        if_exists="replace",
+    )
+    log.info(f"  pub_metadata_raw: {len(pub_metadata):,} rows")
+
+    # --- cit_links ---
     df = df_edges.copy()
     df["src_int"] = df["src"].map(pid_to_int)
     df["tgt_int"] = df["tgt"].map(pid_to_int)
     df = df.dropna(subset=["src_int", "tgt_int"])
     df[["src_int", "tgt_int"]] = df[["src_int", "tgt_int"]].astype(int)
 
-    # Dedupe undirected pairs by normalising direction (src < tgt) and summing weights
+    # Dedupe undirected pairs (src < tgt), sum weights
     swap = df["src_int"] > df["tgt_int"]
     df.loc[swap, ["src_int", "tgt_int"]] = df.loc[swap, ["tgt_int", "src_int"]].values
     df = df[df["src_int"] != df["tgt_int"]]
     df = df.groupby(["src_int", "tgt_int"], as_index=False)["weight"].sum()
 
-    # Write each edge in both directions (A→B and B→A), then sort
+    # Both directions (A→B and B→A)
     df_rev = df.rename(columns={"src_int": "tgt_int", "tgt_int": "src_int"})
-    df_both = pd.concat(
-        [df, df_rev[["src_int", "tgt_int", "weight"]]],
-        ignore_index=True,
-    ).sort_values(["src_int", "tgt_int"])
-
-    links_path = OUTPUT_DIR / "cit_links.txt"
-    df_both[["src_int", "tgt_int", "weight"]].to_csv(
-        links_path, sep="\t", index=False, header=False, float_format="%.6f"
+    cits = (
+        pd.concat([df, df_rev[["src_int", "tgt_int", "weight"]]], ignore_index=True)
+        .sort_values(["src_int", "tgt_int"])
+        .rename(columns={"src_int": "int_pub_id1", "tgt_int": "int_pub_id2"})
+        .reset_index(drop=True)
+    )
+    cits.to_gbq(
+        f"{BQ_DEST_DATASET}.cit_links_raw{datetime.now().strftime("%Y%m%d_%H%M%S")}",
+        project_id=BQ_DEST_PROJECT,
+        if_exists="replace",
     )
     log.info(
-        f"  cit_links.txt : {len(df_both):,} edges  ({len(df):,} unique × 2 directions)"
+        f"  cit_links_raw   : {len(cits):,} rows  ({len(df):,} unique pairs × 2 directions)"
     )
-
 
 # ---------------------------------------------------------------------------
 # Main
