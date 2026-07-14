@@ -302,16 +302,19 @@ def main(run_timestamp: str):
 
 
 def label_level_efficient(df: pd.DataFrame, level: str) -> pd.DataFrame:
-    """Label clusters from pre-sampled data."""
+    """Label clusters from pre-sampled data with two-pass duplicate handling."""
     groups = df.groupby('cluster_id')
     total = len(groups)
     results = []
+    
+    # Store group data for potential retry
+    group_data = {cluster_id: group for cluster_id, group in groups}
 
-    print(f"\n--- Labelling {level} ({total} clusters) ---")
+    print(f"\n--- Pass 1: Labelling {level} ({total} clusters) ---")
 
-    for i, (cluster_id, group) in enumerate(groups, 1):
+    for i, (cluster_id, group) in enumerate(group_data.items(), 1):
         titles = group["title"].tolist()
-        n_papers = group["n_papers"].iloc[0]  # Total papers in cluster (from query)
+        n_papers = group["n_papers"].iloc[0]
         
         titles_str = "\n".join(f"- {t}" for t in titles)
 
@@ -339,7 +342,106 @@ def label_level_efficient(df: pd.DataFrame, level: str) -> pd.DataFrame:
             f"  [{i}/{total}] cluster {cluster_id} ({n_papers:,} papers) → {out.get('short_label')}"
         )
 
+    # Pass 2: Resolve duplicates
+    results = resolve_duplicate_labels(results, group_data, level)
+    
     return pd.DataFrame(results)
+
+
+def resolve_duplicate_labels(results: list, group_data: dict, level: str) -> list:
+    """
+    Detect duplicate short_labels and retry conflicting clusters.
+    Keeps the cluster with the most papers for each duplicate label.
+    """
+    from collections import defaultdict
+    
+    # Group results by short_label
+    label_to_clusters = defaultdict(list)
+    for r in results:
+        label = r.get("short_label", "").strip().lower()
+        if label and label != "error":
+            label_to_clusters[label].append(r)
+    
+    # Find duplicates
+    duplicates = {label: clusters for label, clusters in label_to_clusters.items() 
+                  if len(clusters) > 1}
+    
+    if not duplicates:
+        print("\n  No duplicate labels found.")
+        return results
+    
+    print(f"\n--- Pass 2: Resolving {len(duplicates)} duplicate labels ---")
+    
+    # For each duplicate, keep the one with most papers, retry the rest
+    retry_cluster_ids = set()
+    taken_labels = set()
+    
+    for label, clusters in duplicates.items():
+        # Sort by n_papers descending, keep the largest
+        clusters_sorted = sorted(clusters, key=lambda x: x.get("n_papers", 0), reverse=True)
+        keeper = clusters_sorted[0]
+        taken_labels.add(keeper.get("short_label", "").strip())
+        
+        print(f"  Duplicate '{label}': keeping Cluster {keeper['cluster_id']} ({keeper['n_papers']:,} papers), will retry {len(clusters_sorted)-1} others")
+        
+        for c in clusters_sorted[1:]:
+            retry_cluster_ids.add(c["cluster_id"])
+    
+    # Also add all non-duplicate labels to taken_labels
+    for r in results:
+        if r["cluster_id"] not in retry_cluster_ids:
+            label = r.get("short_label", "").strip()
+            if label:
+                taken_labels.add(label)
+    
+    if not retry_cluster_ids:
+        return results
+    
+    # Retry clusters with taken_labels context
+    print(f"\n  Retrying {len(retry_cluster_ids)} clusters with {len(taken_labels)} labels already taken...")
+    
+    results_map = {r["cluster_id"]: r for r in results}
+    
+    for i, cluster_id in enumerate(sorted(retry_cluster_ids), 1):
+        group = group_data[cluster_id]
+        titles = group["title"].tolist()
+        n_papers = group["n_papers"].iloc[0]
+        
+        titles_str = "\n".join(f"- {t}" for t in titles)
+        
+        # Add warning about taken labels
+        taken_str = ", ".join(sorted(taken_labels))
+        user_prompt = (
+            f"This cluster contains {n_papers:,} academic papers. "
+            f"Here is a sample of their titles:\n\n{titles_str}\n\n"
+            f"IMPORTANT: The following labels are already assigned to other clusters and MUST NOT be used: {taken_str}\n"
+            f"You must choose a DIFFERENT, more specific label for this cluster."
+        )
+
+        try:
+            raw = call_openai(user_prompt)
+            out = json.loads(raw)
+        except json.JSONDecodeError:
+            print(f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id} — bad JSON")
+            out = {"short_label": f"Cluster {cluster_id}", "long_label": "", "keywords": []}
+        except Exception as e:
+            print(f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id} — failed: {e}")
+            out = {"short_label": f"Cluster {cluster_id}", "long_label": str(e), "keywords": []}
+
+        out["level"] = level
+        out["cluster_id"] = cluster_id
+        out["n_papers"] = n_papers
+        
+        old_label = results_map[cluster_id].get("short_label", "")
+        new_label = out.get("short_label", "")
+        
+        # Update taken_labels with new label
+        taken_labels.add(new_label.strip())
+        
+        results_map[cluster_id] = out
+        print(f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id}: '{old_label}' → '{new_label}'")
+    
+    return list(results_map.values())
 
 
 if __name__ == "__main__":
