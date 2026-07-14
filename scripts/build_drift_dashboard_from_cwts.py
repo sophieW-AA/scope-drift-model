@@ -52,6 +52,11 @@ CLUSTER_LEVEL = os.environ.get("CLUSTER_LEVEL", "macro")
 GPT_LABELS_PATH = Path(__file__).resolve().parent.parent / "cwts_output"
 GPT_LABELS = {}
 
+# BigQuery config for metadata
+BQ_PROJECT = os.environ.get("BQ_PROJECT", "ocean-tech-adv-analytics-c-tfs")
+BQ_DATASET = os.environ.get("BQ_DATASET", "scope_drift_raw")
+RUN_TIMESTAMP = os.environ.get("RUN_TIMESTAMP", "")
+
 # Baseline years for comparison
 BASELINE_YEARS = [2018, 2019, 2020]
 
@@ -62,6 +67,33 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S"
 )
 log = logging.getLogger(__name__)
+
+
+def load_run_metadata() -> dict:
+    """Load run metadata from BigQuery."""
+    if not RUN_TIMESTAMP:
+        log.warning("RUN_TIMESTAMP not set, skipping metadata load")
+        return {}
+    
+    try:
+        import pandas_gbq
+        table = f"{BQ_PROJECT}.{BQ_DATASET}.run_metadata_{RUN_TIMESTAMP}"
+        query = f"SELECT * FROM `{table}` LIMIT 1"
+        df = pandas_gbq.read_gbq(query, project_id=BQ_PROJECT)
+        
+        if df.empty:
+            log.warning("No metadata found in %s", table)
+            return {}
+        
+        row = df.iloc[0].to_dict()
+        if "journal_ids" in row and isinstance(row["journal_ids"], str):
+            row["journal_ids"] = json.loads(row["journal_ids"])
+        
+        log.info("       Loaded run metadata from BigQuery: %s", table)
+        return row
+    except Exception as e:
+        log.warning("Could not load metadata from BigQuery: %s", e)
+        return {}
 
 
 def load_gpt_labels() -> dict:
@@ -314,7 +346,7 @@ def compute_community_stats(df: pd.DataFrame) -> list:
 # ──────────────────────────────────────────────────────────────────────────────
 # BUILD HTML
 # ──────────────────────────────────────────────────────────────────────────────
-def build_html(metrics: dict, communities: list, df: pd.DataFrame) -> str:
+def build_html(metrics: dict, communities: list, df: pd.DataFrame, run_metadata: dict = None) -> str:
     """Generate the drift dashboard HTML."""
     log.info("[4/4] Building HTML dashboard …")
 
@@ -324,6 +356,7 @@ def build_html(metrics: dict, communities: list, df: pd.DataFrame) -> str:
     latest_year = int(max(heatmap_years)) if heatmap_years else 0
 
     data = {
+        "run_metadata": run_metadata or {},
         "jsd_trends": metrics["jsd_trends"],
         "summary": metrics["summary"],
         "heatmap": metrics["heatmap"],
@@ -409,7 +442,10 @@ tr:hover{{background:#f9fafb}}
 <div class="card"><h3>Entropy Change</h3><div class="sub">Positive = spreading across more communities; Negative = concentrating</div><div id="entropy" style="height:420px"></div></div>
 </div>
 
-<div class="foot">Data: CWTS clustering · Leiden algorithm · {CLUSTER_LEVEL} level</div>
+<div class="foot">
+  <div>Data: CWTS clustering · Leiden algorithm · {CLUSTER_LEVEL} level</div>
+  <div id="ftSource" style="margin-top:4px;color:#b0b8c4;font-size:10px"></div>
+</div>
 
 <script>
 const D={json.dumps(data)};
@@ -477,6 +513,20 @@ Plotly.newPlot('entropy',eT,{{
            line:{{color:'#d1d5db',width:1,dash:'dot'}}}}]
 }},{{responsive:true}});
 
+// Source metadata footer
+const R = D.run_metadata || {{}};
+const ftSource = document.getElementById('ftSource');
+if (ftSource && (R.generated_utc || R.run_timestamp)) {{
+  const parts = [];
+  if (R.generated_utc) parts.push('Generated ' + R.generated_utc);
+  if (R.bq_source_dataset) parts.push('Source: ' + R.bq_source_dataset);
+  if (R.network_mode) parts.push('Mode: ' + R.network_mode);
+  if (R.start_year && R.end_year) parts.push('Years: ' + R.start_year + '–' + R.end_year);
+  if (R.edge_weighting_enabled && R.temporal_decay_tau) parts.push('τ=' + R.temporal_decay_tau);
+  if (R.run_timestamp) parts.push('Run: ' + R.run_timestamp);
+  ftSource.textContent = parts.join(' · ');
+}}
+
 </script>
 </body>
 </html>"""
@@ -497,6 +547,9 @@ def main():
 
     # Load GPT labels
     GPT_LABELS = load_gpt_labels()
+    
+    # Load run metadata from BigQuery
+    run_metadata = load_run_metadata()
 
     # Load data
     df = load_data()
@@ -506,7 +559,7 @@ def main():
     communities = compute_community_stats(df)
 
     # Build HTML
-    html = build_html(metrics, communities, df)
+    html = build_html(metrics, communities, df, run_metadata)
 
     # Write output
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

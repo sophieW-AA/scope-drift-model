@@ -4,11 +4,7 @@ scope_drift.py
 Visualises how the research focus of each cluster shifts over time using
 Jensen-Shannon divergence on sub-cluster composition.
 
-Reads from the same output directory as label_clusters.py:
-    cwts_output/classification.txt   — int_id | micro | meso | macro
-    cwts_output/pub_metadata.txt     — int_id | pub_id | is_frontiers | journal | pub_date | title
-
-int_id is the CWTS sequential ID; pub_id is the airak PublicationId.
+Loads data from BigQuery (joined classification + pub_metadata tables).
 
 Output:
     cwts_output/scope_drift_Y.html   (yearly, default)
@@ -30,6 +26,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from scipy.spatial.distance import jensenshannon
+from google.cloud import bigquery
 
 # ---------------------------------------------------------------------------
 # Config
@@ -37,6 +34,12 @@ from scipy.spatial.distance import jensenshannon
 OUTPUT_DIR = Path("cwts_output")
 MIN_PAPERS = 30
 CHILD_OF   = {"macro": "meso", "meso": "micro"}
+
+# BigQuery configuration
+BQ_PROJECT = "ocean-tech-adv-analytics-c-tfs"
+BQ_DATASET = "scope_drift_raw"
+TBL_CLASSIF = f"{BQ_DATASET}.classification_raw_20260617_081903"
+TBL_PUB_META = f"{BQ_DATASET}.pub_metadata_raw_20260617_081904"
 
 PALETTE = [
     "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
@@ -61,23 +64,27 @@ def parse_args():
 # Data loading
 # ---------------------------------------------------------------------------
 def load_data() -> pd.DataFrame:
-    classif_path = OUTPUT_DIR / "classification.txt"
-    meta_path    = OUTPUT_DIR / "pub_metadata.txt"
-
-    for p in (classif_path, meta_path):
-        if not p.exists():
-            sys.exit(f"Not found: {p}")
-
-    classif = pd.read_csv(
-        classif_path, sep="\t", header=None,
-        names=["int_id", "micro", "meso", "macro"],
-    )
-    meta = pd.read_csv(
-        meta_path, sep="\t", header=None,
-        names=["int_id", "pub_id", "is_frontiers", "journal", "pub_date", "title"],
-    )
-
-    merged = classif.merge(meta, on="int_id", how="left")
+    """Load classification + metadata from BigQuery with a single JOIN."""
+    bq = bigquery.Client(project=BQ_PROJECT)
+    
+    query = f"""
+    SELECT 
+        c.int_id,
+        c.micro,
+        c.meso,
+        c.macro,
+        m.pub_id,
+        m.is_frontiers,
+        m.journal,
+        m.date AS pub_date,
+        m.title
+    FROM `{TBL_CLASSIF}` c
+    JOIN `{TBL_PUB_META}` m
+    ON c.int_id = m.int_id
+    """
+    
+    print(f"Loading from BigQuery: {TBL_CLASSIF} + {TBL_PUB_META}...")
+    merged = bq.query(query).to_dataframe()
     print(f"Loaded: {len(merged):,} publications")
     return merged
 
@@ -241,6 +248,7 @@ def build_figure(
     summary_y = [drift_data[cid]["drift"].max() for cid in cluster_ids]
     summary_n = [drift_data[cid]["counts"].sum() for cid in cluster_ids]
     max_y     = max(summary_y) if summary_y else 1
+    max_y     = max_y if max_y > 0 else 1  # guard against division by zero
 
     summary_start = len(fig.data)
     fig.add_trace(go.Bar(

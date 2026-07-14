@@ -1,16 +1,30 @@
 """
 build_dashboard_from_cwts.py
 ============================
-Generates the scope drift dashboard directly from local CWTS output files.
+Generates the scope drift dashboard from either local CWTS files or BigQuery.
 Uses render_script.js for visualization.
 
-Input files (from test.ipynb):
+Data source (toggle via DATA_SOURCE env var):
+    - "local" (default): reads from cwts_output/*.txt files
+    - "bigquery": reads from BigQuery tables using RUN_TIMESTAMP
+
+Input files (when DATA_SOURCE=local):
     - cwts_output/classification.txt
     - cwts_output/pub_metadata.txt
     - cwts_output/cit_links.txt
 
+BigQuery tables (when DATA_SOURCE=bigquery):
+    - classification_raw_{RUN_TIMESTAMP}
+    - pub_metadata_raw_{RUN_TIMESTAMP}
+    - cit_links_raw_{RUN_TIMESTAMP}
+
 Output:
     - output/scope_dashboard.html
+
+Environment variables:
+    - DATA_SOURCE: "local" or "bigquery" (default: local)
+    - RUN_TIMESTAMP: required when DATA_SOURCE=bigquery
+    - CLUSTER_LEVEL: micro, meso, or macro (default: macro)
 """
 
 import json
@@ -28,6 +42,10 @@ import os
 CWTS_DIR = Path(__file__).resolve().parent.parent / "cwts_output"
 OUTPUT_PATH = Path(__file__).resolve().parent.parent / "output" / "scope_dashboard.html"
 RENDER_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "render_script.js"
+
+# Data source toggle: "local" (CWTS files) or "bigquery"
+# Can be overridden via DATA_SOURCE env var
+DATA_SOURCE = os.environ.get("DATA_SOURCE", "local").lower()  # Options: local, bigquery
 
 # Which cluster level to use as "communities"
 # Can be overridden via CLUSTER_LEVEL env var
@@ -79,6 +97,39 @@ def load_gpt_labels() -> dict:
 # Global GPT labels (loaded once)
 GPT_LABELS = {}
 
+# BigQuery config for metadata
+BQ_PROJECT = os.environ.get("BQ_PROJECT", "ocean-tech-adv-analytics-c-tfs")
+BQ_DATASET = os.environ.get("BQ_DATASET", "scope_drift_raw")
+RUN_TIMESTAMP = os.environ.get("RUN_TIMESTAMP", "")
+
+
+def load_run_metadata() -> dict:
+    """Load run metadata from BigQuery."""
+    if not RUN_TIMESTAMP:
+        log.warning("RUN_TIMESTAMP not set, skipping metadata load")
+        return {}
+    
+    try:
+        import pandas_gbq
+        table = f"{BQ_PROJECT}.{BQ_DATASET}.run_metadata_{RUN_TIMESTAMP}"
+        query = f"SELECT * FROM `{table}` LIMIT 1"
+        df = pandas_gbq.read_gbq(query, project_id=BQ_PROJECT)
+        
+        if df.empty:
+            log.warning("No metadata found in %s", table)
+            return {}
+        
+        row = df.iloc[0].to_dict()
+        # Parse journal_ids back from JSON string
+        if "journal_ids" in row and isinstance(row["journal_ids"], str):
+            row["journal_ids"] = json.loads(row["journal_ids"])
+        
+        log.info("       Loaded run metadata from BigQuery: %s", table)
+        return row
+    except Exception as e:
+        log.warning("Could not load metadata from BigQuery: %s", e)
+        return {}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # LOAD DATA
@@ -128,7 +179,7 @@ def load_cwts_data() -> pd.DataFrame:
 
 
 def load_citations() -> pd.DataFrame:
-    """Load citation links."""
+    """Load citation links from local files."""
     log.info("[2/5] Loading citation links …")
 
     cit = pd.read_csv(
@@ -140,6 +191,95 @@ def load_citations() -> pd.DataFrame:
     log.info(f"       cit_links.txt: {len(cit):,} edges")
 
     return cit
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# LOAD DATA FROM BIGQUERY
+# ──────────────────────────────────────────────────────────────────────────────
+def load_cwts_data_from_bigquery() -> pd.DataFrame:
+    """Load and merge CWTS data from BigQuery."""
+    from google.cloud import bigquery
+    
+    log.info("[1/5] Loading data from BigQuery …")
+    
+    tbl_classif = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_{RUN_TIMESTAMP}"
+    tbl_pub_meta = f"{BQ_PROJECT}.{BQ_DATASET}.pub_metadata_raw_{RUN_TIMESTAMP}"
+    
+    log.info(f"       Classification: {tbl_classif}")
+    log.info(f"       Pub metadata:   {tbl_pub_meta}")
+    
+    journals_str = ", ".join(f"'{j}'" for j in JOURNALS)
+    
+    client = bigquery.Client(project=BQ_PROJECT)
+    
+    query = f"""
+    SELECT 
+        c.int_id,
+        c.micro,
+        c.meso,
+        c.macro,
+        m.pub_id,
+        m.is_frontiers,
+        m.journal,
+        m.date,
+        m.title
+    FROM `{tbl_classif}` c
+    JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
+    WHERE m.journal IN ({journals_str})
+    """
+    
+    df = client.query(query).to_dataframe()
+    log.info(f"       Loaded {len(df):,} rows from BigQuery")
+    
+    # Parse date
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["pub_year"] = df["date"].dt.year
+    df = df.dropna(subset=["pub_year"])
+    df["pub_year"] = df["pub_year"].astype(int)
+    
+    log.info(f"       Journals: {df['journal'].nunique()}")
+    log.info(f"       {CLUSTER_LEVEL.title()} clusters: {df[CLUSTER_LEVEL].nunique()}")
+    log.info(f"       Years: {df['pub_year'].min()}–{df['pub_year'].max()}")
+    
+    return df
+
+
+def load_citations_from_bigquery(valid_int_ids: set = None) -> pd.DataFrame:
+    """Load citation links from BigQuery, filtered to relevant papers only."""
+    from google.cloud import bigquery
+    
+    log.info("[2/5] Loading citation links from BigQuery …")
+    
+    tbl_cit_links = f"{BQ_PROJECT}.{BQ_DATASET}.cit_links_raw_{RUN_TIMESTAMP}"
+    tbl_classif = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_{RUN_TIMESTAMP}"
+    tbl_pub_meta = f"{BQ_PROJECT}.{BQ_DATASET}.pub_metadata_raw_{RUN_TIMESTAMP}"
+    
+    client = bigquery.Client(project=BQ_PROJECT)
+    
+    # Filter citations to only those between papers in our journal set
+    journals_str = ", ".join(f"'{j}'" for j in JOURNALS)
+    
+    query = f"""
+    WITH journal_papers AS (
+        SELECT c.int_id
+        FROM `{tbl_classif}` c
+        JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
+        WHERE m.journal IN ({journals_str})
+    )
+    SELECT cl.int_id1, cl.int_id2, cl.weight
+    FROM `{tbl_cit_links}` cl
+    WHERE cl.int_id1 IN (SELECT int_id FROM journal_papers)
+      AND cl.int_id2 IN (SELECT int_id FROM journal_papers)
+    """
+    
+    try:
+        df = client.query(query).to_dataframe()
+        log.info(f"       Loaded {len(df):,} citation edges (filtered to journal papers)")
+    except Exception as e:
+        log.warning(f"       Citation query failed: {e}")
+        df = pd.DataFrame(columns=["int_id1", "int_id2", "weight"])
+    
+    return df
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -554,9 +694,12 @@ footer {
 </div>
 
 <footer>
-  <span id="ftYears"></span> · <span id="ftCov"></span>% primary coverage · 
-  <span id="ftJournals"></span> journals · <span id="ftPapers"></span> papers · 
-  <span id="ftComms"></span> communities
+  <div style="margin-bottom: 8px;">
+    <span id="ftYears"></span> · <span id="ftCov"></span>% primary coverage · 
+    <span id="ftJournals"></span> journals · <span id="ftPapers"></span> papers · 
+    <span id="ftComms"></span> communities
+  </div>
+  <div id="ftSource" style="color: #8899a6; font-size: 0.75rem;"></div>
 </footer>
 
 <script>
@@ -598,16 +741,26 @@ def main():
     global GPT_LABELS
     
     log.info("=" * 60)
-    log.info("Building Scope Dashboard from CWTS Output")
+    log.info("Building Scope Dashboard")
+    log.info(f"Data source: {DATA_SOURCE.upper()}")
     log.info(f"Cluster level: {CLUSTER_LEVEL}")
+    if DATA_SOURCE == "bigquery":
+        log.info(f"Run timestamp: {RUN_TIMESTAMP}")
     log.info("=" * 60)
 
     # Load GPT labels
     GPT_LABELS = load_gpt_labels()
     
-    # Load data
-    df = load_cwts_data()
-    df_cit = load_citations()
+    # Load run metadata (from cwts_export.py)
+    run_metadata = load_run_metadata()
+    
+    # Load data based on DATA_SOURCE toggle
+    if DATA_SOURCE == "bigquery":
+        df = load_cwts_data_from_bigquery()
+        df_cit = load_citations_from_bigquery()
+    else:
+        df = load_cwts_data()
+        df_cit = load_citations()
 
     # Compute positions and stats
     positions = compute_scatter_positions(df, df_cit)
@@ -623,6 +776,7 @@ def main():
             "primary_cluster_level": CLUSTER_LEVEL,
             "oos_per_year_years": [int(y) for y in years],
         },
+        "run_metadata": run_metadata,
         "journals": journals,
         "communities": communities,
     }

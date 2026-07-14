@@ -15,12 +15,12 @@ Pipeline:
 8. Output: cluster → taxonomy mapping
 
 Usage:
-    python taxonomy_naming.py
+    python taxonomy_naming.py <run_timestamp>
     
     Or import and call:
         import taxonomy_naming
-        taxonomy_naming.CLUSTER_LEVEL = "macro"
-        taxonomy_naming.main()
+        taxonomy_naming.CLUSTER_LEVEL = "macro"  # optional, defaults to "macro"
+        taxonomy_naming.main("20260618_130306")
 
 Output:
     cwts_output/cluster_taxonomy_labels.csv
@@ -66,10 +66,9 @@ TBL_PUB = "ocean-breeze-tier-1.airak.Publication"
 TBL_L2_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l2_cluster_assignments"
 TBL_L1_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l1_cluster_assignments"
 
-# CWTS tables (update timestamp as needed)
-RUN_TIMESTAMP = "20260618_114712"
-TBL_CLASSIF = f"{BQ_SRC_DATASET}.classification_raw_{RUN_TIMESTAMP}"
-TBL_PUB_META = f"{BQ_SRC_DATASET}.pub_metadata_raw_{RUN_TIMESTAMP}"
+# CWTS tables (constructed from run_timestamp parameter)
+TBL_CLASSIF = None  # Set in main()
+TBL_PUB_META = None  # Set in main()
 
 # Which cluster level to label: "micro", "meso", or "macro"
 CLUSTER_LEVEL = "macro"
@@ -605,8 +604,14 @@ SYSTEM_PROMPT = dedent("""
 """).strip()
 
 
-def format_brief(brief: dict, journal_name: str) -> str:
-    """Convert candidate brief to LLM prompt text."""
+def format_brief(brief: dict, journal_name: str, used_labels: set = None) -> str:
+    """Convert candidate brief to LLM prompt text.
+    
+    Args:
+        brief: Candidate hierarchy for this community
+        journal_name: Name of the community/cluster
+        used_labels: Set of (key, name) tuples already assigned to other communities
+    """
     p = brief["profile"]
     lines = [
         f"## Publication community: {journal_name}",
@@ -614,6 +619,17 @@ def format_brief(brief: dict, journal_name: str) -> str:
         f"{p.get('age_class','?')} ({p.get('age_years','?')} yrs), growth: {p.get('growth_class','?')}",
         f"Total in-scope L2 topics: {brief['n_scope_l2_total']}", ""
     ]
+    
+    # Option 1: Add warning about already-used labels
+    if used_labels:
+        used_names = sorted(set(name for _, name in used_labels))
+        if used_names:
+            lines.append("### ⚠️ Labels already assigned to other communities (avoid if possible):")
+            for name in used_names[:15]:  # Show up to 15
+                lines.append(f"  - {name}")
+            if len(used_names) > 15:
+                lines.append(f"  ... and {len(used_names) - 15} more")
+            lines.append("")
     
     if brief["l0_domains"]:
         lines.append("### L0 Domain candidates")
@@ -655,10 +671,23 @@ def parse_llm_response(text: str) -> dict:
     raise ValueError("No JSON found")
 
 
-def call_llm(journal_id: int, journal_name: str, brief: dict) -> dict:
-    """Call LLM for one community."""
-    user_text = format_brief(brief, journal_name)
+def call_llm(journal_id: int, journal_name: str, brief: dict, used_labels: set = None, force_unique: bool = False) -> dict:
+    """Call LLM for one community.
+    
+    Args:
+        journal_id: Community ID
+        journal_name: Community name
+        brief: Candidate hierarchy
+        used_labels: Set of (key, name) tuples already assigned
+        force_unique: If True, add stronger instruction to avoid duplicates (for retry pass)
+    """
+    user_text = format_brief(brief, journal_name, used_labels)
     system = SYSTEM_PROMPT.format(max_core=MAX_CORE, max_bleed=MAX_BLEED)
+    
+    # Option 4: Stronger uniqueness instruction for retry pass
+    if force_unique and used_labels:
+        used_names = [name for _, name in used_labels]
+        system += f"\n\nIMPORTANT: The following labels are ALREADY ASSIGNED to other communities and must NOT be used: {', '.join(used_names[:20])}. Choose more specific alternatives."
     
     try:
         resp = oai.chat.completions.create(
@@ -678,10 +707,23 @@ def call_llm(journal_id: int, journal_name: str, brief: dict) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 # 9. RUN LLM AND POST-PROCESS
 # ══════════════════════════════════════════════════════════════════════════════
+def extract_labels_from_result(result: dict) -> set:
+    """Extract (key, name) tuples from an LLM result."""
+    labels = set()
+    for tier in ["core", "bleed"]:
+        for sel in result.get(tier, []):
+            key = sel.get("key", "")
+            name = sel.get("name", "")
+            if key and name:
+                labels.add((key, name))
+    return labels
+
+
 def run_llm_for_all(community_ids: list) -> dict:
-    """Run LLM for all communities."""
-    log.info("Running LLM for %d communities...", len(community_ids))
+    """Run LLM for all communities with duplicate tracking (Option 1)."""
+    log.info("Running LLM for %d communities (Pass 1: with used-label tracking)...", len(community_ids))
     llm_results = {}
+    used_labels = set()  # Track (key, name) tuples already assigned
     
     for i, jid in enumerate(community_ids):
         jname = community_names.get(jid, str(jid))
@@ -695,9 +737,154 @@ def run_llm_for_all(community_ids: list) -> dict:
             continue
         
         log.info("[%d/%d] %s...", i + 1, len(community_ids), jname)
-        llm_results[jid] = call_llm(jid, jname, brief)
+        # Option 1: Pass used_labels to help LLM avoid duplicates
+        llm_results[jid] = call_llm(jid, jname, brief, used_labels=used_labels)
+        
+        # Track newly assigned labels
+        new_labels = extract_labels_from_result(llm_results[jid])
+        used_labels.update(new_labels)
     
-    log.info("LLM complete for %d communities", len(llm_results))
+    log.info("Pass 1 complete for %d communities", len(llm_results))
+    
+    # Option 4: Detect duplicates and retry
+    llm_results = resolve_duplicates(llm_results, community_ids)
+    
+    return llm_results
+
+
+def filter_brief_candidates(brief: dict, taken_labels: set) -> dict:
+    """Create a copy of brief with taken labels removed from candidates."""
+    import copy
+    filtered = copy.deepcopy(brief)
+    
+    taken_keys = {key for key, name in taken_labels}
+    taken_names = {name for key, name in taken_labels}
+    
+    # Filter L0 domains
+    if filtered.get("l0_domains"):
+        filtered["l0_domains"] = [
+            d for d in filtered["l0_domains"]
+            if d.get("key") not in taken_keys and d.get("name") not in taken_names
+        ]
+    
+    # Filter L1 clusters
+    if filtered.get("l1_clusters"):
+        filtered["l1_clusters"] = [
+            c for c in filtered["l1_clusters"]
+            if c.get("key") not in taken_keys and c.get("name") not in taken_names
+        ]
+    
+    # Filter L1 singles
+    if filtered.get("l1_singles"):
+        filtered["l1_singles"] = [
+            s for s in filtered["l1_singles"]
+            if s.get("key") not in taken_keys and s.get("name") not in taken_names
+        ]
+    
+    # Filter L2 clusters
+    if filtered.get("l2_clusters"):
+        filtered["l2_clusters"] = [
+            c for c in filtered["l2_clusters"]
+            if c.get("key") not in taken_keys and c.get("name") not in taken_names
+        ]
+    
+    return filtered
+
+
+def resolve_duplicates(llm_results: dict, community_ids: list) -> dict:
+    """Option 4: Detect duplicate labels and re-run LLM for conflicts."""
+    log.info("Checking for duplicate labels...")
+    
+    # Build label -> communities mapping (only for PRIMARY core label, rank 1)
+    label_to_communities = {}
+    for jid, res in llm_results.items():
+        core_labels = res.get("core", [])
+        if core_labels:
+            # Only consider the FIRST (primary) core label
+            sel = core_labels[0]
+            key = sel.get("key", "")
+            name = sel.get("name", "")
+            if key and name:
+                label_key = (key, name)
+                if label_key not in label_to_communities:
+                    label_to_communities[label_key] = []
+                label_to_communities[label_key].append({
+                    "jid": jid,
+                    "jname": res.get("_journal_name", str(jid)),
+                    "confidence": res.get("confidence", "low"),
+                    "n_articles": profiles.get(jid, {}).get("n_articles", 0),
+                })
+    
+    # Find duplicates
+    duplicates = {k: v for k, v in label_to_communities.items() if len(v) > 1}
+    
+    if not duplicates:
+        log.info("No duplicate labels found.")
+        return llm_results
+    
+    log.info("Found %d duplicate labels, starting Pass 2 (retry with filtered candidates)...", len(duplicates))
+    
+    # For each duplicate, keep the best match (most articles) and retry the others
+    retry_jids = set()
+    for label, communities in duplicates.items():
+        # Sort by article count descending - keep the largest
+        communities.sort(key=lambda x: -x["n_articles"])
+        keeper = communities[0]
+        log.info("  Label '%s': keeping %s (%d articles), will retry %d others",
+                 label[1], keeper["jname"], keeper["n_articles"], len(communities) - 1)
+        for c in communities[1:]:
+            retry_jids.add(c["jid"])
+    
+    if not retry_jids:
+        return llm_results
+    
+    # Collect PRIMARY labels that are "taken" (not from retry candidates)
+    taken_labels = set()
+    for jid, res in llm_results.items():
+        if jid not in retry_jids:
+            core_labels = res.get("core", [])
+            if core_labels:
+                sel = core_labels[0]  # Only primary label
+                key = sel.get("key", "")
+                name = sel.get("name", "")
+                if key and name:
+                    taken_labels.add((key, name))
+    
+    # Retry with filtered candidates (taken labels physically removed)
+    for i, jid in enumerate(sorted(retry_jids)):
+        jname = community_names.get(jid, str(jid))
+        original_brief = briefs[jid]
+        
+        # Filter out taken labels from candidates
+        filtered_brief = filter_brief_candidates(original_brief, taken_labels)
+        
+        # Check if any candidates remain
+        has_candidates = (
+            filtered_brief.get("l0_domains") or 
+            filtered_brief.get("l1_clusters") or 
+            filtered_brief.get("l1_singles") or 
+            filtered_brief.get("l2_clusters")
+        )
+        
+        if not has_candidates:
+            log.warning("  [Retry %d/%d] %s — no candidates left after filtering, keeping original", 
+                       i + 1, len(retry_jids), jname)
+            continue
+        
+        log.info("  [Retry %d/%d] %s (filtered: removed %d taken labels)...", 
+                 i + 1, len(retry_jids), jname, len(taken_labels))
+        llm_results[jid] = call_llm(jid, jname, filtered_brief, used_labels=taken_labels, force_unique=True)
+        
+        # Add new PRIMARY label to taken set for subsequent retries
+        new_core = llm_results[jid].get("core", [])
+        if new_core:
+            sel = new_core[0]
+            key = sel.get("key", "")
+            name = sel.get("name", "")
+            if key and name:
+                taken_labels.add((key, name))
+    
+    log.info("Pass 2 complete. Retried %d communities.", len(retry_jids))
     return llm_results
 
 
@@ -737,10 +924,21 @@ def flatten_results(llm_results: dict, community_ids: list) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════
 # 10. MAIN
 # ══════════════════════════════════════════════════════════════════════════════
-def main():
-    """Run the full taxonomy naming pipeline."""
+def main(run_timestamp: str):
+    """Run the full taxonomy naming pipeline.
+    
+    Args:
+        run_timestamp: The timestamp suffix for BigQuery tables (e.g., "20260618_130306")
+    """
+    global TBL_CLASSIF, TBL_PUB_META
+    
+    # Set table names from timestamp
+    TBL_CLASSIF = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.classification_raw_{run_timestamp}"
+    TBL_PUB_META = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.pub_metadata_raw_{run_timestamp}"
+    
     log.info("=" * 60)
     log.info("Taxonomy Naming Pipeline")
+    log.info("Run timestamp: %s", run_timestamp)
     log.info("Cluster level: %s", CLUSTER_LEVEL)
     log.info("=" * 60)
     
@@ -786,4 +984,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python taxonomy_naming.py <run_timestamp>")
+        print("Example: python taxonomy_naming.py 20260618_130306")
+        sys.exit(1)
+    main(sys.argv[1])

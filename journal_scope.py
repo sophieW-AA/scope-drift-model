@@ -10,11 +10,7 @@ together account for at least SCOPE_THRESHOLD of the journal's total papers.
 
 Reads:
     cwts_output/classification.txt   (int_id TAB micro TAB meso TAB macro)
-    cwts_output/pub_titles.txt       (int_id TAB title)
-    cwts_output/journal_papers.txt   (int_id TAB journal)   ← join key
-
-int_id is the CWTS sequential ID. To get airak PublicationId for taxonomy
-joins, use pub_metadata.txt which contains both int_id and pub_id.
+    cwts_output/pub_metadata.txt     (int_id TAB pub_id TAB is_frontiers TAB journal TAB date TAB title)
 
 Writes:
     cwts_output/journal_scope.csv    journal-level summary + OOS rates
@@ -55,6 +51,9 @@ SCOPE_THRESHOLD = 0.80
 
 # Journals with fewer papers than this are excluded (too noisy)
 MIN_PAPERS = 50
+
+# Whether to use GPT for scope descriptions (can be overridden)
+USE_GPT = True
 
 # How many titles to sample per journal when generating GPT scope descriptions
 GPT_SAMPLE_N = 100
@@ -142,14 +141,17 @@ def compute_core_clusters(paper_counts: dict, threshold: float) -> set:
 
 
 def main():
-    use_gpt = "--no-gpt" not in sys.argv
+    # Check command line arg first, then module variable
+    if "--no-gpt" in sys.argv:
+        use_gpt = False
+    else:
+        use_gpt = USE_GPT
 
     # ── Load data ────────────────────────────────────────────────────────────
     classif_path = OUTPUT_DIR / "classification.txt"
-    titles_path = OUTPUT_DIR / "pub_titles.txt"
-    core_path = OUTPUT_DIR / "frontiers_core.txt"
+    metadata_path = OUTPUT_DIR / "pub_metadata.txt"
 
-    for p in [classif_path, titles_path, core_path]:
+    for p in [classif_path, metadata_path]:
         if not p.exists():
             raise FileNotFoundError(f"Required file not found: {p}")
 
@@ -161,28 +163,20 @@ def main():
         names=["int_id", "micro", "meso", "macro"],
     )
 
-    print("Loading titles...")
-    titles = pd.read_csv(
-        titles_path,
+    print("Loading metadata (journal + title)...")
+    metadata = pd.read_csv(
+        metadata_path,
         sep="\t",
         header=None,
-        names=["int_id", "title"],
-    )
-
-    print("Loading journal assignments...")
-    core = pd.read_csv(
-        core_path,
-        sep="\t",
-        header=None,
-        names=["int_id", "is_frontiers", "journal"],
+        names=["int_id", "pub_id", "is_frontiers", "journal", "date", "title"],
     )
 
     if TARGET_JOURNALS:
-        core = core[core["journal"].isin(TARGET_JOURNALS)]
+        metadata = metadata[metadata["journal"].isin(TARGET_JOURNALS)]
 
     # ── Merge ────────────────────────────────────────────────────────────────
-    df = classif.merge(titles, on="int_id", how="inner").merge(
-        core[["int_id", "journal"]], on="int_id", how="inner"
+    df = classif.merge(
+        metadata[["int_id", "journal", "title"]], on="int_id", how="inner"
     )
     print(
         f"Merged: {len(df):,} publications across {df['journal'].nunique():,} journals"

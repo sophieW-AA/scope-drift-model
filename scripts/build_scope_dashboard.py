@@ -15,6 +15,7 @@ Output      : output/scope_dashboard.html
 import json
 import logging
 import math
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -29,9 +30,12 @@ from google.cloud import bigquery
 BQ_PROJECT = "ocean-tech-adv-analytics-c-tfs"
 BQ_DATASET = "scope_drift_raw"
 
-TBL_CLASSIF = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_20260617_120737"
-TBL_PUB_META = f"{BQ_PROJECT}.{BQ_DATASET}.pub_metadata_raw_20260617_122707"
-TBL_CIT_LINKS = f"{BQ_PROJECT}.{BQ_DATASET}.cit_links_raw_20260617_122707"
+# Get timestamp from environment variable or use default
+RUN_TIMESTAMP = os.environ.get("RUN_TIMESTAMP", "20260617_120737")
+
+TBL_CLASSIF = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_{RUN_TIMESTAMP}"
+TBL_PUB_META = f"{BQ_PROJECT}.{BQ_DATASET}.pub_metadata_raw_{RUN_TIMESTAMP}"
+TBL_CIT_LINKS = f"{BQ_PROJECT}.{BQ_DATASET}.cit_links_raw_{RUN_TIMESTAMP}"
 # FROM `ocean-tech-adv-analytics-c-tfs.scope_drift_raw.classification_raw_20260617_120737` cit
 
 # JOIN ocean-tech-adv-analytics-c-tfs.scope_drift_raw.pub_metadata_raw_20260617_122707 met
@@ -587,6 +591,8 @@ def build_html(data: dict):
 def main():
     log.info("=" * 60)
     log.info("Building Scope Dashboard")
+    log.info(f"Run timestamp: {RUN_TIMESTAMP}")
+    log.info(f"Tables: classification_raw_{RUN_TIMESTAMP}, pub_metadata_raw_{RUN_TIMESTAMP}, cit_links_raw_{RUN_TIMESTAMP}")
     log.info("=" * 60)
 
     client = bigquery.Client(project=BQ_PROJECT)

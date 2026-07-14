@@ -39,6 +39,7 @@ import pandas as pd
 from google.cloud import bigquery
 
 from datetime import datetime
+import pandas_gbq
 
 
 # ---------------------------------------------------------------------------
@@ -379,7 +380,9 @@ def get_node_metadata(
 # ---------------------------------------------------------------------------
 # Step 5a: Temporal decay + self-citation discount
 # ---------------------------------------------------------------------------
-def apply_edge_weights(df_edges: pd.DataFrame, node_lookup: dict) -> pd.DataFrame:
+def apply_edge_weights(
+    df_edges: pd.DataFrame, node_lookup: pd.DataFrame
+) -> pd.DataFrame:
     log.info("Applying edge weights (temporal decay + self-citation discount)...")
     end_year = YEAR_RANGE[1]
 
@@ -527,7 +530,7 @@ BQ_DEST_DATASET = "scope_drift_raw"
 def write_cwts_files(
     df_edges: pd.DataFrame,
     final_nodes: set[int],
-    node_lookup: dict,
+    node_lookup: pd.DataFrame,
     upload_to_bq: bool = True,
 ) -> None:
     """
@@ -545,6 +548,9 @@ def write_cwts_files(
 
     log.info(f"Writing CWTS files to {OUTPUT_DIR}/  ({len(sorted_pids):,} nodes)...")
 
+    # Convert DataFrame to dictionary for O(1) row access in loop
+    node_dict = node_lookup.to_dict("index")
+
     # ═══════════════════════════════════════════════════════════════════════
     # 1. pubs.txt
     # ═══════════════════════════════════════════════════════════════════════
@@ -555,14 +561,13 @@ def write_cwts_files(
     # Write text file
     pubs_path = OUTPUT_DIR / "pubs.txt"
     pubs_df.to_csv(pubs_path, sep="\t", index=False, header=False)
-    n_core = sum(
-        1 for pid in sorted_pids if node_lookup.get(pid, {}).get("IsFrontiers")
-    )
+    n_core = sum(1 for pid in sorted_pids if node_dict.get(pid, {}).get("IsFrontiers"))
     log.info(f"  pubs.txt        : {len(pubs_df):,} rows  ({n_core:,} Frontiers)")
 
     # Upload to BigQuery
     if upload_to_bq:
-        pubs_df.to_gbq(
+        pandas_gbq.to_gbq(
+            pubs_df,
             f"{BQ_DEST_DATASET}.pubs_raw_{timestamp}",
             project_id=BQ_DEST_PROJECT,
             if_exists="replace",
@@ -574,19 +579,22 @@ def write_cwts_files(
     # ═══════════════════════════════════════════════════════════════════════
     meta_rows = []
     for pid in sorted_pids:
-        m = node_lookup.get(pid, {})
+        m = node_dict.get(pid, {})
         meta_rows.append(
             {
                 "int_id": pid_to_int[pid],
                 "pub_id": pid,
                 "is_frontiers": 1 if m.get("IsFrontiers") else 0,
-                "journal": (m.get("JournalName") or str(m.get("JournalId", "")))
-                .replace("\t", " ")
-                .strip(),
+                "journal": (
+                    str(m.get("JournalName") or m.get("JournalId") or "")
+                    .replace("\t", " ")
+                    .strip()
+                ),
                 "date": str(
-                    m.get("PublishedDate") or f"{m.get('PublishedYear', '')}-01-01"
-                ).strip(),
-                "title": (m.get("Title") or "")
+                    m.get("PublishedDate") or m.get("PublishedYear") or ""
+                ).strip()
+                or "0000-01-01",
+                "title": str(m.get("Title") or "")
                 .replace("\t", " ")
                 .replace("\n", " ")
                 .strip(),
@@ -603,11 +611,13 @@ def write_cwts_files(
 
     # Upload to BigQuery
     if upload_to_bq:
-        pub_metadata_df.to_gbq(
+        pandas_gbq.to_gbq(
+            pub_metadata_df,
             f"{BQ_DEST_DATASET}.pub_metadata_raw_{timestamp}",
             project_id=BQ_DEST_PROJECT,
             if_exists="replace",
         )
+
         log.info(f"  → BigQuery: {BQ_DEST_DATASET}.pub_metadata_raw_{timestamp}")
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -647,7 +657,8 @@ def write_cwts_files(
         cit_links_bq = cit_links_df.rename(
             columns={"src_int": "int_id1", "tgt_int": "int_id2"}
         )
-        cit_links_bq.to_gbq(
+        pandas_gbq.to_gbq(
+            cit_links_bq,
             f"{BQ_DEST_DATASET}.cit_links_raw_{timestamp}",
             project_id=BQ_DEST_PROJECT,
             if_exists="replace",
@@ -659,61 +670,95 @@ def write_cwts_files(
 # Main
 # ---------------------------------------------------------------------------
 def main():
-
-    log.info("=" * 60)
-    log.info("CWTS Export — Edge Weight Builder")
-    log.info(
-        f"  Mode: {NETWORK_MODE.upper()}  |  Years: {YEAR_RANGE[0]}-{YEAR_RANGE[1]}"
-    )
-    log.info(f"  Edge weights: {'ON' if ENABLE_EDGE_WEIGHTS else 'OFF'}")
-    log.info("=" * 60)
-
-    # Step 1: journals
-    if JOURNAL_IDS_OVERRIDE:
-        journal_ids = [
-            int(x.strip()) for x in JOURNAL_IDS_OVERRIDE.split(",") if x.strip()
-        ]
-        log.info(f"Using specified journal IDs: {journal_ids}")
-    else:
-        journal_ids = get_top_frontiers_journals(TOP_N_JOURNALS)
-
-    # Step 2: Frontiers pub IDs
-    frontiers_pub_ids = get_frontiers_pub_ids(journal_ids)
-
-    # Step 3: Citation network
-    all_journal_ids = set(journal_ids)
-    if NETWORK_MODE == "full":
-        df_edges, final_nodes, all_journal_ids = get_full_network_edges(
-            frontiers_pub_ids, journal_ids
+    try:
+        log.info("=" * 60)
+        log.info("CWTS Export — Edge Weight Builder")
+        log.info(
+            f"  Mode: {NETWORK_MODE.upper()}  |  Years: {YEAR_RANGE[0]}-{YEAR_RANGE[1]}"
         )
-    elif NETWORK_MODE == "global":
-        df_edges, final_nodes = get_global_network_edges(frontiers_pub_ids)
-        # No bounded journal set in global mode — BC's `JournalId IN (...)`
-        # filter would be meaningless and the cross-join would explode.
-        if ENABLE_BC_EDGES:
-            log.warning(
-                "Global mode: disabling bibliographic-coupling edges "
-                "(no journal scope; query would be unbounded)."
+        log.info(f"  Edge weights: {'ON' if ENABLE_EDGE_WEIGHTS else 'OFF'}")
+        log.info("=" * 60)
+
+        # Step 1: journals
+        if JOURNAL_IDS_OVERRIDE:
+            journal_ids = [
+                int(x.strip()) for x in JOURNAL_IDS_OVERRIDE.split(",") if x.strip()
+            ]
+            log.info(f"Using specified journal IDs: {journal_ids}")
+        else:
+            journal_ids = get_top_frontiers_journals(TOP_N_JOURNALS)
+
+        # Step 2: Frontiers pub IDs
+        frontiers_pub_ids = get_frontiers_pub_ids(journal_ids)
+
+        # Step 3: Citation network
+        all_journal_ids = set(journal_ids)
+        if NETWORK_MODE == "full":
+            df_edges, final_nodes, all_journal_ids = get_full_network_edges(
+                frontiers_pub_ids, journal_ids
             )
-            globals()["ENABLE_BC_EDGES"] = False
-    else:
-        df_edges, final_nodes = get_ego_network_edges(frontiers_pub_ids)
+        elif NETWORK_MODE == "global":
+            df_edges, final_nodes = get_global_network_edges(frontiers_pub_ids)
+            # No bounded journal set in global mode — BC's `JournalId IN (...)`
+            # filter would be meaningless and the cross-join would explode.
+            if ENABLE_BC_EDGES:
+                log.warning(
+                    "Global mode: disabling bibliographic-coupling edges "
+                    "(no journal scope; query would be unbounded)."
+                )
+                globals()["ENABLE_BC_EDGES"] = False
+        else:
+            df_edges, final_nodes = get_ego_network_edges(frontiers_pub_ids)
 
-    # Step 4: Node metadata (year + journal — needed for weights)
-    node_lookup = get_node_metadata(final_nodes, journal_ids)
+        # Step 4: Node metadata (year + journal — needed for weights)
+        node_lookup = get_node_metadata(final_nodes, journal_ids)
 
-    # Step 5: Edge weights
-    if ENABLE_EDGE_WEIGHTS:
-        df_edges = apply_edge_weights(df_edges, node_lookup)
-        df_bc = get_bc_edges(frontiers_pub_ids, all_journal_ids)
-        if len(df_bc):
-            df_edges = merge_edges(df_edges, df_bc)
-    else:
-        log.info("Edge weighting disabled — using weight=1.0")
-        df_edges["weight"] = 1.0
+        # Step 5: Edge weights
+        if ENABLE_EDGE_WEIGHTS:
+            df_edges = apply_edge_weights(df_edges, node_lookup)
+            df_bc = get_bc_edges(frontiers_pub_ids, all_journal_ids)
+            if len(df_bc):
+                df_edges = merge_edges(df_edges, df_bc)
+        else:
+            log.info("Edge weighting disabled — using weight=1.0")
+            df_edges["weight"] = 1.0
 
-    # Step 6: Write files
-    write_cwts_files(df_edges, final_nodes, node_lookup)
+        # Step 6: Write files
+        write_cwts_files(df_edges, final_nodes, node_lookup)
+
+        # Step 7: Save run metadata to BigQuery for dashboards
+        import json
+        metadata_row = {
+            "run_timestamp": RUN_TIMESTAMP,
+            "generated_utc": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "bq_source_project": BQ_PROJECT,
+            "bq_source_dataset": AIRAK_DATASET,
+            "network_mode": NETWORK_MODE,
+            "start_year": START_YEAR,
+            "end_year": END_YEAR,
+            "top_n_journals": TOP_N_JOURNALS,
+            "journal_ids": json.dumps(journal_ids),
+            "edge_weighting_enabled": ENABLE_EDGE_WEIGHTS,
+            "temporal_decay_tau": TEMPORAL_DECAY_TAU,
+            "self_cite_journal_weight": SELF_CITE_JOURNAL_WEIGHT,
+            "bc_edges_enabled": ENABLE_BC_EDGES,
+            "bc_min_shared_refs": BC_MIN_SHARED_REFS,
+            "total_nodes": len(final_nodes),
+            "total_edges": len(df_edges),
+        }
+        metadata_df = pd.DataFrame([metadata_row])
+        pandas_gbq.to_gbq(
+            metadata_df,
+            f"{BQ_DEST_DATASET}.run_metadata_{RUN_TIMESTAMP}",
+            project_id=BQ_DEST_PROJECT,
+            if_exists="replace",
+        )
+        log.info(f"  → BigQuery: {BQ_DEST_DATASET}.run_metadata_{RUN_TIMESTAMP}")
+
+    except Exception as e:
+        log.exception("An error occurred during execution of the CWTS export:")
+        raise e
+    log.info("Done!!!!")
 
 
 if __name__ == "__main__":
