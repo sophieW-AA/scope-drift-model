@@ -3,11 +3,16 @@ cwts_export.py
 ==============
 Standalone script: pull the citation network from BigQuery, apply edge
 weights (temporal decay + journal self-citation discount + optional
-bibliographic coupling), then write the two text files required by the
-CWTS publicationclassification Java tool:
+bibliographic coupling), then write the text files required by the
+CWTS publicationclassification Java tool.
 
-    pubs.txt       — <int_pub_id>  <core_pub>
-    cit_links.txt  — <int_pub_id1> <int_pub_id2> <weight>
+Optionally runs the CWTS Java classification and uploads results to BigQuery.
+
+Output files:
+    pubs.txt           — <int_pub_id>  <core_pub>
+    pub_metadata.txt   — <int_id> <pub_id> <is_frontiers> <journal> <date> <title>
+    cit_links.txt      — <int_pub_id1> <int_pub_id2> <weight>
+    classification.txt — <int_id> <micro> <meso> <macro>  (if RUN_CLASSIFICATION=true)
 
 Usage
 -----
@@ -18,7 +23,7 @@ Optional env vars (all have defaults):
     JOURNAL_IDS             str   comma-separated IDs, overrides TOP_N_JOURNALS
     START_YEAR              int   default 2021
     END_YEAR                int   default 2025
-    NETWORK_MODE            str   "ego" | "full" (default "full")
+    NETWORK_MODE            str   "ego" | "full" | "global" (default "global")
     ENABLE_EDGE_WEIGHTS     bool  default true
     TEMPORAL_DECAY_TAU      float default 5.0
     SELF_CITE_JOURNAL_WEIGHT float default 0.5
@@ -26,6 +31,19 @@ Optional env vars (all have defaults):
     BC_MIN_SHARED_REFS      int   default 3
     MAX_EXTERNAL_PAPERS     int   default 50000  (ego mode only)
     OUTPUT_DIR              str   default ./cwts_output
+
+Classification env vars (when RUN_CLASSIFICATION=true):
+    RUN_CLASSIFICATION      bool  default false
+    CWTS_JAR_PATH           str   default publicationclassification.jar
+    JAVA_HEAP_SIZE          str   default 350g
+    CWTS_LARGEST_COMPONENT  str   default true
+    CWTS_ITERATIONS         str   default 100
+    CWTS_MICRO_RES          str   default 4e-4
+    CWTS_MICRO_MIN_SIZE     str   default 200
+    CWTS_MESO_RES           str   default 1e-6
+    CWTS_MESO_MIN_SIZE      str   default 1000
+    CWTS_MACRO_RES          str   default 5e-7
+    CWTS_MACRO_MIN_SIZE     str   default 50000
 """
 
 import logging
@@ -81,6 +99,28 @@ MAX_EXTERNAL_PAPERS = int(os.environ.get("MAX_EXTERNAL_PAPERS", "50000"))
 
 OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", "cwts_output"))
 
+# CWTS Classification (Java step) - set to true to run classification after export
+RUN_CLASSIFICATION = os.environ.get("RUN_CLASSIFICATION", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+CWTS_JAR_PATH = os.environ.get("CWTS_JAR_PATH", "publicationclassification.jar")
+
+# Classification parameters (can be overridden via env vars)
+CWTS_PARAMS = {
+    "largest_component_only": os.environ.get("CWTS_LARGEST_COMPONENT", "true"),
+    "iterations": os.environ.get("CWTS_ITERATIONS", "100"),
+    "micro_resolution": os.environ.get("CWTS_MICRO_RES", "5e-4"),
+    "micro_min_cluster_size": os.environ.get("CWTS_MICRO_MIN_SIZE", "1000"),
+    "meso_resolution": os.environ.get("CWTS_MESO_RES", "5e-6"),
+    "meso_min_cluster_size": os.environ.get("CWTS_MESO_MIN_SIZE", "5000"),
+    "macro_resolution": os.environ.get("CWTS_MACRO_RES", "1e-6"),
+    "macro_min_cluster_size": os.environ.get("CWTS_MACRO_MIN_SIZE", "20000"),
+}
+# Java heap size - set to empty string "" to disable (e.g. JAVA_HEAP_SIZE="")
+JAVA_HEAP_SIZE = os.environ.get("JAVA_HEAP_SIZE", "")
+
 LOG_DIR = Path("cwts_logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +153,10 @@ log.info(f"  ENABLE_BC_EDGES         : {ENABLE_BC_EDGES}")
 log.info(f"  BC_MIN_SHARED_REFS      : {BC_MIN_SHARED_REFS}")
 log.info(f"  MAX_EXTERNAL_PAPERS     : {MAX_EXTERNAL_PAPERS}")
 log.info(f"  OUTPUT_DIR              : {OUTPUT_DIR}")
+log.info(f"  RUN_CLASSIFICATION      : {RUN_CLASSIFICATION}")
+if RUN_CLASSIFICATION:
+    log.info(f"  CWTS_JAR_PATH           : {CWTS_JAR_PATH}")
+    log.info(f"  JAVA_HEAP_SIZE          : {JAVA_HEAP_SIZE}")
 log.info("=" * 60)
 
 
@@ -667,6 +711,122 @@ def write_cwts_files(
 
 
 # ---------------------------------------------------------------------------
+# Step 7: Run CWTS Java Classification
+# ---------------------------------------------------------------------------
+def run_cwts_classification() -> bool:
+    """
+    Run the CWTS Java classification tool to generate micro/meso/macro clusters.
+
+    Returns True if classification succeeded, False otherwise.
+    """
+    import subprocess
+
+    pubs_path = OUTPUT_DIR / "pubs.txt"
+    cit_links_path = OUTPUT_DIR / "cit_links.txt"
+    classification_path = OUTPUT_DIR / "classification.txt"
+
+    if not Path(CWTS_JAR_PATH).exists():
+        log.error(f"CWTS JAR not found at: {CWTS_JAR_PATH}")
+        return False
+
+    log.info("=" * 60)
+    log.info("Running CWTS Classification")
+    log.info("=" * 60)
+    log.info(f"  JAR: {CWTS_JAR_PATH}")
+    if JAVA_HEAP_SIZE:
+        log.info(f"  Java heap: -Xmx{JAVA_HEAP_SIZE}")
+    log.info(f"  Parameters:")
+    for k, v in CWTS_PARAMS.items():
+        log.info(f"    {k}: {v}")
+
+    # Build command - only add heap flag if specified
+    cmd = ["java"]
+    if JAVA_HEAP_SIZE:
+        cmd.append(f"-Xmx{JAVA_HEAP_SIZE}")
+    cmd.extend(
+        [
+            "-cp",
+            CWTS_JAR_PATH,
+            "nl.cwts.publicationclassification.run.PublicationClassificationCreator",
+            str(pubs_path),
+            str(cit_links_path),
+            str(classification_path),
+            CWTS_PARAMS["largest_component_only"],
+            CWTS_PARAMS["iterations"],
+            CWTS_PARAMS["micro_resolution"],
+            CWTS_PARAMS["micro_min_cluster_size"],
+            CWTS_PARAMS["meso_resolution"],
+            CWTS_PARAMS["meso_min_cluster_size"],
+            CWTS_PARAMS["macro_resolution"],
+            CWTS_PARAMS["macro_min_cluster_size"],
+        ]
+    )
+
+    log.info(f"  Running command...")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # Log output
+    log_path = LOG_DIR / f"cwts_classification_{RUN_TIMESTAMP}.log"
+    with open(log_path, "w") as f:
+        f.write(f"CWTS Publication Classification\n")
+        f.write(f"{'='*50}\n")
+        f.write(f"Timestamp: {RUN_TIMESTAMP}\n\n")
+        f.write(f"Parameters\n{'-'*30}\n")
+        for k, v in CWTS_PARAMS.items():
+            f.write(f"  {k:<26}: {v}\n")
+        f.write(f"\nReturn Code: {result.returncode}\n")
+        f.write(f"\nSTDOUT\n{'-'*30}\n")
+        f.write(result.stdout or "(empty)\n")
+        f.write(f"\nSTDERR\n{'-'*30}\n")
+        f.write(result.stderr or "(empty)\n")
+
+    log.info(f"  Log written to: {log_path}")
+
+    if result.returncode != 0:
+        log.error(f"  Classification failed with return code {result.returncode}")
+        if result.stderr:
+            log.error(f"  STDERR: {result.stderr[:500]}")
+        return False
+
+    if result.stdout:
+        log.info(f"  STDOUT: {result.stdout[:200]}...")
+
+    log.info(f"  Classification complete: {classification_path}")
+    return True
+
+
+def upload_classification_to_bigquery() -> None:
+    """Upload classification.txt to BigQuery."""
+    classification_path = OUTPUT_DIR / "classification.txt"
+
+    if not classification_path.exists():
+        log.error(f"Classification file not found: {classification_path}")
+        return
+
+    log.info("Uploading classification to BigQuery...")
+
+    classification_df = pd.read_csv(
+        classification_path,
+        sep="\t",
+        header=None,
+        names=["int_id", "micro", "meso", "macro"],
+    )
+
+    log.info(f"  Loaded {len(classification_df):,} rows")
+    log.info(f"  Micro clusters: {classification_df['micro'].nunique():,}")
+    log.info(f"  Meso clusters:  {classification_df['meso'].nunique():,}")
+    log.info(f"  Macro clusters: {classification_df['macro'].nunique():,}")
+
+    pandas_gbq.to_gbq(
+        classification_df,
+        f"{BQ_DEST_DATASET}.classification_raw_{RUN_TIMESTAMP}",
+        project_id=BQ_DEST_PROJECT,
+        if_exists="replace",
+    )
+    log.info(f"  → BigQuery: {BQ_DEST_DATASET}.classification_raw_{RUN_TIMESTAMP}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
@@ -726,8 +886,17 @@ def main():
         # Step 6: Write files
         write_cwts_files(df_edges, final_nodes, node_lookup)
 
-        # Step 7: Save run metadata to BigQuery for dashboards
+        # Step 7: Run CWTS classification (if enabled)
+        if RUN_CLASSIFICATION:
+            classification_success = run_cwts_classification()
+            if classification_success:
+                upload_classification_to_bigquery()
+        else:
+            log.info("Classification step skipped (RUN_CLASSIFICATION=false)")
+
+        # Step 8: Save run metadata to BigQuery for dashboards
         import json
+
         metadata_row = {
             "run_timestamp": RUN_TIMESTAMP,
             "generated_utc": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
