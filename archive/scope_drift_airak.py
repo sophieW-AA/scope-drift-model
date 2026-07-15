@@ -79,7 +79,7 @@ def _bootstrap_env_from_dotenv() -> None:
 
     candidates: list[Path] = []
     here = Path(__file__).resolve()
-    for i in range(8):
+    for i in range(min(8, len(here.parents))):
         candidates.append(here.parents[i] / ".env")
     candidates.append(Path.cwd() / ".env")
 

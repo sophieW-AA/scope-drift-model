@@ -1,0 +1,7 @@
+*.csv
+*.txt
+.env
+*.log
+*.pyc
+*.pyc
+/__pycache__

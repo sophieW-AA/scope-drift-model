@@ -1,0 +1,50 @@
+2026-06-11 10:54:53,371 [INFO] ============================================================
+2026-06-11 10:54:53,372 [INFO] Configuration
+2026-06-11 10:54:53,372 [INFO] ============================================================
+2026-06-11 10:54:53,372 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-p-usr
+2026-06-11 10:54:53,372 [INFO]   AIRAK_DATASET           : ocean-breeze-tier-1.airak
+2026-06-11 10:54:53,372 [INFO]   NETWORK_MODE            : full
+2026-06-11 10:54:53,372 [INFO]   START_YEAR              : 2026
+2026-06-11 10:54:53,372 [INFO]   END_YEAR                : 2026
+2026-06-11 10:54:53,372 [INFO]   TOP_N_JOURNALS          : 5
+2026-06-11 10:54:53,372 [INFO]   JOURNAL_IDS_OVERRIDE    : (none)
+2026-06-11 10:54:53,372 [INFO]   ENABLE_EDGE_WEIGHTS     : True
+2026-06-11 10:54:53,373 [INFO]   TEMPORAL_DECAY_TAU      : 5.0
+2026-06-11 10:54:53,373 [INFO]   SELF_CITE_JOURNAL_WEIGHT: 0.5
+2026-06-11 10:54:53,373 [INFO]   ENABLE_BC_EDGES         : True
+2026-06-11 10:54:53,373 [INFO]   BC_MIN_SHARED_REFS      : 3
+2026-06-11 10:54:53,373 [INFO]   MAX_EXTERNAL_PAPERS     : 50000
+2026-06-11 10:54:53,373 [INFO]   OUTPUT_DIR              : cwts_output
+2026-06-11 10:54:53,373 [INFO] ============================================================
+2026-06-11 10:54:53,373 [INFO] ============================================================
+2026-06-11 10:54:53,373 [INFO] CWTS Export — Edge Weight Builder
+2026-06-11 10:54:53,373 [INFO]   Mode: FULL  |  Years: 2026-2026
+2026-06-11 10:54:53,373 [INFO]   Edge weights: ON
+2026-06-11 10:54:53,373 [INFO] ============================================================
+2026-06-11 10:54:53,373 [INFO] Fetching top 5 Frontiers journals by publication count...
+2026-06-11 10:54:56,157 [INFO]   Journal IDs: [3315714752512, 2826088480769, 2379411881984, 2405181685761, 2972117368834]
+2026-06-11 10:54:56,157 [INFO] Fetching Frontiers publication IDs...
+2026-06-11 10:54:58,617 [INFO]   16,222 Frontiers publications
+2026-06-11 10:54:58,617 [INFO] Building full network (Frontiers + related journals)...
+2026-06-11 10:54:58,618 [INFO]   Finding journals citing Frontiers...
+2026-06-11 10:55:02,536 [INFO]   Finding journals cited by Frontiers...
+2026-06-11 10:55:07,254 [INFO]   5 journals in network (0 related + 5 Frontiers)
+2026-06-11 10:55:09,654 [INFO]   16,222 publications
+2026-06-11 10:55:09,657 [INFO]   Citation batch 1/1...
+2026-06-11 10:55:14,172 [INFO]   40 edges, 78 nodes
+2026-06-11 10:55:14,173 [INFO] Fetching metadata for 78 nodes...
+2026-06-11 10:55:14,173 [INFO]   Metadata batch 1/1...
+2026-06-11 10:55:16,605 [INFO]   78 nodes (78 Frontiers core)
+2026-06-11 10:55:16,611 [INFO] Applying edge weights (temporal decay + self-citation discount)...
+2026-06-11 10:55:16,618 [INFO]   Decay mean=1.000  |  Self-citations: 29
+2026-06-11 10:55:16,618 [INFO]   Combined weight mean=0.637
+2026-06-11 10:55:16,619 [INFO] Computing bibliographic coupling (min shared refs=3)...
+2026-06-11 10:55:16,621 [INFO]   BC batch 1/1...
+2026-06-11 10:55:23,207 [INFO]     8,594 BC edges
+2026-06-11 10:55:23,209 [INFO]   Total BC edges: 8,594
+2026-06-11 10:55:23,210 [INFO] Merging direct citation and BC edges...
+2026-06-11 10:55:23,223 [INFO]   Merged: 4,321 edges (mean weight=0.126)
+2026-06-11 10:55:23,223 [INFO] Writing CWTS files to cwts_output/  (78 nodes)...
+2026-06-11 10:55:23,223 [INFO]   pubs.txt       : 78 rows  (78 core)
+2026-06-11 10:55:23,224 [INFO]   pub_metadata.txt: is_frontiers | journal | date | title (78 rows)
+2026-06-11 10:55:23,235 [INFO]   cit_links.txt : 92 edges  (46 unique × 2 directions)

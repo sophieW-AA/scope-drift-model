@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cluster Bubble Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.8rem;
+        }
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            margin-bottom: 30px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+        .card .stats {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 10px;
+        }
+        .plot {
+            width: 100%;
+            height: 350px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Cluster Bubble Dashboard</h1>
+    <p class="subtitle">Cluster level: macro | Circle size = paper count</p>
+    <div class="grid" id="grid"></div>
+
+    <script>
+    const DATA = {"journals": {"Frontiers in Immunology": {"color": "#2563eb", "total_papers": 924, "bubbles": [{"cluster_id": 0, "label": "Immunopharmacology", "count": 140, "x": 0.4625, "y": 0.495}, {"cluster_id": 1, "label": "Immunology and Disease", "count": 90, "x": 0.535, "y": 0.3425}, {"cluster_id": 2, "label": "Immunology and Disease", "count": 74, "x": 0.7084, "y": 0.4511}, {"cluster_id": 3, "label": "Sport and exercise psychology", "count": 77, "x": 0.6533, "y": 0.7014}, {"cluster_id": 4, "label": "Immunopharmacology", "count": 81, "x": 0.4055, "y": 0.7134}, {"cluster_id": 5, "label": "Oncology", "count": 64, "x": 0.588, "y": 0.1188}, {"cluster_id": 6, "label": "Immunology and Disease", "count": 64, "x": 0.2125, "y": 0.6786}, {"cluster_id": 7, "label": "Immunology and Disease", "count": 65, "x": 0.3692, "y": 0.1}, {"cluster_id": 8, "label": "Positive psychology", "count": 65, "x": 0.5081, "y": 0.9}, {"cluster_id": 9, "label": "Oncology", "count": 49, "x": 0.1, "y": 0.4289}, {"cluster_id": 10, "label": "Inflammation biology", "count": 57, "x": 0.2991, "y": 0.3259}, {"cluster_id": 11, "label": "Mental health nursing", "count": 56, "x": 0.9, "y": 0.6916}, {"cluster_id": 12, "label": "Educational psychology", "count": 42, "x": 0.8688, "y": 0.2049}]}, "Frontiers in Public Health": {"color": "#059669", "total_papers": 712, "bubbles": [{"cluster_id": 0, "label": "Immunopharmacology", "count": 112, "x": 0.4625, "y": 0.495}, {"cluster_id": 1, "label": "Immunology and Disease", "count": 54, "x": 0.535, "y": 0.3425}, {"cluster_id": 2, "label": "Immunology and Disease", "count": 77, "x": 0.7084, "y": 0.4511}, {"cluster_id": 3, "label": "Sport and exercise psychology", "count": 53, "x": 0.6533, "y": 0.7014}, {"cluster_id": 4, "label": "Immunopharmacology", "count": 57, "x": 0.4055, "y": 0.7134}, {"cluster_id": 5, "label": "Oncology", "count": 60, "x": 0.588, "y": 0.1188}, {"cluster_id": 6, "label": "Immunology and Disease", "count": 47, "x": 0.2125, "y": 0.6786}, {"cluster_id": 7, "label": "Immunology and Disease", "count": 44, "x": 0.3692, "y": 0.1}, {"cluster_id": 8, "label": "Positive psychology", "count": 48, "x": 0.5081, "y": 0.9}, {"cluster_id": 9, "label": "Oncology", "count": 45, "x": 0.1, "y": 0.4289}, {"cluster_id": 10, "label": "Inflammation biology", "count": 42, "x": 0.2991, "y": 0.3259}, {"cluster_id": 11, "label": "Mental health nursing", "count": 39, "x": 0.9, "y": 0.6916}, {"cluster_id": 12, "label": "Educational psychology", "count": 34, "x": 0.8688, "y": 0.2049}]}, "Frontiers in Medicine": {"color": "#d97706", "total_papers": 363, "bubbles": [{"cluster_id": 0, "label": "Immunopharmacology", "count": 49, "x": 0.4625, "y": 0.495}, {"cluster_id": 1, "label": "Immunology and Disease", "count": 37, "x": 0.535, "y": 0.3425}, {"cluster_id": 2, "label": "Immunology and Disease", "count": 31, "x": 0.7084, "y": 0.4511}, {"cluster_id": 3, "label": "Sport and exercise psychology", "count": 21, "x": 0.6533, "y": 0.7014}, {"cluster_id": 4, "label": "Immunopharmacology", "count": 34, "x": 0.4055, "y": 0.7134}, {"cluster_id": 5, "label": "Oncology", "count": 18, "x": 0.588, "y": 0.1188}, {"cluster_id": 6, "label": "Immunology and Disease", "count": 28, "x": 0.2125, "y": 0.6786}, {"cluster_id": 7, "label": "Immunology and Disease", "count": 33, "x": 0.3692, "y": 0.1}, {"cluster_id": 8, "label": "Positive psychology", "count": 18, "x": 0.5081, "y": 0.9}, {"cluster_id": 9, "label": "Oncology", "count": 26, "x": 0.1, "y": 0.4289}, {"cluster_id": 10, "label": "Inflammation biology", "count": 26, "x": 0.2991, "y": 0.3259}, {"cluster_id": 11, "label": "Mental health nursing", "count": 23, "x": 0.9, "y": 0.6916}, {"cluster_id": 12, "label": "Educational psychology", "count": 19, "x": 0.8688, "y": 0.2049}]}, "Frontiers in Oncology": {"color": "#dc2626", "total_papers": 786, "bubbles": [{"cluster_id": 0, "label": "Immunopharmacology", "count": 116, "x": 0.4625, "y": 0.495}, {"cluster_id": 1, "label": "Immunology and Disease", "count": 65, "x": 0.535, "y": 0.3425}, {"cluster_id": 2, "label": "Immunology and Disease", "count": 82, "x": 0.7084, "y": 0.4511}, {"cluster_id": 3, "label": "Sport and exercise psychology", "count": 51, "x": 0.6533, "y": 0.7014}, {"cluster_id": 4, "label": "Immunopharmacology", "count": 73, "x": 0.4055, "y": 0.7134}, {"cluster_id": 5, "label": "Oncology", "count": 55, "x": 0.588, "y": 0.1188}, {"cluster_id": 6, "label": "Immunology and Disease", "count": 70, "x": 0.2125, "y": 0.6786}, {"cluster_id": 7, "label": "Immunology and Disease", "count": 56, "x": 0.3692, "y": 0.1}, {"cluster_id": 8, "label": "Positive psychology", "count": 47, "x": 0.5081, "y": 0.9}, {"cluster_id": 9, "label": "Oncology", "count": 40, "x": 0.1, "y": 0.4289}, {"cluster_id": 10, "label": "Inflammation biology", "count": 53, "x": 0.2991, "y": 0.3259}, {"cluster_id": 11, "label": "Mental health nursing", "count": 36, "x": 0.9, "y": 0.6916}, {"cluster_id": 12, "label": "Educational psychology", "count": 42, "x": 0.8688, "y": 0.2049}]}, "Frontiers in Psychology": {"color": "#7c3aed", "total_papers": 856, "bubbles": [{"cluster_id": 0, "label": "Immunopharmacology", "count": 150, "x": 0.4625, "y": 0.495}, {"cluster_id": 1, "label": "Immunology and Disease", "count": 80, "x": 0.535, "y": 0.3425}, {"cluster_id": 2, "label": "Immunology and Disease", "count": 74, "x": 0.7084, "y": 0.4511}, {"cluster_id": 3, "label": "Sport and exercise psychology", "count": 71, "x": 0.6533, "y": 0.7014}, {"cluster_id": 4, "label": "Immunopharmacology", "count": 71, "x": 0.4055, "y": 0.7134}, {"cluster_id": 5, "label": "Oncology", "count": 61, "x": 0.588, "y": 0.1188}, {"cluster_id": 6, "label": "Immunology and Disease", "count": 68, "x": 0.2125, "y": 0.6786}, {"cluster_id": 7, "label": "Immunology and Disease", "count": 73, "x": 0.3692, "y": 0.1}, {"cluster_id": 8, "label": "Positive psychology", "count": 49, "x": 0.5081, "y": 0.9}, {"cluster_id": 9, "label": "Oncology", "count": 38, "x": 0.1, "y": 0.4289}, {"cluster_id": 10, "label": "Inflammation biology", "count": 47, "x": 0.2991, "y": 0.3259}, {"cluster_id": 11, "label": "Mental health nursing", "count": 40, "x": 0.9, "y": 0.6916}, {"cluster_id": 12, "label": "Educational psychology", "count": 34, "x": 0.8688, "y": 0.2049}]}}, "positions": {"11": {"x": 0.9, "y": 0.6916}, "1": {"x": 0.535, "y": 0.3425}, "7": {"x": 0.3692, "y": 0.1}, "5": {"x": 0.588, "y": 0.1188}, "2": {"x": 0.7084, "y": 0.4511}, "8": {"x": 0.5081, "y": 0.9}, "0": {"x": 0.4625, "y": 0.495}, "4": {"x": 0.4055, "y": 0.7134}, "6": {"x": 0.2125, "y": 0.6786}, "10": {"x": 0.2991, "y": 0.3259}, "12": {"x": 0.8688, "y": 0.2049}, "9": {"x": 0.1, "y": 0.4289}, "3": {"x": 0.6533, "y": 0.7014}}};
+    
+    const grid = document.getElementById('grid');
+    
+    Object.entries(DATA.journals).forEach(([journal, jdata]) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        
+        const nClusters = jdata.bubbles.length;
+        card.innerHTML = `
+            <h2 style="color: ${jdata.color}">${journal}</h2>
+            <div class="stats">${jdata.total_papers.toLocaleString()} papers · ${nClusters} clusters</div>
+            <div class="plot" id="plot-${journal.replace(/\s+/g, '-')}"></div>
+        `;
+        grid.appendChild(card);
+        
+        const plotId = 'plot-' + journal.replace(/\s+/g, '-');
+        
+        const bubbles = jdata.bubbles;
+        const maxCount = Math.max(...bubbles.map(b => b.count));
+        
+        const trace = {
+            x: bubbles.map(b => b.x),
+            y: bubbles.map(b => b.y),
+            mode: 'markers',
+            marker: {
+                size: bubbles.map(b => Math.sqrt(b.count / maxCount) * 50 + 5),
+                color: jdata.color,
+                opacity: 0.6,
+                line: { color: jdata.color, width: 1 }
+            },
+            text: bubbles.map(b => `${b.label}<br>${b.count} papers`),
+            hoverinfo: 'text'
+        };
+        
+        const layout = {
+            showlegend: false,
+            xaxis: { visible: false, range: [0, 1] },
+            yaxis: { visible: false, range: [0, 1], scaleanchor: 'x' },
+            margin: { l: 10, r: 10, t: 10, b: 10 },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            hovermode: 'closest'
+        };
+        
+        Plotly.newPlot(plotId, [trace], layout, { responsive: true });
+    });
+    </script>
+</body>
+</html>
