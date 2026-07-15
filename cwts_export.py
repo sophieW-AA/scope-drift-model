@@ -568,7 +568,7 @@ def merge_edges(df_direct: pd.DataFrame, df_bc: pd.DataFrame) -> pd.DataFrame:
 # Step 6: Upload CWTS tables to BigQuery
 # ---------------------------------------------------------------------------
 BQ_DEST_PROJECT = "ocean-tech-adv-analytics-c-tfs"
-BQ_DEST_DATASET = "scope_drift_raw"
+BQ_DEST_DATASET = "raw_citation_network_data"
 
 
 # ---------------------------------------------------------------------------
