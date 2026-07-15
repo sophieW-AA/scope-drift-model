@@ -33,7 +33,7 @@ Optional env vars (all have defaults):
     OUTPUT_DIR              str   default ./cwts_output
 
 Classification env vars (when RUN_CLASSIFICATION=true):
-    RUN_CLASSIFICATION      bool  default false
+    RUN_CLASSIFICATION      bool  default true
     CWTS_JAR_PATH           str   default publicationclassification.jar
     JAVA_HEAP_SIZE          str   default 350g
     CWTS_LARGEST_COMPONENT  str   default true
@@ -67,8 +67,11 @@ BQ_PROJECT = "ocean-tech-adv-analytics-p-usr"
 AIRAK_DATASET = "ocean-breeze-tier-1.airak"
 FRONTIERS_PUBLISHER_ID = 1563368095744
 
-TOP_N_JOURNALS = int(os.environ.get("TOP_N_JOURNALS", "5"))
-JOURNAL_IDS_OVERRIDE = os.environ.get("JOURNAL_IDS", "").strip()
+TOP_N_JOURNALS = int(os.environ.get("TOP_N_JOURNALS", "5"))  #
+JOURNAL_IDS_OVERRIDE = os.environ.get(
+    "JOURNAL_IDS",
+    "1675037245440,1589137899520,2336462209024,2774548873217,120259084288,764504178688,1005022347264,558345748481",
+).strip()
 
 START_YEAR = int(os.environ.get("START_YEAR", "2020"))
 END_YEAR = int(os.environ.get("END_YEAR", "2026"))
