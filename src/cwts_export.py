@@ -65,6 +65,7 @@ import pandas_gbq
 # ---------------------------------------------------------------------------
 BQ_PROJECT = "ocean-tech-adv-analytics-p-usr"
 AIRAK_DATASET = "ocean-breeze-tier-1.airak"
+pandas_gbq.context.location = "EU"
 FRONTIERS_PUBLISHER_ID = 1563368095744
 
 TOP_N_JOURNALS = int(os.environ.get("TOP_N_JOURNALS", "5"))  #
