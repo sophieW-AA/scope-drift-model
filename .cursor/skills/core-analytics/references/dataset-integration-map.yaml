@@ -1,0 +1,1326 @@
+# Dataset-level integration map  — v2
+# Status per relationship:
+#   status: confirmed      → query ran and returned rows (tested in BigQuery)
+#   status: unconfirmed    → no rows / format mismatch found during testing
+#   status: inaccessible   → dataset not reachable from EU billing project
+#   status: in_review      → join path is under active investigation / correction pending
+#   status: ignored        → join disproved or superseded; retained for audit trail only
+#
+# IMPORTANT corrections discovered during testing (vs v1):
+#   - peer_review.annotation/review_turn.article_id  = article_id_ORIGINAL (not internal article_id)
+#   - SF Journal__c join key is Journal_API_Id__c (not JournalId__c which is a CRM key)
+#   - SF EditorialBoardMember__c / ArticleReviewer__c join on LoopId__c=user_id (not the member ID)
+#   - SF ArticleAuthor__c join needs article_id_original (not article_id internal)
+#   - senscience.event.submission_id (7M range) joins on article.first_submission_id_original (not article_id_original)
+#   - senscience.event.publication_id is a UUID (ScienceRadar system); no confirmed DWH join — user_id and submission_id are the confirmed links
+#   - AIRAK OrganizationSource SourceId=23 values are numeric; ROSST uses O-prefixed IDs — no direct join
+#   - production_forum.article.id  = article_id_original (not internal article_id)
+#
+# Space filter note (from HL model):
+#   Always add space_id = 1 (frontiersin.org) when the table carries space_id.
+#   SF equivalent: SpaceId__c = 'a3G4K0000000CmXUAU'
+
+###############################################################################
+# TOP INDEX — all relationship IDs
+# Use this to jump directly to a section without reading the full file.
+# Format:  id: label  [status]
+###############################################################################
+#
+# ARTICLE joins (ART-*)
+#   ART-001  DWH article → AIRAK Publication (via DOI)  [confirmed]
+#   ART-002  DWH article → AIRAK Publication (via article_id_original through PublicationSource)  [confirmed]
+#   ART-003  DWH article → Salesforce Article__c  [confirmed]
+#   ART-004  DWH article → Production Forum article  [confirmed]
+#   ART-005  DWH article → Dimensions metrics (citation enrichment)  [confirmed]
+#   ART-006  DWH article → Dimensions publications (full bibliographic metadata)  [confirmed]
+#   ART-007  AIRAK Publication → Dimensions publications  [confirmed]
+#   ART-008  market_intelligence article_impact → AIRAK Publication (via Dimensions PublicationSource)  [confirmed]
+#
+# AUTHOR / PERSON joins (AUTH-*)
+#   AUTH-001  DWH Article author → AIRAK Publication Author (via DOI + author_order)  [confirmed]
+#   AUTH-002  DWH author (person_id) → AIRAK Author  [ignored]
+#   AUTH-003  DWH author → Salesforce ArticleAuthor__c  [in_review]
+#   AUTH-004  DWH author → Production Forum author  [in_review]
+#   AUTH-005  DWH user_metrics → Salesforce Contact  [confirmed]
+#   AUTH-006  AIRAK Author → Salesforce Contact (via AIRAId__c)  [confirmed]
+#   AUTH-007  DWH author_organizations → ROSST organization  [confirmed]
+#   AUTH-008  AIRAK OrganizationSource → ROSST organization  [ignored]
+#   AUTH-009  AIRAK Author → ai_enhanced_profile (researcher AI profile)  [confirmed]
+#
+# JOURNAL joins (JOUR-*)
+#   JOUR-001  DWH journal → Salesforce Journal__c  [confirmed]
+#   JOUR-002  DWH journal → AIRAK Journal (journal_id)  [confirmed]
+#   JOUR-003  DWH journal/section → Workday allocations_pubdev (employee-journal allocation)  [confirmed]
+#
+# RESEARCH TOPIC joins (RT-*)
+#   RT-001  DWH research_topic → Salesforce ResearchTopic__c  [confirmed]
+#   RT-002  DWH research_topic → AIRAK ResearchTopic  [confirmed]
+#
+# EDITORIAL BOARD joins (EB-*)
+#   EB-001  DWH editorial_board_member → Salesforce EditorialBoardMember__c  [confirmed]
+#   EB-002  DWH review_board_member → Salesforce ArticleReviewer__c  [confirmed]
+#   EB-003  DWH research_topic_editor → Salesforce ArticleEditor__c  [confirmed]
+#
+# ORGANISATION joins (ORG-*)
+#   ORG-001  ROSST organization ↔ DWH author_organizations  [confirmed]
+#   ORG-002  AIRAK Organization → ROSST organization  [unconfirmed]
+#   ORG-003  Production Forum institution → ROSST organization  [confirmed]
+#
+# EMPLOYEE / HR joins (EMP-*)
+#   EMP-001  Workday employee → FrontonGPT agent_user (employee_id)  [inaccessible]
+#   EMP-002  Workday allocations_pubdev → DWH journal/section  [confirmed]
+#
+# CAMPAIGN joins (CAMP-*)
+#   CAMP-001  DWH campaign_member → Salesforce CampaignMember  [confirmed]
+#
+# PEER REVIEW joins (PR-*)
+#   PR-001  Peer Review annotation → DWH article  [confirmed]
+#   PR-002  Peer Review review_turn → DWH article  [confirmed]
+#
+# SENSCIENCE joins (SENS-*)
+#   SENS-001  senscience.event → reporting_data_mart.user_metrics (user_id) + space (space_id)  [confirmed]
+#   SENS-002  senscience.event → reporting_data_mart.article (submission_id ↔ first_submission_id_original)  [confirmed]
+#
+###############################################################################
+
+###############################################################################
+# 1. ARTICLE — cross-dataset joins
+###############################################################################
+
+article_cross_dataset_joins:
+
+  - id: ART-001
+    status: confirmed
+    label: "DWH article → AIRAK Publication (via DOI)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: doi
+    to:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: Publication
+      column: Doi
+    join_key_pairs:
+      - { from_col: doi, to_col: Doi, transform: "UPPER() on both sides" }
+    join_type: direct
+    cardinality: one_to_one
+    notes: >
+      DOI join is the primary recommended path. Normalise with UPPER() on both sides.
+      Frontiers DOIs follow pattern '10.3389/%'.
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        ar.doi            AS dwh_doi,
+        p.PublicationId   AS airak_publication_id,
+        p.Doi             AS airak_doi,
+        p.PublishedDate
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-1.airak.Publication` p
+        ON UPPER(ar.doi) = UPPER(p.Doi)
+      WHERE ar.space_id = 1
+        AND ar.doi IS NOT NULL
+      LIMIT 5
+
+  - id: ART-002
+    status: confirmed
+    label: "DWH article → AIRAK Publication (via article_id_original through PublicationSource)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: article_id_original
+    to:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: PublicationSource
+      column: SourceValue   # CAST AS INT64; SourceId = 19 = Frontiers
+    via_bridge:
+      table: ocean-breeze-tier-1.airak.PublicationSource
+      filter: "SourceId = 19  -- Frontiers publications"
+      then_join:
+        from_col: PublicationId
+        to_table: ocean-breeze-tier-1.airak.Publication
+        to_col: PublicationId
+    join_type: via_bridge
+    cardinality: one_to_one
+    notes: >
+      Use when DOI is absent. SourceValue is STRING; cast to INT64.
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        ps.PublicationId  AS airak_publication_id,
+        ps.SourceValue    AS source_article_id,
+        p.Doi             AS airak_doi,
+        ar.doi            AS dwh_doi
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-1.airak.PublicationSource` ps
+        ON CAST(ps.SourceValue AS INT64) = ar.article_id_original
+        AND ps.SourceId = 19
+      JOIN `ocean-breeze-tier-1.airak.Publication` p
+        ON ps.PublicationId = p.PublicationId
+      WHERE ar.space_id = 1
+      LIMIT 5
+
+  # NDM NOTE — Salesforce custom fields:
+  # ocean-breeze-tier-2.salesforce_NDM.yaml now carries FK-annotated columns for the
+  # following Frontiers custom fields: Journal_API_Id__c, ArticleId__c, LoopId__c,
+  # UserId__c, AIRAId__c, ResearchTopicId__c.  Cross-dataset joins that rely on those
+  # columns are therefore NDM-confirmed.
+  # Still unmodelled in the SF NDM (no FK-annotated column): DOI__c, SpaceId__c.
+  # SpaceId__c is a GUID with no direct integer FK to reporting_data_mart.space; see
+  # the join-rules header in the NDM file for details.
+
+  - id: ART-003
+    status: confirmed
+    label: "DWH article → Salesforce Article__c"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: article_id_original
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: Article__c
+      column: ArticleId__c   # STRING → CAST AS INT64
+    join_key_pairs:
+      - { from_col: article_id_original, to_col: ArticleId__c, transform: "SAFE_CAST(ArticleId__c AS INT64)" }
+    secondary_join:
+      - { from_col: doi, to_col: DOI__c, transform: "UPPER() on both sides" }
+    join_type: direct
+    cardinality: one_to_one
+    notes: >
+      Filter SF: SpaceId__c = 'a3G4K0000000CmXUAU' (frontiersin.org).
+      DOI is a valid secondary/validation join path.
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        ar.doi            AS dwh_doi,
+        sf.Id             AS sf_article_crm_id,
+        CAST(sf.ArticleId__c AS INT64) AS sf_article_id,
+        sf.DOI__c         AS sf_doi,
+        sf.Stage__c
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-2.salesforce.Article__c` sf
+        ON ar.article_id_original = CAST(sf.ArticleId__c AS INT64)
+      WHERE ar.space_id = 1
+        AND sf.SpaceId__c = 'a3G4K0000000CmXUAU'
+      LIMIT 5
+
+  - id: ART-004
+    status: confirmed
+    label: "DWH article → Production Forum article"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: article_id_original
+    to:
+      project: ocean-breeze-tier-2
+      dataset: production_forum
+      table: article
+      column: id   # production_forum.article.id = article_id_original
+    join_key_pairs:
+      - { from_col: article_id_original, to_col: id }
+    secondary_join:
+      - { from_col: doi, to_col: doi, transform: "UPPER() on both sides" }
+    join_type: direct
+    cardinality: one_to_one
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        ar.doi   AS dwh_doi,
+        pf.id    AS pof_article_id,
+        pf.doi   AS pof_doi,
+        pf.publication_date
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-2.production_forum.article` pf
+        ON ar.article_id_original = pf.id
+      WHERE ar.space_id = 1
+        AND pf.space_id = 1
+      LIMIT 5
+
+  - id: ART-005
+    status: confirmed
+    label: "DWH article → Dimensions metrics (citation enrichment)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: doi
+    to:
+      project: ocean-breeze-tier-2
+      dataset: dimensions
+      table: metrics
+      column: doi
+    join_key_pairs:
+      - { from_col: doi, to_col: doi, transform: "UPPER() on both sides" }
+    join_type: direct
+    cardinality: one_to_one
+    notes: Provides times_cited, recent_citations, field_citation_ratio, relative_citation_ratio.
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        ar.doi,
+        dm.times_cited,
+        dm.recent_citations,
+        dm.field_citation_ratio,
+        dm.relative_citation_ratio
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-2.dimensions.metrics` dm
+        ON UPPER(ar.doi) = UPPER(dm.doi)
+      WHERE ar.space_id = 1
+        AND ar.doi IS NOT NULL
+      LIMIT 5
+
+  - id: ART-006
+    status: confirmed
+    label: "DWH article → Dimensions publications (full bibliographic metadata)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: doi
+    to:
+      project: ocean-breeze-tier-2
+      dataset: dimensions
+      table: publications
+      column: doi
+    join_key_pairs:
+      - { from_col: doi, to_col: doi, transform: "UPPER() on both sides" }
+    join_type: direct
+    cardinality: one_to_one
+    notes: Provides abstract, funding, author_affiliations, concepts, open_access categories, pmcid, pmid.
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        ar.doi       AS dwh_doi,
+        dp.id        AS dimensions_id,
+        dp.doi       AS dim_doi,
+        dp.pmid,
+        dp.pmcid
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-2.dimensions.publications` dp
+        ON UPPER(ar.doi) = UPPER(dp.doi)
+      WHERE ar.space_id = 1
+        AND ar.doi IS NOT NULL
+      LIMIT 5
+
+  - id: ART-007
+    status: confirmed
+    label: "AIRAK Publication → Dimensions publications"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: Publication
+      column: Doi
+    to:
+      project: ocean-breeze-tier-2
+      dataset: dimensions
+      table: publications
+      column: doi
+    join_key_pairs:
+      - { from_col: Doi, to_col: doi, transform: "UPPER() on both sides" }
+    join_type: direct
+    cardinality: one_to_one
+    sample_query: |
+      SELECT
+        p.PublicationId,
+        p.Doi       AS airak_doi,
+        dp.id       AS dimensions_id,
+        dp.pmid,
+        dp.pmcid
+      FROM `ocean-breeze-tier-1.airak.Publication` p
+      JOIN `ocean-breeze-tier-2.dimensions.publications` dp
+        ON UPPER(p.Doi) = UPPER(dp.doi)
+      WHERE p.Doi LIKE '10.3389/%'
+      LIMIT 5
+
+  - id: ART-008
+    status: confirmed
+    label: "market_intelligence article_impact → AIRAK Publication (via Dimensions PublicationSource)"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: market_intelligence
+      table: article_impact
+      column: publication_id          # Dimensions pub.XXXXXXXXXX ID
+    to:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: Publication
+      column: PublicationId
+    via_bridge:
+      table: ocean-breeze-tier-1.airak.PublicationSource
+      filter: "SourceId = 11  -- Dimensions publications"
+      then_join:
+        from_col: PublicationId
+        to_table: ocean-breeze-tier-1.airak.Publication
+        to_col: PublicationId
+    join_type: via_bridge
+    cardinality: one_to_one
+    notes: >
+      article_impact.publication_id is a Dimensions pub-ID (format 'pub.XXXXXXXXXX').
+      airak.PublicationSource.SourceId = 11 carries these same values in SourceValue (STRING — no cast needed).
+      Always filter is_deleted = FALSE on article_impact.
+      A secondary path via DOI (UPPER() on both sides) also works when publication_id is absent.
+    sample_query: |
+      SELECT
+        ai.publication_id          AS dimensions_pub_id,
+        ai.doi                     AS impact_doi,
+        ai.cites_all,
+        ai.cites_norm,
+        ps.PublicationId           AS airak_publication_id,
+        p.Doi                      AS airak_doi,
+        p.PublishedDate
+      FROM `ocean-breeze-tier-2.market_intelligence.article_impact` ai
+      JOIN `ocean-breeze-tier-1.airak.PublicationSource` ps
+        ON ps.SourceValue = ai.publication_id
+        AND ps.SourceId = 11
+      JOIN `ocean-breeze-tier-1.airak.Publication` p
+        ON ps.PublicationId = p.PublicationId
+      WHERE ai.is_deleted = FALSE
+      LIMIT 10
+
+###############################################################################
+# 2. AUTHOR / RESEARCHER — cross-dataset joins
+###############################################################################
+
+author_cross_dataset_joins:
+
+  - id: AUTH-001
+    status: confirmed
+    label: "DWH Article author → AIRAK Publication Author (via DOI + author_order)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: author
+      columns: [author_article_id, author_order]
+    to:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: PublicationAuthor
+      columns: [PublicationId, AuthorSequenceNumber]
+    join_key_pairs:
+      - { from_col: author_order, to_col: AuthorSequenceNumber }
+    via_bridge:
+      resolve_publication: "Join article → Publication via DOI (ART-001)"
+    join_type: via_bridge
+    cardinality: many_to_one
+    sample_query: |
+      SELECT
+        au.author_id,
+        au.author_order,
+        ar.doi,
+        pa.AuthorId    AS airak_author_id,
+        pa.AuthorSequenceNumber,
+        pa.IsCorrespondingAuthor
+      FROM `ocean-breeze-tier-1.reporting_data_mart.author` au
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.article` ar
+        ON au.author_article_id = ar.article_id AND au.author_space_id = ar.space_id
+      JOIN `ocean-breeze-tier-1.airak.Publication` p
+        ON UPPER(ar.doi) = UPPER(p.Doi)
+      JOIN `ocean-breeze-tier-1.airak.PublicationAuthor` pa
+        ON p.PublicationId = pa.PublicationId
+        AND au.author_order = pa.AuthorSequenceNumber
+      WHERE ar.space_id = 1
+        AND ar.doi IS NOT NULL
+      LIMIT 5
+
+  - id: AUTH-002
+    status: ignored
+    label: "DWH author (person_id) → AIRAK Author"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: author
+      column: person_id   # alias for researcher_id / AIRAK AuthorId
+    to:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: Author
+      column: AuthorId
+    join_key_pairs:
+      - { from_col: person_id, to_col: AuthorId }
+    join_type: direct
+    cardinality: many_to_one
+    notes: person_id is nullable; only populated when a match exists.
+    sample_query: |
+      SELECT
+        au.author_id,
+        au.person_id   AS dwh_researcher_id,
+        a.AuthorId     AS airak_author_id,
+        a.FullName,
+        a.IsFrontiersAuthor
+      FROM `ocean-breeze-tier-1.reporting_data_mart.author` au
+      JOIN `ocean-breeze-tier-1.airak.Author` a
+        ON au.person_id = a.AuthorId
+      WHERE au.author_space_id = 1
+        AND au.person_id IS NOT NULL
+      LIMIT 5
+
+  - id: AUTH-003
+    status: in_review
+    label: "DWH author → Salesforce ArticleAuthor__c"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: author
+      columns: [author_article_id, author_order]
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: ArticleAuthor__c
+      columns: [ArticleId__c, Order__c]
+    via_bridge:
+      table: ocean-breeze-tier-1.reporting_data_mart.article
+      join: "author.author_article_id = article.article_id AND author.author_space_id = article.space_id"
+      then_join:
+        from_col: article_id_original
+        to_table: ocean-breeze-tier-2.salesforce.ArticleAuthor__c
+        to_col: ArticleId__c
+        transform: "SAFE_CAST(ArticleId__c AS INT64)"
+    join_key_pairs:
+      - { from_col: author_order, to_col: Order__c, transform: "SAFE_CAST(Order__c AS INT64)" }
+    join_type: via_bridge
+    cardinality: one_to_one
+    notes: >
+      Bridge via article: author → article (author_article_id = article_id) →
+      ArticleAuthor__c (SAFE_CAST(ArticleId__c AS INT64) = article_id_original).
+      Filter SF: SpaceId__c = 'a3G4K0000000CmXUAU' (frontiersin.org).
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        au.author_article_id,
+        au.author_order,
+        sf.Id             AS sf_id,
+        sf.ArticleAuthorId__c,
+        sf.FirstName__c,
+        sf.LastName__c,
+        sf.Order__c AS sf_order
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.author` au
+        ON au.author_article_id = ar.article_id AND au.author_space_id = ar.space_id
+      JOIN `ocean-breeze-tier-2.salesforce.ArticleAuthor__c` sf
+        ON SAFE_CAST(sf.ArticleId__c AS INT64) = ar.article_id_original
+          AND SAFE_CAST(sf.Order__c AS INT64) = au.author_order
+          and sf.spaceid__c = 'a3G4K0000000CmXUAU'  
+      WHERE ar.space_id = 1
+        AND au.author_article_id IS NOT NULL
+        AND sf.Order__c IS NOT NULL
+      LIMIT 5
+
+  - id: AUTH-004
+    status: in_review
+    label: "DWH author → Production Forum author"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: author
+      columns: [ article_id_original, author_order ]
+    to:
+      project: ocean-breeze-tier-2
+      dataset: production_forum
+      table: author
+      columns: [ article_id,  sequence_number ]
+    join_key_pairs:
+      - { from_col: article_id_original, to_col: article_id, note: "production_forum.author.article_id = article_id_original" }
+      - { from_col: author_order, to_col: sequence_number }
+    join_type: direct
+    cardinality: many_to_one
+    sample_query: |
+      SELECT
+        ar.article_id_original,
+        au.author_user_id,
+        au.author_order,
+        pf_au.id     AS pof_author_id,
+        pf_au.user_id AS pof_user_id,
+        pf_au.sequence_number,
+        pf_au.first_name,
+        pf_au.last_name
+      FROM `ocean-breeze-tier-1.reporting_data_mart.article` ar
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.author` au
+        ON au.author_article_id = ar.article_id AND au.author_space_id = ar.space_id
+      JOIN `ocean-breeze-tier-2.production_forum.author` pf_au
+        ON pf_au.article_id = ar.article_id_original
+        AND pf_au.sequence_number = au.author_order
+      WHERE ar.space_id = 1
+        AND pf_au.space_id = 1
+        AND au.author_article_id IS NOT NULL
+        AND au.author_order IS NOT NULL
+      LIMIT 5
+
+  - id: AUTH-005
+    status: confirmed
+    label: "DWH user_metrics → Salesforce Contact"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: user_metrics
+      column: user_id
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: Contact
+      column: UserId__c   # STRING → CAST AS INT64
+    join_key_pairs:
+      - { from_col: user_id, to_col: UserId__c, transform: "SAFE_CAST(UserId__c AS INT64)" }
+    join_type: direct
+    cardinality: one_to_one
+    notes: Contact.AIRAId__c (FLOAT) = AIRAK AuthorId — use to further bridge to airak.Author.
+    sample_query: |
+      SELECT
+        u.user_id,
+        u.email        AS dwh_email,
+        c.Id           AS sf_contact_id,
+        c.UserId__c,
+        c.FirstName,
+        c.LastName,
+        SAFE_CAST(c.AIRAId__c AS INT64) AS airak_author_id
+      FROM `ocean-breeze-tier-1.reporting_data_mart.user_metrics` u
+      JOIN `ocean-breeze-tier-2.salesforce.Contact` c
+        ON SAFE_CAST(c.UserId__c AS INT64) = u.user_id
+      WHERE u.user_id IS NOT NULL
+        AND c.UserId__c IS NOT NULL
+      LIMIT 5
+
+  - id: AUTH-006
+    status: confirmed
+    label: "AIRAK Author → Salesforce Contact (via AIRAId__c)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: Author
+      column: AuthorId
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: Contact
+      column: AIRAId__c   # FLOAT → CAST AS INT64
+    join_key_pairs:
+      - { from_col: AuthorId, to_col: AIRAId__c, transform: "SAFE_CAST(AIRAId__c AS INT64)" }
+    join_type: direct
+    cardinality: one_to_one
+    sample_query: |
+      SELECT
+        a.AuthorId,
+        a.FullName,
+        c.Id       AS sf_contact_id,
+        c.FirstName,
+        c.LastName,
+        SAFE_CAST(c.AIRAId__c AS INT64) AS sf_aira_id
+      FROM `ocean-breeze-tier-1.airak.Author` a
+      JOIN `ocean-breeze-tier-2.salesforce.Contact` c
+        ON SAFE_CAST(c.AIRAId__c AS INT64) = a.AuthorId
+      WHERE c.AIRAId__c IS NOT NULL
+      LIMIT 5
+
+  - id: AUTH-007
+    status: confirmed
+    label: "DWH author_organizations → ROSST organization"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: author_organizations
+      column: rosst_id   # O-prefixed string e.g. "O100034"
+    to:
+      project: ocean-breeze-tier-2
+      dataset: rosst
+      table: organization
+      column: OrganizationId
+    join_key_pairs:
+      - { from_col: rosst_id, to_col: OrganizationId }
+    join_type: direct
+    cardinality: many_to_one
+    sample_query: |
+      SELECT
+        ao.author_organizations_id,
+        ao.author_id,
+        ao.rosst_id,
+        r.OrganizationId,
+        r.Name           AS org_name,
+        r.NormalizedName AS org_normalized
+      FROM `ocean-breeze-tier-1.reporting_data_mart.author_organizations` ao
+      JOIN `ocean-breeze-tier-2.rosst.organization` r
+        ON ao.rosst_id = r.OrganizationId
+      WHERE ao.rosst_id IS NOT NULL
+      LIMIT 5
+
+  - id: AUTH-008
+    status: ignored
+    label: "AIRAK OrganizationSource → ROSST organization"
+    notes: >
+      INVESTIGATION FINDING: airak.OrganizationSource SourceId=23 stores numeric IDs
+      (e.g. "317731624"); SourceId=24 stores GRID IDs (e.g. "grid.501581.8").
+      ROSST uses O-prefixed string IDs (e.g. "O100034" / "O25770010693").
+      No confirmed format match found — no direct join path between airak and rosst.
+      AIRAK → ROSST must go through DWH: airak.Author → DWH author (person_id) →
+      author_organizations (rosst_id) → rosst.organization.
+    recommended_path: "AIRAK AuthorId → reporting_data_mart.author.person_id → author_organizations.rosst_id → rosst.organization.OrganizationId"
+
+  - id: AUTH-009
+    status: confirmed
+    label: "AIRAK Author → ai_enhanced_profile (researcher AI profile)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: Author
+      column: AuthorId
+    to:
+      project: ocean-breeze-tier-1
+      dataset: ai_enhanced_profile
+      table: enhanced_profiles_validated
+      column: aira_id
+    join_key_pairs:
+      - { from_col: AuthorId, to_col: aira_id }
+    join_type: direct
+    cardinality: one_to_one
+    notes: >
+      Provides AI-generated profile: expertise, career_stage, ORCID, institutional affiliation,
+      field_of_expertise, publishing_interests, decision_label, quality_score.
+    sample_query: |
+      SELECT
+        a.AuthorId,
+        a.FullName,
+        ep.aira_id,
+        ep.decision_label,
+        ep.quality_score,
+        ep.career_stage
+      FROM `ocean-breeze-tier-1.airak.Author` a
+      JOIN `ocean-breeze-tier-1.ai_enhanced_profile.enhanced_profiles_validated` ep
+        ON a.AuthorId = ep.aira_id
+      LIMIT 5
+
+###############################################################################
+# 3. JOURNAL / SECTION — cross-dataset joins
+###############################################################################
+
+journal_cross_dataset_joins:
+
+  - id: JOUR-001
+    status: confirmed
+    label: "DWH journal → Salesforce Journal__c"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: journal
+      column: journal_id
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: Journal__c
+      column: Journal_API_Id__c   # FLOAT → CAST AS INT64; NOT JournalId__c which is a CRM key
+    join_key_pairs:
+      - { from_col: journal_id, to_col: Journal_API_Id__c, transform: "SAFE_CAST(Journal_API_Id__c AS INT64)" }
+    join_type: direct
+    cardinality: one_to_one
+    filter: "DWH: journal_level = 'Journal'. SF: SpaceId__c = 'a3G4K0000000CmXUAU'."
+    sample_query: |
+      SELECT
+        j.journal_id,
+        j.journal_name,
+        sf.Id                AS sf_journal_crm_id,
+        sf.JournalId__c      AS sf_journal_crm_key,
+        SAFE_CAST(sf.Journal_API_Id__c AS INT64) AS sf_api_id,
+        sf.Name__c
+      FROM `ocean-breeze-tier-1.reporting_data_mart.journal` j
+      JOIN `ocean-breeze-tier-2.salesforce.Journal__c` sf
+        ON SAFE_CAST(sf.Journal_API_Id__c AS INT64) = j.journal_id
+      WHERE j.space_id = 1
+        AND j.journal_level = 'Journal'
+      LIMIT 5
+
+  - id: JOUR-002
+    status: confirmed
+    label: "DWH journal → AIRAK Journal (journal_id)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: journal
+      column: journal_id
+    to:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: JournalSource
+      column: SourceValue   # CAST AS INT64; SourceId = 19 = Frontiers
+    via_bridge:
+      table: ocean-breeze-tier-1.airak.JournalSource
+      filter: "SourceId = 19  -- Frontiers journals"
+      then_join:
+        from_col: JournalId
+        to_table: ocean-breeze-tier-1.airak.Journal
+        to_col: JournalId
+    join_type: via_bridge
+    cardinality: one_to_one
+    sample_query: |
+      SELECT
+        j.journal_id   AS dwh_journal_id,
+        j.journal_name AS dwh_journal_name,
+        aj.JournalId AS airak_journal_id,
+        aj.DisplayName AS airak_journal_name,
+        aj.PublicationCount AS airak_publication_count
+      FROM `ocean-breeze-tier-1.reporting_data_mart.journal` j
+      JOIN `ocean-breeze-tier-1.airak.JournalSource` js
+        ON j.journal_id = cast(js.SourceValue as int64) 
+        AND js.SourceId = 19
+      join `ocean-breeze-tier-1.airak.Journal` aj
+        ON aj.JournalId = js.JournalId
+      WHERE j.space_id = 1
+      and j.journal_level = 'Journal' 
+      LIMIT 5
+
+  - id: JOUR-003
+    status: confirmed
+    label: "DWH journal/section → Workday allocations_pubdev (employee-journal allocation)"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: journal
+      columns: [journal_id, section_id]
+    to:
+      project: ocean-breeze-tier-2
+      dataset: workday_adaptive_planning
+      table: allocations_pubdev
+      columns: [journal_id, section_id]
+    join_key_pairs:
+      - { from_col: journal_id, to_col: journal_id }
+      - { from_col: section_id, to_col: section_id }
+    join_type: direct
+    cardinality: one_to_many
+    sample_query: |
+      SELECT
+        j.journal_id,
+        j.journal_name,
+        j.section_id,
+        w.employee_id,
+        w.employee_name,
+        w.allocatedrole,
+        w.Allocation
+      FROM `ocean-breeze-tier-1.reporting_data_mart.journal` j
+      JOIN `ocean-breeze-tier-2.workday_adaptive_planning.allocations_pubdev` w
+        ON j.journal_id = w.journal_id
+        AND j.section_id = w.section_id
+      WHERE j.space_id = 1
+      LIMIT 5
+
+###############################################################################
+# 4. RESEARCH TOPIC — cross-dataset joins
+###############################################################################
+
+research_topic_cross_dataset_joins:
+
+  - id: RT-001
+    status: confirmed
+    label: "DWH research_topic → Salesforce ResearchTopic__c"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: research_topic
+      column: research_topic_id_original
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: ResearchTopic__c
+      column: ResearchTopicId__c   # STRING → CAST AS INT64
+    join_key_pairs:
+      - { from_col: research_topic_id_original, to_col: ResearchTopicId__c, transform: "SAFE_CAST(ResearchTopicId__c AS INT64)" }
+    join_type: direct
+    cardinality: one_to_one
+    notes: Filter SF side by SpaceId__c for space scoping.
+    sample_query: |
+      SELECT
+        rt.research_topic_id_original,
+        rt.title         AS dwh_rt_title,
+        sf.Id            AS sf_rt_crm_id,
+        sf.ResearchTopicId__c,
+        SAFE_CAST(sf.ResearchTopicId__c AS INT64) AS sf_rt_int,
+        sf.Title__c
+      FROM `ocean-breeze-tier-1.reporting_data_mart.research_topic` rt
+      JOIN `ocean-breeze-tier-2.salesforce.ResearchTopic__c` sf
+        ON SAFE_CAST(sf.ResearchTopicId__c AS INT64) = rt.research_topic_id_original
+      WHERE rt.space_id = 1
+      LIMIT 5
+
+  - id: RT-002
+    status: confirmed
+    label: "DWH research_topic → AIRAK ResearchTopic"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: research_topic
+      column: research_topic_id_original
+    to:
+      project: ocean-breeze-tier-1
+      dataset: airak
+      table: ResearchTopic
+      column: ResearchTopicId
+    join_key_pairs:
+      - { from_col: research_topic_id_original, to_col: ResearchTopicId }
+    join_type: direct
+    cardinality: one_to_one
+    notes: AIRAK ResearchTopic provides stage, deadlines, online/completed dates.
+    sample_query: |
+      SELECT
+        rt.research_topic_id_original,
+        rt.title            AS dwh_title,
+        akt.ResearchTopicId AS airak_rt_id,
+        akt.Title           AS airak_title,
+        akt.OnlineDate
+      FROM `ocean-breeze-tier-1.reporting_data_mart.research_topic` rt
+      JOIN `ocean-breeze-tier-1.airak.ResearchTopic` akt
+        ON rt.research_topic_id_original = akt.ResearchTopicId
+      WHERE rt.space_id = 1
+      LIMIT 5
+
+###############################################################################
+# 5. EDITORIAL BOARD — cross-dataset joins
+###############################################################################
+
+editorial_board_cross_dataset_joins:
+
+  - id: EB-001
+    status: confirmed
+    label: "DWH editorial_board_member → Salesforce EditorialBoardMember__c"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: editorial_board_member
+      column: editorial_board_member_user_id
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: EditorialBoardMember__c
+      column: LoopId__c   # = Frontiers user_id
+    join_key_pairs:
+      - { from_col: editorial_board_member_user_id, to_col: LoopId__c, transform: "SAFE_CAST(LoopId__c AS INT64)" }
+    join_type: direct
+    cardinality: one_to_many
+    filter: "SF: SpaceId__c = 'a3G4K0000000CmXUAU'."
+    sample_query: |
+      SELECT
+        ebm.editorial_board_member_id,
+        ebm.editorial_board_member_user_id,
+        sf.Id              AS sf_crm_id,
+        sf.EditorialBoardMemberId__c,
+        SAFE_CAST(sf.LoopId__c AS INT64) AS sf_loop_id,
+        sf.Status__c
+      FROM `ocean-breeze-tier-1.reporting_data_mart.editorial_board_member` ebm
+      JOIN `ocean-breeze-tier-2.salesforce.EditorialBoardMember__c` sf
+        ON SAFE_CAST(sf.LoopId__c AS INT64) = ebm.editorial_board_member_user_id
+      WHERE ebm.editorial_board_member_space_id = 1
+        AND sf.SpaceId__c = 'a3G4K0000000CmXUAU'
+      LIMIT 5
+
+  - id: EB-002
+    status: confirmed
+    label: "DWH review_board_member → Salesforce ArticleReviewer__c"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: review_board_member
+      column: review_board_member_user_id
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: ArticleReviewer__c
+      column: LoopId__c
+    join_key_pairs:
+      - { from_col: review_board_member_user_id, to_col: LoopId__c, transform: "SAFE_CAST(LoopId__c AS INT64)" }
+    join_type: direct
+    cardinality: one_to_many
+    filter: "SF: SpaceId__c = 'a3G4K0000000CmXUAU'."
+    sample_query: |
+      SELECT
+        rbm.review_board_member_id,
+        rbm.review_board_member_user_id,
+        rbm.review_board_member_article_id,
+        sf.Id              AS sf_crm_id,
+        sf.ArticleReviewerId__c,
+        SAFE_CAST(sf.LoopId__c AS INT64) AS sf_loop_id,
+        sf.Status__c
+      FROM `ocean-breeze-tier-1.reporting_data_mart.review_board_member` rbm
+      JOIN `ocean-breeze-tier-2.salesforce.ArticleReviewer__c` sf
+        ON SAFE_CAST(sf.LoopId__c AS INT64) = rbm.review_board_member_user_id
+      WHERE rbm.review_board_member_space_id = 1
+        AND sf.SpaceId__c = 'a3G4K0000000CmXUAU'
+      LIMIT 5
+
+  - id: EB-003
+    status: confirmed
+    label: "DWH research_topic_editor → Salesforce ArticleEditor__c"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: research_topic_editor
+      column: editor_user_id
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: ArticleEditor__c
+      column: LoopId__c
+    join_key_pairs:
+      - { from_col: editor_user_id, to_col: LoopId__c, transform: "SAFE_CAST(LoopId__c AS INT64)" }
+    join_type: direct
+    cardinality: one_to_many
+    filter: "SF: SpaceId__c = 'a3G4K0000000CmXUAU'."
+    sample_query: |
+      SELECT
+        rte.editor_id,
+        rte.editor_user_id,
+        rte.editor_research_topic_id,
+        sf.Id              AS sf_crm_id,
+        sf.ArticleEditorId__c,
+        sf.LoopId__c,
+        sf.Article_Stage__c
+      FROM `ocean-breeze-tier-1.reporting_data_mart.research_topic_editor` rte
+      JOIN `ocean-breeze-tier-2.salesforce.ArticleEditor__c` sf
+        ON SAFE_CAST(sf.LoopId__c AS INT64) = rte.editor_user_id
+      WHERE rte.editor_space_id = 1
+        AND sf.SpaceId__c = 'a3G4K0000000CmXUAU'
+      LIMIT 5
+
+###############################################################################
+# 6. ORGANIZATION — cross-dataset joins
+###############################################################################
+
+organization_cross_dataset_joins:
+
+  - id: ORG-001
+    status: confirmed
+    label: "ROSST organization ↔ DWH author_organizations"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: rosst
+      table: organization
+      column: OrganizationId   # O-prefixed string e.g. "O100034"
+    to:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: author_organizations
+      column: rosst_id
+    join_key_pairs:
+      - { from_col: OrganizationId, to_col: rosst_id }
+    join_type: direct
+    cardinality: one_to_many
+    sample_query: |
+      SELECT
+        r.OrganizationId,
+        r.Name           AS rosst_name,
+        ao.author_organizations_id,
+        ao.author_id,
+        ao.organization
+      FROM `ocean-breeze-tier-2.rosst.organization` r
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.author_organizations` ao
+        ON ao.rosst_id = r.OrganizationId
+      WHERE ao.space_id = 1
+      LIMIT 5
+
+  - id: ORG-002
+    status: unconfirmed
+    label: "AIRAK Organization → ROSST organization"
+    notes: >
+      INVESTIGATION FINDING: No direct join path confirmed.
+      AIRAK OrganizationSource (SourceId=23) stores numeric IDs;
+      AIRAK OrganizationSource (SourceId=24) stores GRID IDs.
+      Neither matches ROSST's O-prefixed OrganizationId format.
+      Recommended workaround: bridge via DWH —
+      airak.PublicationAuthor.OrganizationId → reporting_data_mart.author_organizations.organization_id
+      (this also did not confirm during testing, suggesting the AIRAK org ID
+      is a different namespace from DWH organization_id).
+      Further investigation needed with data engineering team.
+
+  - id: ORG-003
+    status: confirmed
+    label: "Production Forum institution → ROSST organization"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: production_forum
+      table: institution
+      column: rosst_id
+    to:
+      project: ocean-breeze-tier-2
+      dataset: rosst
+      table: organization
+      column: OrganizationId
+    join_key_pairs:
+      - { from_col: rosst_id, to_col: OrganizationId }
+    join_type: direct
+    cardinality: many_to_one
+    notes: Bridge via production_forum.author_institution to link authors to institutions.
+    sample_query: |
+      SELECT
+        inst.id         AS pof_institution_id,
+        inst.name       AS pof_inst_name,
+        inst.rosst_id,
+        r.OrganizationId,
+        r.Name          AS rosst_name
+      FROM `ocean-breeze-tier-2.production_forum.institution` inst
+      JOIN `ocean-breeze-tier-2.rosst.organization` r
+        ON inst.rosst_id = r.OrganizationId
+      WHERE inst.rosst_id IS NOT NULL
+      LIMIT 5
+
+###############################################################################
+# 7. EMPLOYEE / WORKDAY — cross-dataset joins
+###############################################################################
+
+employee_cross_dataset_joins:
+
+  - id: EMP-001
+    status: inaccessible
+    label: "Workday employee → FrontonGPT agent_user (employee_id)"
+    from:
+      project: ocean-breeze-tier-3
+      dataset: workday_reference_data
+      table: employee
+      column: employee_id
+    to:
+      project: gcp-innovation-hub
+      dataset: frontongpt_AL
+      table: Agent_user
+      column: Employee_ID
+    join_key_pairs:
+      - { from_col: employee_id, to_col: Employee_ID }
+    join_type: direct
+    cardinality: one_to_one
+    notes: >
+      Dataset gcp-innovation-hub.frontongpt_AL not accessible from EU billing project.
+      Join key (employee_id ↔ Employee_ID) is architecturally correct per data model.
+      Test from a US-region BigQuery context.
+
+  - id: EMP-002
+    status: confirmed
+    label: "Workday allocations_pubdev → DWH journal/section"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: workday_adaptive_planning
+      table: allocations_pubdev
+      columns: [journal_id, section_id]
+    to:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: journal
+      columns: [journal_id, section_id]
+    join_key_pairs:
+      - { from_col: journal_id, to_col: journal_id }
+      - { from_col: section_id, to_col: section_id }
+    join_type: direct
+    cardinality: many_to_one
+    sample_query: |
+      SELECT
+        w.employee_id,
+        w.employee_name,
+        w.journal_id,
+        w.section_id,
+        j.journal_name,
+        j.section,
+        w.allocatedrole,
+        w.Allocation
+      FROM `ocean-breeze-tier-2.workday_adaptive_planning.allocations_pubdev` w
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.journal` j
+        ON w.journal_id = j.journal_id AND w.section_id = j.section_id
+      WHERE j.space_id = 1
+      LIMIT 5
+
+###############################################################################
+# 8. CAMPAIGN — cross-dataset joins
+###############################################################################
+
+campaign_cross_dataset_joins:
+
+  - id: CAMP-001
+    status: confirmed
+    label: "DWH campaign_member → Salesforce CampaignMember"
+    from:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: campaign_member
+      column: campaign_member_id   # STRING = SF CampaignMember.Id
+    to:
+      project: ocean-breeze-tier-2
+      dataset: salesforce
+      table: CampaignMember
+      column: Id
+    join_key_pairs:
+      - { from_col: campaign_member_id, to_col: Id }
+    secondary_join:
+      - { from_col: campaign_crm_id, to_col: CampaignId }
+    join_type: direct
+    cardinality: one_to_one
+    sample_query: |
+      SELECT
+        cm.campaign_member_id,
+        cm.campaign_crm_id,
+        cm.campaign_member_user_id,
+        sf.Id       AS sf_id,
+        sf.CampaignId,
+        sf.Status,
+        sf.FirstName,
+        sf.LastName
+      FROM `ocean-breeze-tier-1.reporting_data_mart.campaign_member` cm
+      JOIN `ocean-breeze-tier-2.salesforce.CampaignMember` sf
+        ON cm.campaign_member_id = sf.Id
+      LIMIT 5
+
+###############################################################################
+# 9. PEER REVIEW — cross-dataset joins
+###############################################################################
+
+peer_review_cross_dataset_joins:
+
+  - id: PR-001
+    status: confirmed
+    label: "Peer Review annotation → DWH article"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: peer_review
+      table: annotation
+      column: article_id   # = article_id_original, NOT internal article_id
+    to:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: article_id_original
+    join_key_pairs:
+      - { from_col: article_id, to_col: article_id_original }
+      - { from_col: space_id, to_col: space_id }
+    join_type: direct
+    cardinality: many_to_one
+    sample_query: |
+      SELECT
+        ann.annotation_id,
+        ann.article_id    AS pr_article_id,
+        ann.space_id,
+        ann.user_id,
+        ar.article_id_original,
+        ar.article_id     AS dwh_internal_id,
+        ar.doi,
+        ar.title
+      FROM `ocean-breeze-tier-2.peer_review.annotation` ann
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.article` ar
+        ON ann.article_id = ar.article_id_original
+        AND ann.space_id  = ar.space_id
+      WHERE ann.is_deleted = FALSE
+      LIMIT 5
+
+  - id: PR-002
+    status: confirmed
+    label: "Peer Review review_turn → DWH article"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: peer_review
+      table: review_turn
+      column: article_id   # = article_id_original
+    to:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: article_id_original
+    join_key_pairs:
+      - { from_col: article_id, to_col: article_id_original }
+      - { from_col: space_id, to_col: space_id }
+    join_type: direct
+    cardinality: many_to_one
+    notes: review_turn.reviewer_id = DWH user_id (join to user_metrics).
+    sample_query: |
+      SELECT
+        rt.review_turn_id,
+        rt.article_id     AS pr_article_id,
+        rt.reviewer_id,
+        rt.round_number,
+        ar.article_id_original,
+        ar.doi,
+        ar.title
+      FROM `ocean-breeze-tier-2.peer_review.review_turn` rt
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.article` ar
+        ON rt.article_id = ar.article_id_original
+        AND rt.space_id  = ar.space_id
+      LIMIT 5
+
+###############################################################################
+# 10. SENSCIENCE — cross-dataset joins
+###############################################################################
+
+senscience_cross_dataset_joins:
+
+  - id: SENS-001
+    status: confirmed
+    label: "senscience.event → reporting_data_mart.user_metrics (user_id) + space (space_id)"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: senscience
+      table: event
+      column: user_id
+    to:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: user_metrics
+      column: user_id
+    join_key_pairs:
+      - { from_col: user_id, to_col: user_id, transform: "direct" }
+    join_type: direct
+    cardinality: many_to_one
+    filter: "Filter by space_id = 1 and is_deleted = FALSE."
+    notes: >
+      publication_id is a UUID from the ScienceRadar/data_vitae system — no confirmed
+      join to DWH article or DOI. submission_id (7M range) confirmed via SENS-002
+      (joins to article.first_submission_id_original, not article_id_original).
+    sample_query: |
+      SELECT
+        ev.publication_id,
+        ev.user_id,
+        ev.name AS event_name,
+        ev.submission_id,
+        u.user_id AS dwh_user_id,
+        u.email,
+        u.name AS user_name
+      FROM `ocean-breeze-tier-2.senscience.event` ev
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.user_metrics` u
+        ON ev.user_id = u.user_id
+      WHERE ev.space_id = 1
+        AND ev.is_deleted = FALSE
+      LIMIT 5
+
+  - id: SENS-002
+    status: confirmed
+    label: "senscience.event → reporting_data_mart.article (submission_id ↔ first_submission_id_original)"
+    from:
+      project: ocean-breeze-tier-2
+      dataset: senscience
+      table: event
+      column: submission_id
+    to:
+      project: ocean-breeze-tier-1
+      dataset: reporting_data_mart
+      table: article
+      column: first_submission_id_original
+    join_key_pairs:
+      - { from_col: submission_id, to_col: first_submission_id_original, transform: "direct" }
+      - { from_col: space_id, to_col: space_id, transform: "direct" }
+    join_type: direct
+    cardinality: many_to_one
+    notes: >
+      senscience.event.submission_id (range 6.5M–7.5M) is a short submission ID
+      matching article.first_submission_id_original (not article_id_original 1–1.8M,
+      and not submission_article_id which is a 16-digit composite key).
+      An article may have multiple submissions; the event ties to whichever submission
+      the ScienceRadar event references — confirmed match is on first_submission_id_original.
+      Use latest_submission_id_original for an alternative join if the event refers
+      to the latest revision.
+    filter: "Filter by space_id = 1 and is_deleted = FALSE."
+    sample_query: |
+      SELECT
+        ev.submission_id,
+        ar.article_id_original,
+        ar.first_submission_id_original,
+        ar.latest_submission_id_original,
+        ev.space_id,
+        ev.name AS event_name
+      FROM `ocean-breeze-tier-2.senscience.event` ev
+      JOIN `ocean-breeze-tier-1.reporting_data_mart.article` ar
+        ON ev.submission_id = ar.first_submission_id_original
+       AND ev.space_id = ar.space_id
+      WHERE ev.space_id = 1
+        AND ev.is_deleted = FALSE
+      LIMIT 5

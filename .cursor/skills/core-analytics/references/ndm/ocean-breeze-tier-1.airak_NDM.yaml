@@ -1,0 +1,1820 @@
+# Analytical Data Model — ocean-breeze-tier-1.airak
+# Narrow Data Model (NDM) — Version 2
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-03
+# Source: ocean-breeze-tier-1.airak_ADM_V2.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within the dataset, space_id is not strictly
+#   required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one          : many rows here → same parent row (standard FK)
+# one_to_one           : at most one row here per referenced parent row
+# optional_many_to_one : FK is nullable / zero-or-one participation
+# [PROPOSED]           : inferred — validate before use
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+
+  ####################################################### COMMON #######################################################
+
+  - name: country
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.Country
+    description: >
+      Contains metadata about countries.
+    grain: IsoCode3
+    primary_key: IsoCode3
+    columns:
+      - name: IsoCode3
+        type: String
+      - name: IsoCode2
+        type: String
+
+  - name: country_submission_metrics
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.CountrySubmissionMetrics
+    description: >
+      Contains submission and rejection metrics for countries.
+    grain: CountryIsoCode3
+    primary_key: CountryIsoCode3
+    columns:
+      - name: CountryIsoCode3
+        type: String
+
+
+  ####################################################### JOURNAL #######################################################
+
+  - name: journal
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.Journal
+    description: >
+      Contains general information about a Journal
+    grain: JournalId
+    primary_key: JournalId
+    columns:
+      - name: JournalId
+        type: Integer
+      - name: PublisherId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publisher
+            column: PublisherId
+            cardinality: many_to_one
+            relationship: "is published by"
+
+  - name: journal_field_of_study
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.JournalFieldOfStudy
+    description: >
+      Contains data on what Fields of study are associated to a Journal. This is inferred through the publications published in the journal.
+    grain: JournalId, FieldOfStudyId
+    primary_key: JournalId, FieldOfStudyId
+    columns:
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: FieldOfStudyId
+        type: Integer
+
+  - name: journal_issn
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.JournalIssn
+    description: >
+      Contains the ISSNs for Journals
+    grain: JournalId
+    primary_key: JournalId
+    columns:
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: one_to_one
+            relationship: "has information on"
+
+  - name: journal_metadata
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.JournalMetadata
+    description: >
+      Contains additional metrics like IsOpenAccess and IsOpenForSubmissions for all journals
+    grain: JournalId
+    primary_key: JournalId
+    columns:
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: one_to_one
+            relationship: "has information on"
+
+  - name: journal_section
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.JournalSection
+    description: >
+      Contains the Sections of Journals. This is only for Frontiers Journals and Tenant Journals.
+    grain: JournalId, SectionId
+    primary_key: JournalId, SectionId
+    columns:
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: many_to_one
+            relationship: "is a section of"
+      - name: SectionId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: section
+            column: SectionId
+            cardinality: many_to_one
+            relationship: "is a section of"
+
+  - name: journal_source
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.JournalSource
+    description: >
+      Shows the source from which the Journal data was gathered
+    grain: JournalId, SourceId
+    primary_key: JournalId, SourceId
+    columns:
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: many_to_one
+            relationship: "comes from source"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: journal_url
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.JournalUrl
+    description: >
+      List URLs for journals
+    grain: JournalId
+    primary_key: JournalId
+    columns:
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: one_to_one
+            relationship: "is the url of"
+
+  - name: section
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.Section
+    description: >
+      Contains data on sections. This data only comes from Frontiers & other tenants
+    grain: SectionId
+    primary_key: SectionId
+    columns:
+      - name: SectionId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal_section
+            column: SectionId
+            cardinality: one_to_one
+            relationship: "has information on"
+
+  - name: section_field_of_study
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.SectionFieldOfStudy
+    description: >
+      Lists the Fields of study of the publications associated to a section
+    grain: SectionId, FieldOfStudyId
+    primary_key: SectionId, FieldOfStudyId
+    columns:
+      - name: SectionId
+        type: Integer
+      - name: FieldOfStudyId
+        type: Integer
+
+  - name: section_source
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.SectionSource
+    description: >
+      Shows the source from which the section contribution data was gathered
+    grain: SectionId, SourceId
+    primary_key: SectionId, SourceId
+    columns:
+      - name: SectionId
+        type: Integer
+      - name: SourceId
+        type: Integer
+
+
+  ####################################################### ARTICLE #######################################################
+
+  - name: author
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.Author
+    description: >
+      Contains general information about authors.
+    grain: AuthorId
+    primary_key: AuthorId
+    columns:
+      - name: AuthorId
+        type: Integer
+
+
+  - name: author_closest_frontiers_journal_rank
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorClosestFrontiersJournalRank
+    description: >
+      Shows the 10 closest frontiers journal for a given author,  the confidence and a rank that orders the journals (from 1 closest to 10 farthest)
+    grain: AuthorId, JournalId
+    primary_key: AuthorId, JournalId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: many_to_one
+            relationship: "refers to journal"
+
+  - name: author_closest_frontiers_section_rank
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorClosestFrontiersSectionRank
+    description: >
+      Shows the 10 closest frontiers sections for a given author, the confidence and a rank that orders the journals (from 1 closest to 10 farthest)
+    grain: AuthorId, SectionId
+    primary_key: AuthorId, SectionId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: SectionId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: section
+            column: SectionId
+            cardinality: many_to_one
+            relationship: "refers to section"
+
+  - name: author_data_privacy
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorDataPrivacy
+    description: >
+      Shows for what tenants the author has given consent to share their data
+    grain: AuthorId, SourceId
+    primary_key: AuthorId, SourceId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "refers to source"
+
+  - name: author_email
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorEmail
+    description: >
+      Shows all emails assigned to an author, the validation status of the emails and if the email is the primary email.
+    grain: AuthorId, ValidityId
+    primary_key: AuthorId, ValidityId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: ValidityId
+        type: Integer
+
+  - name: author_email_history
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorEmailHistory
+    description: >
+      Contains metadata about the email history of authors.
+    grain: AuthorId, EmailSourceId
+    primary_key: AuthorId, EmailSourceId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: EmailSourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "refers to source"
+
+  - name: author_exclusion
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorExclusion
+    description: >
+      Entity to centralize and standarise audience eligibility criteria. All the info: https://confluence.frontiersin.net/x/pgBLIg
+    grain: AuthorId
+    primary_key: AuthorId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+
+  - name: author_exclusion_extended
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak_extended.AuthorExclusion
+    description: >
+       Extended view of author_exclusion sourced from airak_extended. One row per author. Excludes pipeline metadata columns (airak_version, _ocean_ingested_on).
+    grain: AuthorId
+    primary_key: AuthorId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+
+  - name: author_field_of_study
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorFieldOfStudy
+    description: >
+      Shows the fields of study associated to an author, how many publications the author has linked to that FOS and how similar the FOS is to the author.
+    grain: AuthorId, FieldOfStudyId
+    primary_key: AuthorId, FieldOfStudyId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: FieldOfStudyId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: field_of_study
+            column: FieldOfStudyId
+            cardinality: many_to_one
+            relationship: "refers to field of study"
+
+  - name: author_grants
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorGrants
+    description: >
+      Contains information about grants associated with authors.
+    grain: GrantId, AuthorId
+    primary_key: GrantId, AuthorId
+    columns:
+      - name: GrantId
+        type: Integer
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+
+  - name: author_metric
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorMetric
+    description: >
+      Contains additional metrics like H5index, citation count and publication count for all eligible authors.
+    grain: AuthorId, MainFieldOfStudyId
+    primary_key: AuthorId, MainFieldOfStudyId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: MainFieldOfStudyId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: field_of_study
+            column: FieldOfStudyId
+            cardinality: many_to_one
+            relationship: "refers to field of study"
+
+  - name: author_organization
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorOrganization
+    description: >
+      Shows the Organizations to which the the author has been affilated to via his pubications
+    grain: AuthorId, OrganizationId
+    primary_key: AuthorId, OrganizationId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: OrganizationId
+        type: Integer
+
+  - name: author_overall_proximity
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorOverallProximity
+    description: >
+      How close an author is within Frontiers scope. Data used  to exclude out-of-Frontiers-scope people from campaigns and use them to analyse gaps in our portfolios and launch new sections/journals or expand boards.
+    grain: AuthorId
+    primary_key: AuthorId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+
+  - name: author_rejections
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorRejections
+    description: >
+      This table contains the data related to an authors publication being rejected from Frontiers
+    grain: AuthorId, FrontiersArticleId
+    primary_key: AuthorId, FrontiersArticleId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: FrontiersArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "refers to article"
+      - name: loopid
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "refers to user"
+
+
+  - name: author_source
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorSource
+    description: >
+      This should be used in conjunction with the Source table. An author can have many rows in Author source, each row will represent an external identifier from a different system. For example, an author that has 2 dimensions profiles and one loop profile will have 3 rows in AuthorSource.
+    grain: AuthorId, SourceId
+    primary_key: AuthorId, SourceId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "refers to source"
+
+  - name: author_source_history
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.AuthorSourceHistory
+    description: >
+      A small portion of Authors will eventually have their AuthorID altered, this is due to new data allowing us to correct the author's identity. This table is used to track down the new Id of an author that has undergone this change
+    grain: AuthorId, FormerAuthorId
+    primary_key: AuthorId, FormerAuthorId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: FormerAuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to former author"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+
+  ####################################################### RESEARCH_TOPIC #######################################################
+
+  - name: research_topic
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopic
+    description: >
+      Contains basic data on research topics from Frontiers & tenants
+    grain: ResearchTopicId
+    primary_key: ResearchTopicId
+    columns:
+      - name: ResearchTopicId
+        type: Integer
+
+  - name: research_topic_contributor
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicContributor
+    description: >
+      Contains data on the contributors of a research topic
+    grain: ResearchTopicId, AuthorId
+    primary_key: ResearchTopicId, AuthorId
+    columns:
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: ResearchTopicId
+            cardinality: many_to_one
+            relationship: "contributes to research topic"
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "contributes to research topic"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: research_topic_contributor_source
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicContributorSource
+    description: >
+      Shows the source from which the RT contribution data was gathered
+    grain: ContributorSourceId, SourceId
+    primary_key: ContributorSourceId, SourceId
+    columns:
+      - name: ContributorSourceId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: research_topic_contributor_status
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicContributorStatus
+    description: >
+      Show the status of the RT contribution, some values are Pending, Declined, Confirmed or Withdrawn
+    grain: ContributorStatusId, SourceId
+    primary_key: ContributorStatusId, SourceId
+    columns:
+      - name: ContributorStatusId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: research_topic_description
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicDescription
+    description: >
+      Contains descriptions for all RTs
+    grain: ResearchTopicId
+    primary_key: ResearchTopicId
+    columns:
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: ResearchTopicId
+            cardinality: many_to_one
+            relationship: "has information on"
+
+  - name: research_topic_keyword
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicKeyword
+    description: >
+      Contains Keywords for all RTs
+    grain: ResearchTopicKeywordId
+    primary_key: ResearchTopicKeywordId
+    columns:
+      - name: ResearchTopicKeywordId
+        type: Integer
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: ResearchTopicId
+            cardinality: many_to_one
+            relationship: "references"
+
+  - name: research_topic_publication
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicPublication
+    description: >
+      Lists the publicatios contained in an RT
+    grain: ResearchTopicId, PublicationId
+    primary_key: ResearchTopicId, PublicationId
+    columns:
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: ResearchTopicId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "includes publication"
+
+  - name: research_topic_source
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicSource
+    description: >
+      Shows the source from which the RT data was gathered
+    grain: ResearchTopicId, SourceId
+    primary_key: ResearchTopicId, SourceId
+    columns:
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: ResearchTopicId
+            cardinality: many_to_one
+            relationship: "comes from source"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: research_topic_stage
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicStage
+    description: >
+      Lists the stages for research topics
+    grain: ResearchTopicStageId
+    primary_key: ResearchTopicStageId
+    columns:
+      - name: ResearchTopicStageId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: research_topic_taxonomy
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.airak.ResearchTopicTaxonomy
+    description: >
+      Lists the Journals and sections associated to an RT
+    grain: ResearchTopicId, JournalId
+    primary_key: ResearchTopicId, JournalId
+    columns:
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: ResearchTopicId
+            cardinality: many_to_one
+            relationship: "references"
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: many_to_one
+            relationship: "references"
+      - name: SectionId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: section
+            column: SectionId
+            cardinality: many_to_one
+            relationship: "references"
+
+
+  ####################################################### ORGANIZATION #######################################################
+
+  - name: organization
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.Organization
+    description: >
+      General information about organizations
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: Integer
+
+  - name: organization_flags
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.OrganizationFlags
+    description: >
+      These are tags associated to organizations some values are VIP, Watchlist, C42, CAS and Overreaching
+    grain: OrganizationId, SourceId
+    primary_key: OrganizationId, SourceId
+    columns:
+      - name: OrganizationId
+        type: Integer
+      - name: SourceId
+        type: Integer
+
+  - name: organization_hierarchy
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.OrganizationHierarchy
+    description: >
+      Lists the known child organizations for all organizations
+    grain: OrganizationId, ChildOrganizationId
+    primary_key: OrganizationId, ChildOrganizationId
+    columns:
+      - name: OrganizationId
+        type: Integer
+      - name: ChildOrganizationId
+        type: Integer
+
+  - name: organization_ranking
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.OrganizationRanking
+    description: >
+      Metadata about different rankings and the organizations in them
+    grain: OrganizationId, RankingId
+    primary_key: OrganizationId, RankingId
+    columns:
+      - name: OrganizationId
+        type: Integer
+      - name: RankingId
+        type: Integer
+
+  - name: organization_source
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.OrganizationSource
+    description: >
+      Shows the source from which the Organization data was gathered
+    grain: OrganizationId, SourceId
+    primary_key: OrganizationId, SourceId
+    columns:
+      - name: OrganizationId
+        type: Integer
+      - name: SourceId
+        type: Integer
+
+  - name: organization_submission_metrics
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.OrganizationSubmissionMetrics
+    description: >
+      Metadata related to Rejections and Submissions for organizations
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: Integer
+
+  - name: organization_top_parent
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.OrganizationTopParent
+    description: >
+      Shows the top level parent for all organizations
+    grain: OrganizationId, TopParentOrganizationId
+    primary_key: OrganizationId, TopParentOrganizationId
+    columns:
+      - name: OrganizationId
+        type: Integer
+      - name: TopParentOrganizationId
+        type: Integer
+
+  - name: organization_url
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.OrganizationUrl
+    description: >
+      lists known URLs for all organizations
+    grain: OrganizationId, SourceId
+    primary_key: OrganizationId, SourceId
+    columns:
+      - name: OrganizationId
+        type: Integer
+      - name: SourceId
+        type: Integer
+
+
+  ####################################################### UNKNOWN #######################################################
+
+  - name: conference
+    domain: CONFERENCE
+    source_table: ocean-breeze-tier-1.airak.Conference
+    description: >
+      Contains general information about conferences.
+    grain: ConferenceId
+    primary_key: ConferenceId
+    columns:
+      - name: ConferenceId
+        type: Integer
+
+  - name: conference_author
+    domain: CONFERENCE
+    source_table: ocean-breeze-tier-1.airak.ConferenceAuthor
+    description: >
+      Contains general information about conference authors.
+    grain: ConferenceId, SessionId
+    primary_key: ConferenceId, SessionId
+    columns:
+      - name: ConferenceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: conference
+            column: ConferenceId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: SessionId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: conference_session
+            column: SessionId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "partcipated in"
+
+  - name: conference_inconsistent_authors
+    domain: CONFERENCE
+    source_table: ocean-breeze-tier-1.airak.ConferenceInconsistentAuthors
+    description: >
+      Contains general information about inconsistent conference authors.
+    grain: DimensionsId
+    primary_key: DimensionsId
+    columns:
+      - name: DimensionsId
+        type: String
+
+  - name: conference_session
+    domain: CONFERENCE
+    source_table: ocean-breeze-tier-1.airak.ConferenceSession
+    description: >
+      Contains general information about conference sessions.
+    grain: SessionId, ConferenceId
+    primary_key: SessionId, ConferenceId
+    columns:
+      - name: SessionId
+        type: Integer
+      - name: ConferenceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: conference
+            column: ConferenceId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: editorial_board_role
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.EditorialBoardRole
+    description: >
+      Contains the editorial board roles like 'Associate Editor'  or 'Reviewer'
+    grain: RoleId, SourceId
+    primary_key: RoleId, SourceId
+    columns:
+      - name: RoleId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: editorial_contribution
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.EditorialContribution
+    description: >
+      describes an authors editorial contribution. For example: Author 23332 was an active reviewer on publication 23234234
+    grain: PublicationId, AuthorId
+    primary_key: PublicationId, AuthorId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "is the publication of"
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "contributed to"
+
+  - name: editorial_contribution_role
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.EditorialContributionRole
+    description: >
+      Contains metadata about roles in editorial contributions.
+    grain: EditorialContributionRoleId
+    primary_key: EditorialContributionRoleId
+    columns:
+      - name: EditorialContributionRoleId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: editorial_contribution_status
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.EditorialContributionStatus
+    description: >
+      Contains metadata about the status of editorial contributions.
+    grain: EditorialContributionStatusId
+    primary_key: EditorialContributionStatusId
+    columns:
+      - name: EditorialContributionStatusId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: editorial_role
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.EditorialRole
+    description: >
+      contains records related to an author's editorial board roles.
+    grain: AuthorId, RoleId
+    primary_key: AuthorId, RoleId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "has role"
+      - name: RoleId
+        type: Integer
+
+  - name: editorial_role_type
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.airak.EditorialRoleType
+    description: >
+      Contains metadata about types of editorial roles.
+    grain: TypeId
+    primary_key: TypeId
+    columns:
+      - name: TypeId
+        type: Integer
+
+  - name: email_source
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.EmailSource
+    description: >
+      The different sources from which emails can enter Aira K
+    grain: EmailSourceId
+    primary_key: EmailSourceId
+    columns:
+      - name: EmailSourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: email_unsubscribed
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.EmailUnsubscribed
+    description: >
+      sontains the emails that have requested to not receive communications from one or more Frontiers tenants
+    grain: TenantId
+    primary_key: TenantId
+    columns:
+      - name: TenantId
+        type: String
+
+  - name: email_validity
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.EmailValidity
+    description: >
+      Email validity values like Safe to send, Valid, Invalid and Unknown
+    grain: ValidityId
+    primary_key: ValidityId
+    columns:
+      - name: ValidityId
+        type: Integer
+
+  - name: field_of_study
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.FieldOfStudy
+    description: >
+      Lists the Fields of study like Enginering, Medicine or Cognitive psychology. FOS can be of multiple levels with level 0 being more generic, like Medicine, and level 5 is very specific, like amyloid precursor protein secretase
+    grain: FieldOfStudyId
+    primary_key: FieldOfStudyId
+    columns:
+      - name: FieldOfStudyId
+        type: Integer
+
+  - name: field_of_study_children
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.FieldOfStudyChildren
+    description: >
+      This table represents the hierarchy of FOS, given a FOS ID you can find its Children.
+    grain: FieldOfStudyId, ChildFieldOfStudyId
+    primary_key: FieldOfStudyId, ChildFieldOfStudyId
+    columns:
+      - name: FieldOfStudyId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: field_of_study
+            column: FieldOfStudyId
+            cardinality: many_to_one
+            relationship: "has children"
+      - name: ChildFieldOfStudyId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: field_of_study
+            column: ChildFieldOfStudyId
+            cardinality: many_to_one
+            relationship: "is a child of"
+
+  - name: field_of_study_source
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.FieldOfStudySource
+    description: >
+      Shows where we obtained the FOS from
+    grain: FieldOfStudyId, SourceId
+    primary_key: FieldOfStudyId, SourceId
+    columns:
+      - name: FieldOfStudyId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: field_of_study
+            column: FieldOfStudyId
+            cardinality: many_to_one
+            relationship: "comes from source"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+  - name: focus_market
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.FocusMarket
+    description: >
+      Contains information related to focus markets. For each region you can find the Focus Market bins and other metrics.
+    grain: ArticleVolumeId, IntegrityIssuesId
+    primary_key: ArticleVolumeId, IntegrityIssuesId
+    columns:
+      - name: ArticleVolumeId
+        type: Integer
+      - name: IntegrityIssuesId
+        type: Integer
+
+  - name: funders
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.Funders
+    description: >
+      This is the Funders entity which provides context about the Funders of grants. https://confluence.frontiersin.net/spaces/ENG/pages/619283931/Funders
+    grain: FunderId
+    primary_key: FunderId
+    columns:
+      - name: FunderId
+        type: Integer
+
+  - name: funders_source
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.FundersSource
+    description: >
+      A table where we can link the Aira Knowledge grant id with the original grant id according to the source that provided it.
+    grain: FunderId, SourceId
+    primary_key: FunderId, SourceId
+    columns:
+      - name: FunderId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: funders
+            column: FunderId
+            cardinality: many_to_one
+            relationship: "is the funder of"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: grants
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.Grants
+    description: >
+      https://jira.frontiersin.net/browse/NESS-6204
+    grain: GrantId
+    primary_key: GrantId
+    columns:
+      - name: FunderId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: funders
+            column: FunderId
+            cardinality: many_to_one
+            relationship: "it's funded by"
+      - name: GrantId
+        type: Integer
+
+  - name: grants_source
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.airak.GrantsSource
+    description: >
+      https://jira.frontiersin.net/browse/NESS-6204
+    grain: GrantId, SourceId
+    primary_key: GrantId, SourceId
+    columns:
+      - name: GrantId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: grants
+            column: GrantId
+            cardinality: many_to_one
+            relationship: "comes from source"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+
+  - name: publication
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.Publication
+    description: >
+      Contains data about all publications.
+    grain: PublicationId
+    primary_key: PublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+      - name: Doi
+        type: String
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: JournalId
+            cardinality: many_to_one
+            relationship: "published in journal"
+      - name: SectionId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: section
+            column: SectionId
+            cardinality: many_to_one
+            relationship: "published in section"
+
+  - name: publication_abstract
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationAbstract
+    description: >
+      Contains the abstracts for publications. Only a subset of publications have abstracts available.
+    grain: PublicationId
+    primary_key: PublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has information on"
+
+  - name: publication_author
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationAuthor
+    description: >
+      Contains metadata on the authors of each publication in Aira K.
+    grain: PublicationId, AuthorId
+    primary_key: PublicationId, AuthorId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has contributed to"
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "has contributed to"
+      - name: OrganizationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: publication_citation
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationCitation
+    description: >
+      Contains the publications being referenced by a publication
+    grain: PublicationId, CitedPublicationId
+    primary_key: PublicationId, CitedPublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: CitedPublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "references"
+
+  - name: publication_field_of_study
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationFieldOfStudy
+    description: >
+      Contains metadata about the fields of study for publications.
+    grain: PublicationId, FieldOfStudyId
+    primary_key: PublicationId, FieldOfStudyId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: FieldOfStudyId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: field_of_study
+            column: FieldOfStudyId
+            cardinality: many_to_one
+            relationship: "is the field of study of"
+
+  - name: publication_full_text
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationFullText
+    description: >
+      Contains the Fulltext for frontiers & tenant publications
+    grain: PublicationId
+    primary_key: PublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: one_to_one
+            relationship: "is the extended full text of"
+
+  - name: publication_metadata
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationMetadata
+    description: >
+      Contains additional metadata on publications
+    grain: PublicationId
+    primary_key: PublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: one_to_one
+            relationship: "is the metadata of"
+
+  - name: publication_source
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationSource
+    description: >
+      Shows the source from which the Publication data was gathered
+    grain: PublicationId, SourceId
+    primary_key: PublicationId, SourceId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "comes from source"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: publication_source_history
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.PublicationSourceHistory
+    description: >
+      Can be used to track down a publication if its ID ever changes
+    grain: PublicationId, FormerPublicationId
+    primary_key: PublicationId, FormerPublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "it refers to"
+      - name: FormerPublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "its substituted by"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: publisher
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.Publisher
+    description: >
+      Contains data about Publishers
+    grain: PublisherId
+    primary_key: PublisherId
+    columns:
+      - name: PublisherId
+        type: Integer
+
+  - name: publisher_metadata
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-1.airak.PublisherMetadata
+    description: >
+      Contains additional metadata on Publishers
+    grain: PublisherId
+    primary_key: PublisherId
+    columns:
+      - name: PublisherId
+        type: Integer
+
+  - name: publisher_source
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.PublisherSource
+    description: >
+      Shows the source from which the Publisher data was gathered
+    grain: PublisherId, SourceId
+    primary_key: PublisherId, SourceId
+    columns:
+      - name: PublisherId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publisher
+            column: PublisherId
+            cardinality: many_to_one
+            relationship: "comes from source"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: pubpeer_comment
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.PubpeerComment
+    description: >
+      Contains data from PubPeer on some publications
+    grain: PublicationId, PubpeerId
+    primary_key: PublicationId, PubpeerId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: PubpeerId
+        type: String
+
+  - name: ranking
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.Ranking
+    description: >
+      Contains the list of all rankings in AiraK
+    grain: RankingId
+    primary_key: RankingId
+    columns:
+      - name: RankingId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: retraction
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.Retraction
+    description: >
+      Contains metadata on retracted publications
+    grain: PublicationId, OriginalPmid
+    primary_key: PublicationId, OriginalPmid
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has information on"
+      - name: OriginalPmid
+        type: String
+
+  - name: retraction_reason
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.RetractionReason
+    description: >
+      Contains the reasons for a retraction
+    grain: PublicationId
+    primary_key: PublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has information on"
+
+  - name: retraction_type
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.airak.RetractionType
+    description: >
+      contains the type of retraction. some values are Letter, Guideline, Case Report, Expression of concern and Correction
+    grain: PublicationId
+    primary_key: PublicationId
+    columns:
+      - name: PublicationId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publication
+            column: PublicationId
+            cardinality: many_to_one
+            relationship: "has information on"
+
+  - name: science_radar_metrics
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.ScienceRadarMetrics
+    description: >
+      https://confluence.frontiersin.net/display/DS/Science+Radar+Metrics+2.0
+    grain: AuthorId
+    primary_key: AuthorId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "has information on"
+
+  - name: source
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.airak.Source
+    description: >
+      Master table containing the different origins of the data in Aira K
+    grain: SourceId
+    primary_key: SourceId
+    columns:
+      - name: SourceId
+        type: Integer
+
+  - name: unknown_author
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.UnknownAuthor
+    description: >
+      Contains authors that have submitted papers to Frontiers buthave not been identified in AiraK
+    grain: ArticleId, ArticleAuthorId
+    primary_key: ArticleId, ArticleAuthorId
+    columns:
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "has written on"
+      - name: ArticleAuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "is the author of"
+
+  - name: watchlist_author
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.WatchlistAuthor
+    description: >
+      Contains the Authors linked to Watchlist
+    grain: AuthorId, CategoryId
+    primary_key: AuthorId, CategoryId
+    columns:
+      - name: AuthorId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            relationship: "refers to author"
+      - name: CategoryId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: watchlist_category
+            column: CategoryId
+            cardinality: many_to_one
+            relationship: "is of category"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: watchlist_category
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.WatchlistCategory
+    description: >
+      Contains the categories from watchlist
+    grain: CategoryId, SourceId
+    primary_key: CategoryId, SourceId
+    columns:
+      - name: CategoryId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: watchlist_reason_role
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.WatchlistReasonRole
+    description: >
+      Contains the Reasons for the watchlist entry
+    grain: ReasonRoleId, SourceId
+    primary_key: ReasonRoleId, SourceId
+    columns:
+      - name: ReasonRoleId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"
+
+  - name: watchlist_reason_type
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.airak.WatchlistReasonType
+    description: >
+      Contains the types of reasons for watchlist
+    grain: ReasonTypeId, CategoryId
+    primary_key: ReasonTypeId, CategoryId
+    columns:
+      - name: ReasonTypeId
+        type: Integer
+      - name: CategoryId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: watchlist_category
+            column: CategoryId
+            cardinality: many_to_one
+            relationship: "is of category"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: source
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "comes from source"

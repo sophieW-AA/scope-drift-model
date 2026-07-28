@@ -1,0 +1,273 @@
+# Analytical Data Model — ocean-breeze-tier-2.editorial_assignment
+# Narrow Data Model (NDM) — Version 1
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-14
+# Source: dataset-model-ADM/ocean-breeze-tier-2.editorial_assignment_ADM_V1.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within the dataset, space_id is not strictly
+#   required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one          : many rows here → same parent row (default for non-nullable FKs)
+# optional_many_to_one : FK column is nullable / zero-or-one participation
+# one_to_one           : at most one row here per referenced parent row
+#
+# relationship label   : domain-specific phrase (child → parent direction).
+#                        "[PROPOSED] references" = not yet reviewed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+  ####################################################### ARTICLE #######################################################
+
+  # ─── REVIEW_BOARD ────────────────────────────────────────────────────────────
+
+  - name: review_board_invitation
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-2.editorial_assignment.review_board_invitation
+    description: >
+      Main fact for review board invitations. Grain is invitation × optional article-inv-reason × optional invitation_tracking (LEFT JOINs can duplicate or widen rows); review_board_invitation_id alone is not a unique row key. Includes space_id per tenant union.
+    grain: review_board_invitation_id, space_id
+    primary_key: review_board_invitation_id, space_id
+    columns:
+      - name: review_board_invitation_id
+        type: Integer
+      - name: article_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: optional_many_to_one
+            relationship: "It's part of the review board of the article"
+      - name: invitee_user_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: optional_many_to_one
+            relationship: "invited user id"
+      - name: invitee_author_id
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.airak
+            entity: Author
+            column: AuthorId
+            cardinality: optional_many_to_one
+            relationship: "it refers to"
+      - name: invitee_role_id
+        type: Integer
+      - name: inviter_user_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: optional_many_to_one
+            relationship: "has been invited by user"
+      - name: inviter_role_id
+        type: Integer
+      - name: invitation_workflow_id
+        type: Integer
+      - name: review_board_invitation_message_type_id
+        type: Integer
+      - name: review_board_invitation_status_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: review_board_invitation_status
+            column: review_board_invitation_status_id
+            cardinality: optional_many_to_one
+            relationship: "it's in status"
+      - name: review_board_invitation_declination_reason_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: review_board_invitation_declination_reason
+            column: review_board_invitation_declination_reason_id
+            cardinality: optional_many_to_one
+            relationship: "has been declined for reason"
+      - name: review_board_invitation_tracking_method_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: review_board_invitation_tracking_method
+            column: review_board_invitation_tracking_method_id
+            cardinality: optional_many_to_one
+            relationship: "has been tracked by method"
+      - name: review_board_invitation_algorithm_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: review_board_invitation_algorithm
+            column: review_board_invitation_algorithm_id
+            cardinality: optional_many_to_one
+            relationship: "has been invited by algorithm"
+      - name: review_board_invitation_audience_group_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: review_board_invitation_audience_group
+            column: review_board_invitation_audience_group_id
+            cardinality: optional_many_to_one
+            relationship: "has been invited to audience group"
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: review_board_invitation_algorithm
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-2.editorial_assignment.review_board_invitation_algorithm
+    description: >
+      Dimension of distinct invitation algorithms from invitation_tracking (non-null Algorithm), one row per algorithm per space_id branch. Uses created_at and modified_at (both load timestamps), not updated_at.
+    grain: review_board_invitation_algorithm_id, space_id
+    primary_key: review_board_invitation_algorithm_id, space_id
+    columns:
+      - name: review_board_invitation_algorithm_id
+        type: String
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: review_board_invitation_audience_group
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-2.editorial_assignment.review_board_invitation_audience_group
+    description: >
+      Dimension of distinct audience groups (data_source) from invitation_tracking, one row per value per space_id branch. Uses created_at and modified_at (both load timestamps), not updated_at.
+    grain: review_board_invitation_audience_group_id, space_id
+    primary_key: review_board_invitation_audience_group_id, space_id
+    columns:
+      - name: review_board_invitation_audience_group_id
+        type: String
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: review_board_invitation_declination_reason
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-2.editorial_assignment.review_board_invitation_declination_reason
+    description: >
+      Dimension of declination reasons from fiv_reason for DEC_AE, DEC_RE, DEC_ED (lang_id = 1), one row per reason per space_id branch. Timestamps use source created_date / modified_date as created_at / modified_at.
+    grain: review_board_invitation_declination_reason_id, space_id
+    primary_key: review_board_invitation_declination_reason_id, space_id
+    columns:
+      - name: review_board_invitation_declination_reason_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: review_board_invitation_status
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-2.editorial_assignment.review_board_invitation_status
+    description: >
+      Dimension of invitation statuses from fiv_invitation_status, restricted to inv_status_id 1-4 only (same normalized id space as review_board_invitation and review_board_invitation_status_history; other raw ids are mapped or filtered there). One row per retained status per space_id branch.
+    grain: review_board_invitation_status_id, space_id
+    primary_key: review_board_invitation_status_id, space_id
+    columns:
+      - name: review_board_invitation_status_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: review_board_invitation_status_history
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-2.editorial_assignment.review_board_invitation_status_history
+    description: >
+      Aggregated history of invitation statuses per (invitation, normalized status) within each tenant. No surrogate history-row id; natural key is review_board_invitation_id + review_board_invitation_status_id + space_id (and branch in the union). Sourced from invitation and invitation_history with the same status filters as the main fact.
+    grain: review_board_invitation_id, review_board_invitation_status_id, space_id
+    primary_key: review_board_invitation_id, review_board_invitation_status_id, space_id
+    columns:
+      - name: review_board_invitation_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: review_board_invitation
+            column: review_board_invitation_id
+            cardinality: many_to_one
+            relationship: "it references to"
+      - name: review_board_invitation_status_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: review_board_invitation_status
+            column: review_board_invitation_status_id
+            cardinality: many_to_one
+            relationship: "it's in status"
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: review_board_invitation_tracking_method
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-2.editorial_assignment.review_board_invitation_tracking_method
+    description: >
+      Dimension of invitation tracking methods from invitation_tracking_method, one row per method per space_id branch. Uses created_at and modified_at (both load timestamps), not updated_at.
+    grain: review_board_invitation_tracking_method_id, space_id
+    primary_key: review_board_invitation_tracking_method_id, space_id
+    columns:
+      - name: review_board_invitation_tracking_method_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"

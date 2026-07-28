@@ -1,0 +1,60 @@
+---
+description: Jira (AA) ticket drafting + auto-create conventions
+alwaysApply: true
+---
+
+# Jira ticketing rules (Project AA)
+
+When the user asks for a Jira ticket, produce a **ready-to-create** ticket with consistent structure and minimal back-and-forth.
+
+## Defaults
+- **Project key**: `AA` (override if user specifies a different project/key)
+- **Issue type**: `Task` (unless user says Bug/Story/Epic)
+- **Description format**: plain text (not ADF JSON)
+- **Acceptance Criteria**: bullet checklist
+- **Labels**: default include `AdvancedAnalytics` (override if user specifies different labels)
+- **Assignee**: default assign to `Sophie Wilson` (override if user requests different)
+- **Story points**: **always** set when drafting a ticket. Use an explicit number in the **Story points** section. If the user only gives a **size label**, map with **Assumption** using this default scale (override if the user names different team values): trivial `1`, small `2`, medium `3`, medium/large `5`, large `8`, extra-large `13`. If estimation is impossible, write **Story points: TBD** and say why.
+
+## Verbatim data request (description line 1)
+When the user provides a **verbatim data / analytics request** (spreadsheet row, intake field, Slack/email paste, etc.), the **plain-text description body** (what becomes Jira `description` / `-Description`) **must** start with **exactly** that text as the **first line**, wrapped in **double quotes** (`"..."`). **Do not paraphrase, correct spelling, or trim meaning** inside the quotes—only remove accidental leading/trailing outer whitespace on the pasted cell if clearly spurious. After the closing quote, use **one blank line**, then continue with **Background / context** and the rest of the template. If **no** source request string was given, **omit** the quoted line (do not invent a quote).
+
+## Output format (copy/paste friendly)
+Always output these sections (omit only if not applicable):
+- **Summary**: short, action-oriented
+- **Quoted data request** (first line of description only, when user supplied verbatim text): `"exact pasted request"` then blank line—see **Verbatim data request** above
+- **Background / context**: why this matters + any links provided
+- **Problem / goal**: what outcome is needed
+- **Scope**: what’s included
+- **Out of scope**: what is explicitly excluded
+- **Acceptance Criteria**: bullet checklist, testable
+- **Dependencies / blockers**
+- **Risks / notes**
+- **Test notes**: how to verify + any data/analytics expectations
+- **Story points**: integer (or `TBD` with reason); must align with auto-create `-StoryPoints` when using the script
+- **AI disclaimer**: add at the very bottom: `Disclaimer: This ticket was created with AI assistance.`
+
+## Bug-specific additions
+If the user indicates it’s a bug, also include:
+- **Steps to reproduce**
+- **Expected vs actual**
+- **Environment**: app/version/browser/permissions (as applicable)
+- **Impact / severity**
+
+## Auto-create guidance (repo script)
+If the user wants the ticket created automatically, provide the exact command using this repo’s script:
+
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\jira-create.ps1 -ProjectKey AA -IssueType <Task|Bug|Story> -Summary "<...>" -Description "<...>" -Labels AdvancedAnalytics -Assignee "sophie.wilson" -StoryPoints <n>`
+
+Notes:
+- **Always** pass `-StoryPoints <n>` when the draft has a numeric estimate (`-1` omits; only use omit when story points are genuinely **TBD**). If the API cannot set the field, the script warns and you set points in the Jira UI.
+- When using **auto-create** with a **multiline** `-Description`, run from the same PowerShell session: `$d = @'...'@; & .\scripts\jira-create.ps1 ... -Description $d` (avoid `powershell -File ... -Description $d`, which can split arguments). Put the **quoted verbatim data request** as the **first line** of `$d` when applicable.
+- Keep `-Summary` under ~120 chars if possible.
+- If the description is long, keep it plain text with clear headings.
+- If the user specifies labels/assignee/project key, reflect those overrides in both the draft and the auto-create command.
+- If an Epic is provided (or defaulted for the project), always set the **Epic Link** so the ticket appears under the Epic tab.
+- If both Epic and Initiative are provided, set both links explicitly.
+
+## Quality bar
+- Don’t invent requirements. If a key detail is missing, make a reasonable assumption and mark it clearly as **Assumption**.
+- Acceptance criteria must be verifiable (avoid vague “works” / “looks good”).

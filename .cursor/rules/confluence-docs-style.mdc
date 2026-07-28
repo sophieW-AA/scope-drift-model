@@ -1,0 +1,75 @@
+---
+description: Friendly technical / ticket Markdown in the layout of docs/confluence-create-docs.md (runbooks, tables, Confluence-ready)
+alwaysApply: true
+---
+
+# Technical documentation style (confluence-create-docs pattern)
+
+Think of this as a **layout recipe** you can reuse anywhere you need the same clarity as [docs/confluence-create-docs.md](../../docs/confluence-create-docs.md)—repo Markdown under `docs/`, Jira descriptions (Background, Scope, AC), runbooks, or Markdown you plan to push to Confluence via `confluence-create.ps1` (`-AppendMarkdownDocumentationFile` / `-AppendConfluenceCreateDocumentation`). If someone asks for “that FrontonGPT / confluence-create-docs style,” this is what they mean.
+
+**Tip:** Glance at the canonical file when you’re unsure; we’re aiming for its *shape* (headings, tables, fences), not a fluffy wiki essay.
+
+## Document skeleton
+
+Here’s a comfortable default order—you can tweak it, but readers will recognise the pattern:
+
+1. **`#` Title** — Short noun phrase (script name, feature, ticket theme). Skip emoji; the title already signals “this is serious.”
+2. **One-sentence summary** — Right under the title, say what the doc is and who it’s for, in plain words.
+3. **`---` between big ideas** — After the intro, and again between major `##` sections on longer pages. It’s a small thing, but it makes scanning much easier.
+4. **`##` sections** — Name real topics (“Modes of operation”, “Authentication & configuration”). “Overview” is fine if it’s genuinely high-level; otherwise a concrete noun usually works better.
+5. **`###` when you need a sub-thread** — One focused topic inside a `##` (e.g. “Body resolution order”, “Mutual exclusivity rules”).
+6. **Wind down usefully** — “Examples”, a “Flow diagram” when it helps, and something like “Key implementation details” or “Risks & notes” so engineers get the honest bits at the end.
+
+## Layout patterns (pick what fits)
+
+| Pattern | Nice when… | How to do it |
+|---------|------------|----------------|
+| **GFM table** | You’re comparing modes, flags, env vars, parameters, or “if / then” grids | Header row, `| --- |` separator, one row per item; three or four columns usually enough |
+| **Numbered list (`1.`)** | Order matters—steps, priority chains, “resolved in this order” | You can bold the label (`1. **Fetch config** — then …`) so skimming is easy |
+| **Bullet list (`-`)** | Constraints, “can’t mix with…”, quick facts | One idea per line; lead with the thing being constrained |
+| **Fenced code block** | Pipelines, ASCII flow, anything you’d copy-paste | Use `powershell`, `html`, `sql`, etc. when it’s real code; a bare ` ``` ` or `text` is fine for diagrams and priority lists |
+| **Blockquote (`>`)** | One caveat you really don’t want lost | `> **Note:** …` or `> **Assumption:** …` works well |
+| **`---` before the next `##`** | The doc is getting long | Same rhythm as the canonical doc—readers appreciate the breathing room |
+
+## Tables
+
+Tables are your friend for reference-y material (parameters, env vars, marker names): they beat long sentences where people have to hunt for the flag name.
+
+- First column: usually the **name**; last column: what it **does** or what value it takes.
+- **Bold** the main token in a cell when it helps (`**Create**`, `**Update**`).
+- Use backticks for flags and paths (`` `-Title` ``). If a cell has `|` characters (e.g. regex), wrapping the tricky bit in backticks keeps pipes from breaking the table—same idea as the canonical doc.
+
+## Code and diagrams
+
+- **Trees / pipelines / priority order** — A fenced monospace block (`→`, `├`, `└`) reads better than a bullet list pretending to be a diagram.
+- **Actual snippets** — Fenced block + language tag; make them copy-pasteable when you can.
+- **Little mentions in prose** — Backticks around API names and paths are enough.
+
+## Prose tone (conversational, still professional)
+
+You can sound like a helpful colleague, not a spec robot:
+
+- **Clear first, chatty second** — Short sentences, direct verbs. It’s OK to use “you” or “we” occasionally (“you’ll need…”, “we resolve credentials like this…”).
+- **Still skip empty filler** — Words like “simply”, “just”, “obviously” don’t add much; drop them.
+- **Point to the repo** — Backticks for paths (`docs/...`, `scripts/...`) so people know where to look.
+- **Say when you’re guessing** — A blockquote or a tiny “Assumptions” bit is enough; no need for a formal disclaimer essay.
+
+## Jira / tickets
+
+When you’re **not** writing a long `.md` file but **are** shaping a ticket:
+
+- **`#` + summary vibe** → short **Summary**; tuck the one-liner into **Description** (top or “Context”).
+- **`##`-style chunks** → whatever headings your project uses (Background, Scope, AC, etc.), but keep the **same density**: tables for lots of AC items, numbered lists for steps, `-` bullets for exclusions and dependencies.
+- **“Parameters reference” energy** → a small table for milestones or work packages often lands better than a paragraph list.
+
+## Confluence / script alignment
+
+If this Markdown might go through `confluence-create.ps1`’s converter (`Convert-MarkdownSubsetToConfluenceStorage`), stick to what it understands: `#` / `##` / `###` on their own lines, `---` on its own line, GFM tables, fenced blocks, `>` quotes, `-` and `1.` lists, `**bold**` and `` `code` ``.
+
+**Heads-up:** nested lists, raw HTML blocks inside Markdown, and fancy link-reference syntax are easy to write but won’t convert reliably—fine for GitHub-only docs, less so for the Confluence append path.
+
+## What usually doesn’t work as well
+
+- Burying reference material in one long comma-separated sentence—**a table almost always wins**.
+- Mentioning “can’t combine X and Y” only in passing—**call it out** in a list or table so nobody learns the hard way.
+- Section titles like “Misc” or “Other” with no hint of what’s inside—**a few extra words in the heading** saves everyone a click.

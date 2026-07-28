@@ -1,0 +1,553 @@
+# Analytical Data Model - ocean-breeze-tier-3.qualtrics
+# Narrow Data Model (NDM) -- Version 3
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-17
+# Source: dataset-model-ADM/ocean-breeze-tier-3.qualtrics_ADM_V3.yaml
+#
+# -- Join rules ----------------------------------------------------------------
+# - space_id is an implicit second join condition wherever the grain includes it.
+# - When joining two tables within the dataset, space_id is not strictly
+#   required - the primary key is sufficient.
+# - When crossing into external datasets, use XXX_original + space_id.
+# - If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# -- FK cardinality conventions ------------------------------------------------
+# many_to_one          : many rows here -> same parent row (standard FK)
+# one_to_one           : at most one row here per referenced parent row
+# optional_many_to_one : FK is nullable / zero-or-one participation
+# [PROPOSED]           : inferred - validate before use
+# -----------------------------------------------------------------------------
+
+entities:
+
+  ######################## JOURNAL ########################
+
+  # --- EDITORIAL_BOARD ---
+
+  - name: editorial_board_nps
+    domain: JOURNAL
+    subdomain: EDITORIAL_BOARD
+    source_table: ocean-breeze-tier-3.qualtrics.editorial_board_nps
+    description: "Survey responses from Editorial Board Members, surveyed regardless of they have performed any activity about their relationship and overall satisfaction with Frontiers. Launched in 2024."
+    grain: Long_Contact_ID
+    primary_key: Long_Contact_ID
+    columns:
+      - name: Long_Contact_ID
+        type: String
+      - name: UserId
+        type: Integer
+      - name: ResponseId
+        type: String
+
+  ######################## ARTICLE ########################
+
+  - name: author_peer_review_experience_survey
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.qualtrics.author_peer_review_experience_survey
+    description: "Survey responses from authors regarding their peer review experience. This survey was launched on April 2022 and replaced the \"Author Peer Review survey\"."
+    grain: ArticleId
+    primary_key: ArticleId
+    columns:
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: FieldId
+        type: Integer
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: research_topic
+            column: research_topic_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: ResponseId
+        type: String
+      - name: ReviewTypeId
+        type: Integer
+      - name: RoleId
+        type: Integer
+      - name: StageId
+        type: Integer
+      - name: UserId
+        type: Integer
+
+  - name: author_peer_review_survey
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.qualtrics.author_peer_review_survey
+    description: "[ARCHIVED] Survey responses from authors regarding their peer review experience. Launched in 2018 and deprecated in 2022. Replaced by the \"Author Peer Review Experience survey\".Use that one for the most up-to-date data."
+    grain: id
+    primary_key: id
+    columns:
+      - name: ResponseId
+        type: String
+      - name: id
+        type: Integer
+
+  - name: author_post_publication_survey
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.qualtrics.author_post_publication_survey
+    description: "Survey responses from accepted authors regarding their publishing experience. This survey was launched on November 2022."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: UserId
+        type: Integer
+      - name: RoleId
+        type: Integer
+
+  - name: author_post_submission_survey
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.qualtrics.author_post_submission_survey
+    description: "Survey responses from submitting authors regarding their submission experience. This survey was launched on March 2023."
+    grain: ArticleId
+    primary_key: ArticleId
+    columns:
+      - name: ArticleId
+        type: Integer
+      - name: UserId
+        type: Integer
+      - name: ResponseId
+        type: String
+      - name: RoleId
+        type: Integer
+
+  ######################## RESEARCH_TOPIC ########################
+
+  - name: research_topic_management_topic_editors_survey
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-3.qualtrics.research_topic_management_topic_editors_survey
+    description: "[ARCHIVED] Survey responses from Topic Editors regarding their Research Topic Manager experience. Launched in 2018 and deprecated in 2022."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+
+  ######################## UNKNOWN ########################
+
+  - name: _survey_metadata
+    domain: SURVEY
+    source_table: ocean-breeze-tier-3.qualtrics._survey_metadata
+    description: "[PROPOSED] One row per _survey_metadata."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+      - name: ownerId
+        type: String
+      - name: organizationId
+        type: String
+
+  - name: brand_nps_web_homepage_survey
+    domain: SURVEY
+    source_table: ocean-breeze-tier-3.qualtrics.brand_nps_web_homepage_survey
+    description: "[ARCHIVED] Survey responses from web visitors about customer perception and reputation. Launched and deprecated in 2025. Replaced by the \"Reputation Radar\".Use that one for the most up-to-date data."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+
+  - name: customer_service_survey
+    domain: SURVEY
+    source_table: ocean-breeze-tier-3.qualtrics.customer_service_survey
+    description: "[ARCHIVED] Survey responses from researchers that interacted with Customer Service about their peer review process queries. Launched in 2022 and deprecated in 2023."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: CaseId
+        type: String
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: sfCaseId
+        type: String
+      - name: sfLoopId
+        type: Integer
+
+  - name: editor_exit_survey
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.qualtrics.editor_exit_survey
+    description: "Survey responses from Editorial Board Members that resing from the Board. Launched in 2022."
+    grain: id
+    primary_key: id
+    columns:
+      - name: ResponseId
+        type: String
+      - name: id
+        type: String
+
+  - name: editor_onboarding_survey
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.qualtrics.editor_onboarding_survey
+    description: "Survey responses from Editorial Board Members that resing from the Board. Launched in 2022."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: UserId
+        type: Integer
+
+  - name: faas_author_peer_review_experience_survey
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.qualtrics.faas_author_peer_review_experience_survey
+    description: "Survey directed to partner journals which use Frontiers as a Service (FaaS) and captures responses from authors regarding their peer review experience. Launched on June 2023\"."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: UserId
+        type: Integer
+      - name: RoleId
+        type: Integer
+      - name: StageId
+        type: Integer
+      - name: JournalId
+        type: Integer
+      - name: FieldId
+        type: Integer
+      - name: ResearchTopicId
+        type: Integer
+      - name: ReviewTypeId
+        type: Integer
+
+  - name: faas_handling_editor_experience_survey
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.qualtrics.faas_handling_editor_experience_survey
+    description: "Survey directed to partner journals which use Frontiers as a Service (FaaS) and captures responses from editors regarding their peer review experience. Launched on June 2023\"."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: StageId
+        type: Integer
+      - name: ResearchTopicId
+        type: Integer
+      - name: ReviewTypeId
+        type: Integer
+      - name: UserId
+        type: Integer
+      - name: RoleId
+        type: Integer
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: FieldId
+        type: Integer
+
+  - name: faas_peer_reviewer_post_peer_review_survey
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.qualtrics.faas_peer_reviewer_post_peer_review_survey
+    description: "Survey directed to partner journals which use Frontiers as a Service (FaaS) and captures responses from reviewers regarding their peer review experience. Launched on June 2023\"."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: UserId
+        type: Integer
+      - name: RoleId
+        type: Integer
+      - name: StageId
+        type: Integer
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: FieldId
+        type: Integer
+      - name: ResearchTopicId
+        type: Integer
+      - name: ReviewTypeId
+        type: Integer
+
+  - name: fee_support_application_owner
+    domain: SURVEY
+    source_table: ocean-breeze-tier-3.qualtrics.fee_support_application_owner
+    description: "Formular to fee support application. Unrelated to Customer Experience."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+
+  - name: frontiers_editor_peer_review_survey
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.qualtrics.frontiers_editor_peer_review_survey
+    description: "[ARCHIVED] Survey responses from editors regarding their peer review experience. Launched in 2018 and deprecated in 2022. Replaced by the \"Handling Editor Experience survey\". Use that one for the most up-to-date data."
+    grain: id
+    primary_key: id
+    columns:
+      - name: ResponseId
+        type: String
+      - name: id
+        type: Integer
+
+  - name: frontiers_pof_survey
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.qualtrics.frontiers_pof_survey
+    description: "[ARCHIVED] Survey responses from authors regarding their production experience. Launched in 2018 and deprecated in 2022. Replaced by the \"Author Post Publication Experience survey\". Use that one for the most up-to-date data."
+    grain: id
+    primary_key: id
+    columns:
+      - name: ResponseId
+        type: String
+      - name: id
+        type: String
+
+  - name: handling_editor_experience_survey
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.qualtrics.handling_editor_experience_survey
+    description: "Survey responses from editors regarding their experience handling a manuscript through peer review. This survey was launched on February 2022."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: StageId
+        type: Integer
+      - name: ResearchTopicId
+        type: Integer
+      - name: ReviewTypeId
+        type: Integer
+      - name: UserId
+        type: Integer
+      - name: RoleId
+        type: Integer
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: FieldId
+        type: Integer
+
+  - name: peer_reviewer_post_peer_review_survey
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.qualtrics.peer_reviewer_post_peer_review_survey
+    description: "Survey responses from reviewers regarding their experience after reviewing a manuscript. This survey was launched on April 2022."
+    grain: ArticleId
+    primary_key: ArticleId
+    columns:
+      - name: ArticleId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: FieldId
+        type: Integer
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: ResearchTopicId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: research_topic
+            column: research_topic_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: ResponseId
+        type: String
+      - name: ReviewTypeId
+        type: Integer
+      - name: RoleId
+        type: Integer
+      - name: StageId
+        type: Integer
+      - name: UserId
+        type: Integer
+
+  - name: topic_editor_experience_survey
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-3.qualtrics.topic_editor_experience_survey
+    description: "Survey responses from topic editors regarding their experience after the first submission deadline. This survey was launched on March 2022."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: UserId
+        type: Integer
+      - name: ResearchTopicId
+        type: Integer
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: RoleId
+        type: Integer
+
+  - name: topic_editor_nps_measure
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-3.qualtrics.topic_editor_nps_measure
+    description: "Survey responses from topic editors regarding their experience after the first Call for Participation deadline (trigger=CfP) and at Research Topic Closure (trigger=RTClosed). This survey was launched on December 2022."
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+      - name: UserId
+        type: Integer
+      - name: RoleId
+        type: Integer
+      - name: WorkflowId
+        type: Integer
+      - name: ResearchTopicId
+        type: Integer
+      - name: MacroJourneyId
+        type: Integer
+
+
+  - name: research_integrity_tnps_survey
+    domain: SURVEY
+    source_table: ocean-breeze-tier-3.qualtrics.ResearchIntegrity_tnps_survey
+    description: >
+      Survey responses from researchers regarding their experience with the RI team when they ask for support. This survey was first launched on August 2023, discontinued in January 2024 and activated in December 2025.
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: UserId
+        type: Integer
+      - name: ContactId
+        type: String
+      - name: CaseId
+        type: String
+
+  - name: rev_ops_tnps_survey
+    domain: SURVEY
+    source_table: ocean-breeze-tier-3.qualtrics.RevOps_tnps_survey
+    description: >
+      Survey responses from researchers regarding their experience with the RevOps team when they ask for support. This survey was first launched on August 2023, discontinued in January 2024 and activated in December 2025.
+    grain: ResponseId
+    primary_key: ResponseId
+    columns:
+      - name: ResponseId
+        type: String
+      - name: UserId
+        type: Integer
+      - name: ContactId
+        type: String
+      - name: ArticleId
+        type: Integer
+      - name: CaseId
+        type: String

@@ -1,0 +1,86 @@
+description: >
+  Business definitions for Tableau KPIs
+
+terms:
+  - name: Research topics posted
+    description: >
+      Count of research topics that are completed, online, or closed (at least one
+      of these is true). Date for grouping by time:
+      online_date (date when research topic went online).
+    referenced_tables:
+      - name: research_topic
+        columns:
+          - name: online_date
+            description: Date when research topic went online.
+
+  - name: Submitted articles
+    description: >
+      Count of articles that are submitted and not deleted.
+      Date for grouping by time: stage_date_submitted (date when article was submitted).
+    referenced_tables:
+      - name: article
+        columns:
+          - name: stage_date_submitted
+            description: Date when article was submitted.
+
+  - name: Accepted articles
+    description: >
+      Count of articles that are accepted and not deleted.
+      Date for grouping by time: stage_date_accepted (date when article was accepted).
+    referenced_tables:
+      - name: article
+        columns:
+          - name: stage_date_accepted
+            description: Date when article was accepted.
+
+  - name: Rejected articles
+    description: >
+      Count of articles that are rejected and not deleted.
+      Date for grouping by time: stage_date_rejected (date when article was rejected).
+    referenced_tables:
+      - name: article
+        columns:
+          - name: stage_date_rejected
+            description: Date when article was rejected.
+
+  - name: Reviewable submission
+    description: >
+      Count of articles that have passed Desk Review.
+      Date for grouping by time: stage_date_editorial_assignment (date when article entered in editorial assignment stage).
+    referenced_tables:
+      - name: article
+        columns:
+          - name: stage_date_editorial_assignment
+            description: Date when article entered in editorial assignment stage.
+
+  - name: Invited to Confirmed Contributor Conversion Rate
+    description: >
+      Percentage of confirmed contributors out of invited contributors.
+      Date for grouping by time: contributor_invitation_date (date when contributor was invited).
+    referenced_tables:
+      - name: contributor
+        columns:
+          - name: contributor_invitation_date
+            description: Date when contributor was invited.
+          - name: invitation_status_date_confirmed_last
+            description: Date when contributor confirmed their invitation.
+
+  - name: Editorial Board Members (roles)
+    description: >
+      Count of editorial board members roles. Counting on editorial_board_member_id
+      Date for grouping by time: join_date (date when editorial board member joined).
+    referenced_tables:
+      - name: editorial_board_member
+        columns:
+          - name: join_date
+            description: Date when editorial board member joined.
+
+  - name: Editorial Board Members (unique users)
+    description: >
+      Count of editorial board members user ids. Counting on editorial_board_member_user_id
+      Date for grouping by time: min_join_date (first date when editorial board member user joined).
+    referenced_tables:
+      - name: editorial_board_member
+        columns:
+          - name: min_join_date
+            description: First date when editorial board member user joined.

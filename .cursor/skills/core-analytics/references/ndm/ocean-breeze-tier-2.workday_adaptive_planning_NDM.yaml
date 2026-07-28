@@ -1,0 +1,248 @@
+# Analytical Data Model — ocean-breeze-tier-2.workday_adaptive_planning
+# Narrow Data Model (NDM) — Version 1
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-03
+# Source: ocean-breeze-tier-2.workday_adaptive_planning_ADM_V1.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within the dataset, space_id is not strictly
+# required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table
+# that does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one         : many rows here → same parent row (standard FK)
+# one_to_one          : at most one row here per referenced parent row
+# optional_many_to_one: FK is nullable / zero-or-one participation
+# [PROPOSED]          : inferred — validate before use
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+  ####################### EMPLOYEE #######################
+
+  - name: employee_status
+    domain: EMPLOYEE
+    source_table: ocean-breeze-tier-2.workday_adaptive_planning.employee_status
+    description: " One row per employee_status."
+    grain: internal_id, employee_id
+    primary_key: internal_id, employee_id
+    columns:
+      - name: internal_id
+        type: String
+      - name: employee_id
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "it references"
+
+  - name: employee_status_historical
+    domain: EMPLOYEE
+    source_table: ocean-breeze-tier-2.workday_adaptive_planning.employee_status_historical
+    description: "One row per employee_status_historical."
+    grain: internal_id, employee_id
+    primary_key: internal_id, employee_id
+    columns:
+      - name: internal_id
+        type: String
+      - name: employee_id
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "it references"
+      - name: dbt_scd_id
+        type: String
+
+  ######################## UNKNOWN ########################
+
+  - name: allocations_pubdev
+    domain: EMPLOYEE
+    source_table: ocean-breeze-tier-2.workday_adaptive_planning.allocations_pubdev
+    description: "]One row per allocations. allocation of an employee to a journal and section."
+    grain: JobProfile_id, employee_id
+    primary_key: JobProfile_id, employee_id
+    columns:
+      - name: JobProfile_id
+        type: String
+      - name: employee_id
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "it references"
+      - name: journal_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: section_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: section
+            column: section_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: AllocatedRole_id
+        type: String
+        foreign_keys: []  # [REVIEW NEEDED] - FK target not defined
+
+  - name: allocations_pubdev_hierarchy
+    domain: EMPLOYEE
+    source_table: ocean-breeze-tier-2.workday_adaptive_planning.allocations_pubdev_hierarchy
+    description: "One row per allocations_pubdev_hierarchy."
+    grain: TaxonomyId
+    primary_key: TaxonomyId
+    columns:
+      - name: TaxonomyId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: ProgramId
+        type: Integer
+      - name: JournalId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: SectionId
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: section
+            column: section_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: Head_SegmentId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: Portfolio_ManagerId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: Journal_ManagerId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: Journal_Section_ManagerId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: Journal_Section_Senior_SpecialistId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: Journal_Section_SpecialistId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: Peer_Review_ManagerId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+
+  - name: allocations_pubdev_historical
+    domain: EMPLOYEE
+    source_table: ocean-breeze-tier-2.workday_adaptive_planning.allocations_pubdev_historical
+    description: "One row per allocations_pubdev_historical."
+    grain: JobProfile_id, employee_id
+    primary_key: JobProfile_id, employee_id
+    columns:
+      - name: JobProfile_id
+        type: String
+      - name: employee_id
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-3.workday_reference_data
+            entity: employee
+            column: employee_id
+            cardinality: many_to_one
+            relationship: "it references"
+      - name: journal_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: section_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: section
+            column: section_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: AllocatedRole_id
+        type: String
+      - name: dbt_scd_id
+        type: String

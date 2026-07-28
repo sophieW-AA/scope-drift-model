@@ -1,0 +1,1532 @@
+{
+  "Frontiers in Neurorobotics": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      4,
+      8,
+      15,
+      27
+    ],
+    "candidate_ids": [
+      0,
+      1,
+      3,
+      6,
+      9,
+      11,
+      13,
+      16,
+      17,
+      18,
+      20,
+      22,
+      23,
+      28,
+      45,
+      46,
+      47
+    ],
+    "borderline_ids": [],
+    "decisions": [
+      {
+        "comm_id": 20,
+        "label": "AI Applications",
+        "verdict": "out_of_scope",
+        "reason": "AI applications lack direct relevance to neurorobotics."
+      },
+      {
+        "comm_id": 0,
+        "label": "Electrochemical Materials",
+        "verdict": "out_of_scope",
+        "reason": "Electrochemical materials do not connect to neurorobotics."
+      },
+      {
+        "comm_id": 3,
+        "label": "Sustainable Development",
+        "verdict": "out_of_scope",
+        "reason": "Sustainable development is unrelated to neurorobotics."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "out_of_scope",
+        "reason": "Fault diagnosis techniques do not apply to neurorobotics."
+      },
+      {
+        "comm_id": 18,
+        "label": "Cybersecurity In IoT",
+        "verdict": "out_of_scope",
+        "reason": "Cybersecurity in IoT is not relevant to neurorobotics."
+      },
+      {
+        "comm_id": 46,
+        "label": "Optical Measurement",
+        "verdict": "out_of_scope",
+        "reason": "Optical measurement lacks application in neurorobotics."
+      },
+      {
+        "comm_id": 28,
+        "label": "Immersive Learning Technologies",
+        "verdict": "out_of_scope",
+        "reason": "Immersive learning technologies do not relate to neurorobotics."
+      },
+      {
+        "comm_id": 1,
+        "label": "Cancer Immunotherapy",
+        "verdict": "out_of_scope",
+        "reason": "Cancer immunotherapy is unrelated to neurorobotics."
+      },
+      {
+        "comm_id": 6,
+        "label": "Materials Science",
+        "verdict": "out_of_scope",
+        "reason": "Materials science does not connect to neurorobotics."
+      },
+      {
+        "comm_id": 23,
+        "label": "Evolutionary Biology",
+        "verdict": "out_of_scope",
+        "reason": "Evolutionary biology lacks relevance to neurorobotics."
+      },
+      {
+        "comm_id": 16,
+        "label": "Thermal Energy Systems",
+        "verdict": "out_of_scope",
+        "reason": "Thermal energy systems do not apply to neurorobotics."
+      },
+      {
+        "comm_id": 45,
+        "label": "Electromagnetic Technologies",
+        "verdict": "out_of_scope",
+        "reason": "Electromagnetic technologies are not relevant to neurorobotics."
+      },
+      {
+        "comm_id": 9,
+        "label": "Construction Materials",
+        "verdict": "out_of_scope",
+        "reason": "Construction materials lack application in neurorobotics."
+      },
+      {
+        "comm_id": 22,
+        "label": "Aging Health Interventions",
+        "verdict": "out_of_scope",
+        "reason": "Aging health interventions do not connect to neurorobotics."
+      },
+      {
+        "comm_id": 11,
+        "label": "Organic Synthesis",
+        "verdict": "out_of_scope",
+        "reason": "Organic synthesis is unrelated to neurorobotics."
+      },
+      {
+        "comm_id": 13,
+        "label": "Geological And Environmental Sciences",
+        "verdict": "out_of_scope",
+        "reason": "Geological sciences do not apply to neurorobotics."
+      },
+      {
+        "comm_id": 47,
+        "label": "Urban Mobility",
+        "verdict": "out_of_scope",
+        "reason": "Urban mobility lacks relevance to neurorobotics."
+      }
+    ]
+  },
+  "Frontiers in Earth Science": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      2,
+      9,
+      13
+    ],
+    "candidate_ids": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      10,
+      11,
+      12,
+      15,
+      16,
+      17,
+      19,
+      20,
+      23,
+      27,
+      38,
+      41,
+      48,
+      49
+    ],
+    "borderline_ids": [
+      0,
+      3,
+      7,
+      10,
+      23
+    ],
+    "decisions": [
+      {
+        "comm_id": 3,
+        "label": "Sustainable Development",
+        "verdict": "borderline",
+        "reason": "Sustainable development is relevant to environmental impact studies."
+      },
+      {
+        "comm_id": 7,
+        "label": "Agricultural And Environmental Sciences",
+        "verdict": "borderline",
+        "reason": "Agricultural practices can have significant environmental impacts."
+      },
+      {
+        "comm_id": 49,
+        "label": "Space Weather Studies",
+        "verdict": "out_of_scope",
+        "reason": "Space weather studies do not relate to earth science directly."
+      },
+      {
+        "comm_id": 8,
+        "label": "Deep Learning Applications",
+        "verdict": "out_of_scope",
+        "reason": "Deep learning applications lack direct relevance to earth science."
+      },
+      {
+        "comm_id": 0,
+        "label": "Electrochemical Materials",
+        "verdict": "borderline",
+        "reason": "Electrochemical materials can be linked to environmental applications."
+      },
+      {
+        "comm_id": 16,
+        "label": "Thermal Energy Systems",
+        "verdict": "out_of_scope",
+        "reason": "Thermal energy systems do not connect to earth science directly."
+      },
+      {
+        "comm_id": 20,
+        "label": "AI Applications",
+        "verdict": "out_of_scope",
+        "reason": "AI applications are too generic without specific earth science context."
+      },
+      {
+        "comm_id": 15,
+        "label": "Control Systems Optimization",
+        "verdict": "out_of_scope",
+        "reason": "Control systems optimization lacks relevance to earth science."
+      },
+      {
+        "comm_id": 19,
+        "label": "Infectious Disease Research",
+        "verdict": "out_of_scope",
+        "reason": "Infectious disease research does not pertain to earth science."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "out_of_scope",
+        "reason": "Fault diagnosis is unrelated to earth science topics."
+      },
+      {
+        "comm_id": 10,
+        "label": "Advanced Materials Engineering",
+        "verdict": "borderline",
+        "reason": "Materials engineering can relate to construction materials in earth science."
+      },
+      {
+        "comm_id": 23,
+        "label": "Evolutionary Biology",
+        "verdict": "borderline",
+        "reason": "Evolutionary biology can intersect with ecological studies."
+      },
+      {
+        "comm_id": 6,
+        "label": "Materials Science",
+        "verdict": "out_of_scope",
+        "reason": "Materials science lacks direct relevance to earth science."
+      },
+      {
+        "comm_id": 38,
+        "label": "Healthcare Research",
+        "verdict": "out_of_scope",
+        "reason": "Healthcare research does not connect to earth science."
+      },
+      {
+        "comm_id": 5,
+        "label": "Gut Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Gut health research is unrelated to earth science."
+      },
+      {
+        "comm_id": 11,
+        "label": "Organic Synthesis",
+        "verdict": "out_of_scope",
+        "reason": "Organic synthesis does not pertain to earth science."
+      },
+      {
+        "comm_id": 4,
+        "label": "Neurodegenerative Diseases",
+        "verdict": "out_of_scope",
+        "reason": "Neurodegenerative diseases are not relevant to earth science."
+      },
+      {
+        "comm_id": 27,
+        "label": "Rehabilitation Engineering",
+        "verdict": "out_of_scope",
+        "reason": "Rehabilitation engineering lacks relevance to earth science."
+      },
+      {
+        "comm_id": 1,
+        "label": "Cancer Immunotherapy",
+        "verdict": "out_of_scope",
+        "reason": "Cancer immunotherapy does not connect to earth science."
+      },
+      {
+        "comm_id": 48,
+        "label": "Marine Renewable Energy",
+        "verdict": "out_of_scope",
+        "reason": "Marine renewable energy lacks direct relevance to earth science."
+      },
+      {
+        "comm_id": 12,
+        "label": "COVID-19 Health Impacts",
+        "verdict": "out_of_scope",
+        "reason": "COVID-19 health impacts do not relate to earth science."
+      },
+      {
+        "comm_id": 41,
+        "label": "Astrophysics And Cosmology",
+        "verdict": "out_of_scope",
+        "reason": "Astrophysics and cosmology are unrelated to earth science."
+      }
+    ]
+  },
+  "Frontiers in Surgery": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      1,
+      4,
+      14,
+      21,
+      22,
+      24,
+      25,
+      26,
+      34,
+      36
+    ],
+    "candidate_ids": [
+      0,
+      3,
+      5,
+      7,
+      8,
+      10,
+      11,
+      12,
+      17,
+      18,
+      19,
+      20,
+      27,
+      28,
+      29,
+      30,
+      33,
+      35,
+      37,
+      38,
+      39,
+      40,
+      42,
+      43
+    ],
+    "borderline_ids": [
+      12,
+      19,
+      37,
+      38,
+      39,
+      42,
+      43
+    ],
+    "decisions": [
+      {
+        "comm_id": 43,
+        "label": "Reconstructive Surgery",
+        "verdict": "borderline",
+        "reason": "Reconstructive surgery is closely related to surgical practices."
+      },
+      {
+        "comm_id": 39,
+        "label": "Thyroid And Vitamin Research",
+        "verdict": "borderline",
+        "reason": "Thyroid disorders can impact surgical outcomes and health."
+      },
+      {
+        "comm_id": 19,
+        "label": "Infectious Disease Research",
+        "verdict": "borderline",
+        "reason": "Infectious diseases are relevant to surgical infection control."
+      },
+      {
+        "comm_id": 12,
+        "label": "COVID-19 Health Impacts",
+        "verdict": "borderline",
+        "reason": "COVID-19 health impacts are pertinent to surgical health considerations."
+      },
+      {
+        "comm_id": 42,
+        "label": "Neonatal Healthcare",
+        "verdict": "borderline",
+        "reason": "Neonatal healthcare is relevant to pediatric surgical practices."
+      },
+      {
+        "comm_id": 37,
+        "label": "Cancer Treatment",
+        "verdict": "borderline",
+        "reason": "Cancer treatment is directly related to surgical oncology."
+      },
+      {
+        "comm_id": 28,
+        "label": "Immersive Learning Technologies",
+        "verdict": "out_of_scope",
+        "reason": "Immersive learning technologies lack direct surgical application."
+      },
+      {
+        "comm_id": 5,
+        "label": "Gut Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Gut health research does not directly relate to surgical practices."
+      },
+      {
+        "comm_id": 27,
+        "label": "Rehabilitation Engineering",
+        "verdict": "out_of_scope",
+        "reason": "Rehabilitation engineering is not focused on surgical applications."
+      },
+      {
+        "comm_id": 29,
+        "label": "Dental Health",
+        "verdict": "out_of_scope",
+        "reason": "Dental health is not a primary focus of surgical research."
+      },
+      {
+        "comm_id": 38,
+        "label": "Healthcare Research",
+        "verdict": "borderline",
+        "reason": "Healthcare research can inform surgical practices and outcomes."
+      },
+      {
+        "comm_id": 3,
+        "label": "Sustainable Development",
+        "verdict": "out_of_scope",
+        "reason": "Sustainable development lacks direct relevance to surgical topics."
+      },
+      {
+        "comm_id": 40,
+        "label": "Parasitic Infections",
+        "verdict": "out_of_scope",
+        "reason": "Parasitic infections do not directly relate to surgical practices."
+      },
+      {
+        "comm_id": 8,
+        "label": "Deep Learning Applications",
+        "verdict": "out_of_scope",
+        "reason": "Deep learning applications lack specific surgical context."
+      },
+      {
+        "comm_id": 0,
+        "label": "Electrochemical Materials",
+        "verdict": "out_of_scope",
+        "reason": "Electrochemical materials do not pertain to surgical research."
+      },
+      {
+        "comm_id": 20,
+        "label": "AI Applications",
+        "verdict": "out_of_scope",
+        "reason": "AI applications are too broad without surgical focus."
+      },
+      {
+        "comm_id": 30,
+        "label": "Ocular Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Ocular health research does not align with surgical topics."
+      },
+      {
+        "comm_id": 11,
+        "label": "Organic Synthesis",
+        "verdict": "out_of_scope",
+        "reason": "Organic synthesis is unrelated to surgical practices."
+      },
+      {
+        "comm_id": 10,
+        "label": "Advanced Materials Engineering",
+        "verdict": "out_of_scope",
+        "reason": "Advanced materials engineering lacks direct surgical relevance."
+      },
+      {
+        "comm_id": 35,
+        "label": "HIV And Hepatitis Research",
+        "verdict": "out_of_scope",
+        "reason": "HIV and hepatitis research does not focus on surgical applications."
+      },
+      {
+        "comm_id": 7,
+        "label": "Agricultural And Environmental Sciences",
+        "verdict": "out_of_scope",
+        "reason": "Agricultural sciences do not relate to surgical practices."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "out_of_scope",
+        "reason": "Fault diagnosis is unrelated to surgical topics."
+      },
+      {
+        "comm_id": 18,
+        "label": "Cybersecurity In IoT",
+        "verdict": "out_of_scope",
+        "reason": "Cybersecurity in IoT lacks relevance to surgical research."
+      },
+      {
+        "comm_id": 33,
+        "label": "Nutrition And Health",
+        "verdict": "out_of_scope",
+        "reason": "Nutrition and health research does not directly relate to surgery."
+      }
+    ]
+  },
+  "Frontiers in Aging Neuroscience": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      1,
+      4,
+      14
+    ],
+    "candidate_ids": [
+      0,
+      2,
+      3,
+      5,
+      7,
+      8,
+      10,
+      11,
+      12,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      29,
+      30,
+      32,
+      33,
+      34,
+      35,
+      38,
+      39,
+      42,
+      43
+    ],
+    "borderline_ids": [
+      5,
+      12,
+      22,
+      25,
+      27,
+      34
+    ],
+    "decisions": [
+      {
+        "comm_id": 5,
+        "label": "Gut Health Research",
+        "verdict": "borderline",
+        "reason": "Gut health can influence neurological health and aging."
+      },
+      {
+        "comm_id": 22,
+        "label": "Aging Health Interventions",
+        "verdict": "borderline",
+        "reason": "Health interventions for aging are relevant to neuroscience."
+      },
+      {
+        "comm_id": 25,
+        "label": "Perioperative Care",
+        "verdict": "borderline",
+        "reason": "Perioperative care can relate to neurological surgeries and recovery."
+      },
+      {
+        "comm_id": 27,
+        "label": "Rehabilitation Engineering",
+        "verdict": "borderline",
+        "reason": "Rehabilitation engineering can apply to neurorehabilitation."
+      },
+      {
+        "comm_id": 12,
+        "label": "COVID-19 Health Impacts",
+        "verdict": "borderline",
+        "reason": "COVID-19 health impacts can affect aging populations and neurological health."
+      },
+      {
+        "comm_id": 34,
+        "label": "Hearing Disorders",
+        "verdict": "borderline",
+        "reason": "Hearing disorders can have neurological implications in aging."
+      },
+      {
+        "comm_id": 30,
+        "label": "Ocular Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Ocular health lacks direct relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 42,
+        "label": "Neonatal Healthcare",
+        "verdict": "out_of_scope",
+        "reason": "Neonatal healthcare does not align with aging neuroscience."
+      },
+      {
+        "comm_id": 39,
+        "label": "Thyroid And Vitamin Research",
+        "verdict": "out_of_scope",
+        "reason": "Thyroid and vitamin research lacks direct relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 23,
+        "label": "Evolutionary Biology",
+        "verdict": "out_of_scope",
+        "reason": "Evolutionary biology does not connect to aging neuroscience."
+      },
+      {
+        "comm_id": 0,
+        "label": "Electrochemical Materials",
+        "verdict": "out_of_scope",
+        "reason": "Electrochemical materials are unrelated to aging neuroscience."
+      },
+      {
+        "comm_id": 29,
+        "label": "Dental Health",
+        "verdict": "out_of_scope",
+        "reason": "Dental health lacks direct relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 7,
+        "label": "Agricultural And Environmental Sciences",
+        "verdict": "out_of_scope",
+        "reason": "Agricultural sciences do not connect to aging neuroscience."
+      },
+      {
+        "comm_id": 11,
+        "label": "Organic Synthesis",
+        "verdict": "out_of_scope",
+        "reason": "Organic synthesis is unrelated to aging neuroscience."
+      },
+      {
+        "comm_id": 21,
+        "label": "Orthopedic Surgery",
+        "verdict": "out_of_scope",
+        "reason": "Orthopedic surgery does not align with aging neuroscience."
+      },
+      {
+        "comm_id": 8,
+        "label": "Deep Learning Applications",
+        "verdict": "out_of_scope",
+        "reason": "Deep learning applications lack direct relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 2,
+        "label": "Environmental Monitoring",
+        "verdict": "out_of_scope",
+        "reason": "Environmental monitoring does not connect to aging neuroscience."
+      },
+      {
+        "comm_id": 24,
+        "label": "Surgical Oncology",
+        "verdict": "out_of_scope",
+        "reason": "Surgical oncology is unrelated to aging neuroscience."
+      },
+      {
+        "comm_id": 43,
+        "label": "Reconstructive Surgery",
+        "verdict": "out_of_scope",
+        "reason": "Reconstructive surgery does not align with aging neuroscience."
+      },
+      {
+        "comm_id": 33,
+        "label": "Nutrition And Health",
+        "verdict": "out_of_scope",
+        "reason": "Nutrition and health lacks direct relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 35,
+        "label": "HIV And Hepatitis Research",
+        "verdict": "out_of_scope",
+        "reason": "HIV and hepatitis research does not connect to aging neuroscience."
+      },
+      {
+        "comm_id": 20,
+        "label": "AI Applications",
+        "verdict": "out_of_scope",
+        "reason": "AI applications lack direct relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 19,
+        "label": "Infectious Disease Research",
+        "verdict": "out_of_scope",
+        "reason": "Infectious disease research does not align with aging neuroscience."
+      },
+      {
+        "comm_id": 10,
+        "label": "Advanced Materials Engineering",
+        "verdict": "out_of_scope",
+        "reason": "Advanced materials engineering is unrelated to aging neuroscience."
+      },
+      {
+        "comm_id": 3,
+        "label": "Sustainable Development",
+        "verdict": "out_of_scope",
+        "reason": "Sustainable development does not connect to aging neuroscience."
+      },
+      {
+        "comm_id": 32,
+        "label": "Maternal And Child Health",
+        "verdict": "out_of_scope",
+        "reason": "Maternal and child health lacks relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 18,
+        "label": "Cybersecurity In IoT",
+        "verdict": "out_of_scope",
+        "reason": "Cybersecurity in IoT does not align with aging neuroscience."
+      },
+      {
+        "comm_id": 38,
+        "label": "Healthcare Research",
+        "verdict": "out_of_scope",
+        "reason": "Healthcare research lacks direct relevance to aging neuroscience."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "out_of_scope",
+        "reason": "Fault diagnosis is unrelated to aging neuroscience."
+      },
+      {
+        "comm_id": 26,
+        "label": "Reproductive Health",
+        "verdict": "out_of_scope",
+        "reason": "Reproductive health does not connect to aging neuroscience."
+      }
+    ]
+  },
+  "Frontiers in Environmental Science": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      2,
+      3,
+      7
+    ],
+    "candidate_ids": [
+      0,
+      1,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      22,
+      23,
+      27,
+      28,
+      32,
+      33,
+      38,
+      40,
+      46,
+      47,
+      48,
+      49
+    ],
+    "borderline_ids": [
+      0,
+      13,
+      23,
+      33,
+      48
+    ],
+    "decisions": [
+      {
+        "comm_id": 0,
+        "label": "Electrochemical Materials",
+        "verdict": "borderline",
+        "reason": "Electrochemical materials can be relevant for environmental applications."
+      },
+      {
+        "comm_id": 9,
+        "label": "Construction Materials",
+        "verdict": "out_of_scope",
+        "reason": "Construction materials lack direct relevance to environmental science."
+      },
+      {
+        "comm_id": 8,
+        "label": "Deep Learning Applications",
+        "verdict": "out_of_scope",
+        "reason": "Deep learning applications are too generic without environmental context."
+      },
+      {
+        "comm_id": 13,
+        "label": "Geological And Environmental Sciences",
+        "verdict": "borderline",
+        "reason": "Geological and environmental sciences are relevant to environmental assessments."
+      },
+      {
+        "comm_id": 19,
+        "label": "Infectious Disease Research",
+        "verdict": "out_of_scope",
+        "reason": "Infectious disease research does not align with environmental science."
+      },
+      {
+        "comm_id": 23,
+        "label": "Evolutionary Biology",
+        "verdict": "borderline",
+        "reason": "Evolutionary biology can intersect with ecological interactions."
+      },
+      {
+        "comm_id": 5,
+        "label": "Gut Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Gut health research lacks direct environmental relevance."
+      },
+      {
+        "comm_id": 15,
+        "label": "Control Systems Optimization",
+        "verdict": "out_of_scope",
+        "reason": "Control systems optimization is not applicable to environmental science."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "out_of_scope",
+        "reason": "Fault diagnosis techniques do not relate to environmental topics."
+      },
+      {
+        "comm_id": 12,
+        "label": "COVID-19 Health Impacts",
+        "verdict": "out_of_scope",
+        "reason": "COVID-19 health impacts are not relevant to environmental science."
+      },
+      {
+        "comm_id": 49,
+        "label": "Space Weather Studies",
+        "verdict": "out_of_scope",
+        "reason": "Space weather studies do not connect with environmental science."
+      },
+      {
+        "comm_id": 20,
+        "label": "AI Applications",
+        "verdict": "out_of_scope",
+        "reason": "AI applications are too broad without environmental focus."
+      },
+      {
+        "comm_id": 47,
+        "label": "Urban Mobility",
+        "verdict": "out_of_scope",
+        "reason": "Urban mobility lacks direct relevance to environmental science."
+      },
+      {
+        "comm_id": 16,
+        "label": "Thermal Energy Systems",
+        "verdict": "out_of_scope",
+        "reason": "Thermal energy systems do not align with environmental topics."
+      },
+      {
+        "comm_id": 28,
+        "label": "Immersive Learning Technologies",
+        "verdict": "out_of_scope",
+        "reason": "Immersive learning technologies are not relevant to environmental science."
+      },
+      {
+        "comm_id": 40,
+        "label": "Parasitic Infections",
+        "verdict": "out_of_scope",
+        "reason": "Parasitic infections do not connect with environmental science."
+      },
+      {
+        "comm_id": 33,
+        "label": "Nutrition And Health",
+        "verdict": "borderline",
+        "reason": "Nutrition and health can relate to environmental food security."
+      },
+      {
+        "comm_id": 1,
+        "label": "Cancer Immunotherapy",
+        "verdict": "out_of_scope",
+        "reason": "Cancer immunotherapy is unrelated to environmental science."
+      },
+      {
+        "comm_id": 10,
+        "label": "Advanced Materials Engineering",
+        "verdict": "out_of_scope",
+        "reason": "Advanced materials engineering lacks environmental context."
+      },
+      {
+        "comm_id": 38,
+        "label": "Healthcare Research",
+        "verdict": "out_of_scope",
+        "reason": "Healthcare research does not pertain to environmental science."
+      },
+      {
+        "comm_id": 18,
+        "label": "Cybersecurity In IoT",
+        "verdict": "out_of_scope",
+        "reason": "Cybersecurity in IoT is not relevant to environmental topics."
+      },
+      {
+        "comm_id": 11,
+        "label": "Organic Synthesis",
+        "verdict": "out_of_scope",
+        "reason": "Organic synthesis does not connect with environmental science."
+      },
+      {
+        "comm_id": 6,
+        "label": "Materials Science",
+        "verdict": "out_of_scope",
+        "reason": "Materials science lacks direct relevance to environmental science."
+      },
+      {
+        "comm_id": 4,
+        "label": "Neurodegenerative Diseases",
+        "verdict": "out_of_scope",
+        "reason": "Neurodegenerative diseases are unrelated to environmental science."
+      },
+      {
+        "comm_id": 32,
+        "label": "Maternal And Child Health",
+        "verdict": "out_of_scope",
+        "reason": "Maternal and child health lacks environmental relevance."
+      },
+      {
+        "comm_id": 22,
+        "label": "Aging Health Interventions",
+        "verdict": "out_of_scope",
+        "reason": "Aging health interventions do not connect with environmental science."
+      },
+      {
+        "comm_id": 48,
+        "label": "Marine Renewable Energy",
+        "verdict": "borderline",
+        "reason": "Marine renewable energy is relevant to environmental science."
+      },
+      {
+        "comm_id": 14,
+        "label": "Cardiovascular And Metabolic Health",
+        "verdict": "out_of_scope",
+        "reason": "Cardiovascular and metabolic health lacks environmental context."
+      },
+      {
+        "comm_id": 27,
+        "label": "Rehabilitation Engineering",
+        "verdict": "out_of_scope",
+        "reason": "Rehabilitation engineering is unrelated to environmental science."
+      },
+      {
+        "comm_id": 46,
+        "label": "Optical Measurement",
+        "verdict": "out_of_scope",
+        "reason": "Optical measurement techniques do not pertain to environmental science."
+      }
+    ]
+  },
+  "Frontiers in Chemistry": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      0,
+      1,
+      5,
+      6,
+      11
+    ],
+    "candidate_ids": [
+      2,
+      3,
+      4,
+      7,
+      8,
+      9,
+      10,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      19,
+      23,
+      24,
+      26,
+      29,
+      30,
+      31,
+      35,
+      36,
+      39,
+      40,
+      42,
+      45,
+      46
+    ],
+    "borderline_ids": [
+      2,
+      3,
+      7,
+      10,
+      13
+    ],
+    "decisions": [
+      {
+        "comm_id": 7,
+        "label": "Agricultural And Environmental Sciences",
+        "verdict": "borderline",
+        "reason": "Environmental impact studies can relate to chemistry."
+      },
+      {
+        "comm_id": 12,
+        "label": "COVID-19 Health Impacts",
+        "verdict": "out_of_scope",
+        "reason": "Health impacts of COVID-19 do not directly relate to chemistry."
+      },
+      {
+        "comm_id": 19,
+        "label": "Infectious Disease Research",
+        "verdict": "out_of_scope",
+        "reason": "Infectious disease research lacks a direct chemistry focus."
+      },
+      {
+        "comm_id": 4,
+        "label": "Neurodegenerative Diseases",
+        "verdict": "out_of_scope",
+        "reason": "Neurodegenerative diseases do not align with chemistry topics."
+      },
+      {
+        "comm_id": 10,
+        "label": "Advanced Materials Engineering",
+        "verdict": "borderline",
+        "reason": "Materials engineering can involve chemical processes."
+      },
+      {
+        "comm_id": 9,
+        "label": "Construction Materials",
+        "verdict": "out_of_scope",
+        "reason": "Construction materials research lacks a chemistry focus."
+      },
+      {
+        "comm_id": 13,
+        "label": "Geological And Environmental Sciences",
+        "verdict": "borderline",
+        "reason": "Geological assessments can involve chemical analysis."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "out_of_scope",
+        "reason": "Fault diagnosis is unrelated to chemistry."
+      },
+      {
+        "comm_id": 16,
+        "label": "Thermal Energy Systems",
+        "verdict": "out_of_scope",
+        "reason": "Thermal energy systems do not directly relate to chemistry."
+      },
+      {
+        "comm_id": 40,
+        "label": "Parasitic Infections",
+        "verdict": "out_of_scope",
+        "reason": "Parasitic infections lack a chemistry focus."
+      },
+      {
+        "comm_id": 8,
+        "label": "Deep Learning Applications",
+        "verdict": "out_of_scope",
+        "reason": "Deep learning applications do not relate to chemistry."
+      },
+      {
+        "comm_id": 2,
+        "label": "Environmental Monitoring",
+        "verdict": "borderline",
+        "reason": "Environmental monitoring can involve chemical assessments."
+      },
+      {
+        "comm_id": 31,
+        "label": "Quantum Computing",
+        "verdict": "out_of_scope",
+        "reason": "Quantum computing lacks a chemistry focus."
+      },
+      {
+        "comm_id": 23,
+        "label": "Evolutionary Biology",
+        "verdict": "out_of_scope",
+        "reason": "Evolutionary biology does not relate to chemistry."
+      },
+      {
+        "comm_id": 3,
+        "label": "Sustainable Development",
+        "verdict": "borderline",
+        "reason": "Sustainable development can involve chemical impact studies."
+      },
+      {
+        "comm_id": 29,
+        "label": "Dental Health",
+        "verdict": "out_of_scope",
+        "reason": "Dental health lacks a chemistry focus."
+      },
+      {
+        "comm_id": 45,
+        "label": "Electromagnetic Technologies",
+        "verdict": "out_of_scope",
+        "reason": "Electromagnetic technologies do not relate to chemistry."
+      },
+      {
+        "comm_id": 14,
+        "label": "Cardiovascular And Metabolic Health",
+        "verdict": "out_of_scope",
+        "reason": "Cardiovascular health lacks a chemistry focus."
+      },
+      {
+        "comm_id": 35,
+        "label": "HIV And Hepatitis Research",
+        "verdict": "out_of_scope",
+        "reason": "HIV and hepatitis research does not relate to chemistry."
+      },
+      {
+        "comm_id": 46,
+        "label": "Optical Measurement",
+        "verdict": "out_of_scope",
+        "reason": "Optical measurement lacks a chemistry focus."
+      },
+      {
+        "comm_id": 26,
+        "label": "Reproductive Health",
+        "verdict": "out_of_scope",
+        "reason": "Reproductive health does not relate to chemistry."
+      },
+      {
+        "comm_id": 24,
+        "label": "Surgical Oncology",
+        "verdict": "out_of_scope",
+        "reason": "Surgical oncology lacks a chemistry focus."
+      },
+      {
+        "comm_id": 42,
+        "label": "Neonatal Healthcare",
+        "verdict": "out_of_scope",
+        "reason": "Neonatal healthcare does not relate to chemistry."
+      },
+      {
+        "comm_id": 30,
+        "label": "Ocular Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Ocular health lacks a chemistry focus."
+      },
+      {
+        "comm_id": 15,
+        "label": "Control Systems Optimization",
+        "verdict": "out_of_scope",
+        "reason": "Control systems optimization does not relate to chemistry."
+      },
+      {
+        "comm_id": 36,
+        "label": "Sarcoma Research",
+        "verdict": "out_of_scope",
+        "reason": "Sarcoma research lacks a chemistry focus."
+      },
+      {
+        "comm_id": 39,
+        "label": "Thyroid And Vitamin Research",
+        "verdict": "out_of_scope",
+        "reason": "Thyroid and vitamin research does not relate to chemistry."
+      }
+    ]
+  },
+  "Frontiers in Materials": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      0,
+      1,
+      6,
+      9,
+      10
+    ],
+    "candidate_ids": [
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      19,
+      21,
+      24,
+      29,
+      30,
+      31,
+      45,
+      46,
+      49
+    ],
+    "borderline_ids": [
+      2,
+      3,
+      7,
+      13,
+      16
+    ],
+    "decisions": [
+      {
+        "comm_id": 16,
+        "label": "Thermal Energy Systems",
+        "verdict": "borderline",
+        "reason": "Thermal energy systems can relate to materials used in energy management."
+      },
+      {
+        "comm_id": 29,
+        "label": "Dental Health",
+        "verdict": "out_of_scope",
+        "reason": "Dental health does not connect to materials science."
+      },
+      {
+        "comm_id": 13,
+        "label": "Geological And Environmental Sciences",
+        "verdict": "borderline",
+        "reason": "Geological and environmental sciences can involve materials used in assessments."
+      },
+      {
+        "comm_id": 11,
+        "label": "Organic Synthesis",
+        "verdict": "out_of_scope",
+        "reason": "Organic synthesis lacks direct relevance to materials science."
+      },
+      {
+        "comm_id": 8,
+        "label": "Deep Learning Applications",
+        "verdict": "out_of_scope",
+        "reason": "Deep learning applications are too generic without a materials context."
+      },
+      {
+        "comm_id": 3,
+        "label": "Sustainable Development",
+        "verdict": "borderline",
+        "reason": "Sustainable development can relate to materials used in environmental impact."
+      },
+      {
+        "comm_id": 5,
+        "label": "Gut Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Gut health research does not connect to materials science."
+      },
+      {
+        "comm_id": 7,
+        "label": "Agricultural And Environmental Sciences",
+        "verdict": "borderline",
+        "reason": "Agricultural and environmental sciences can involve materials for environmental studies."
+      },
+      {
+        "comm_id": 15,
+        "label": "Control Systems Optimization",
+        "verdict": "out_of_scope",
+        "reason": "Control systems optimization lacks relevance to materials science."
+      },
+      {
+        "comm_id": 2,
+        "label": "Environmental Monitoring",
+        "verdict": "borderline",
+        "reason": "Environmental monitoring can involve materials used in ecological assessments."
+      },
+      {
+        "comm_id": 19,
+        "label": "Infectious Disease Research",
+        "verdict": "out_of_scope",
+        "reason": "Infectious disease research does not connect to materials science."
+      },
+      {
+        "comm_id": 21,
+        "label": "Orthopedic Surgery",
+        "verdict": "out_of_scope",
+        "reason": "Orthopedic surgery lacks relevance to materials science."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "out_of_scope",
+        "reason": "Fault diagnosis does not connect to materials science."
+      },
+      {
+        "comm_id": 46,
+        "label": "Optical Measurement",
+        "verdict": "out_of_scope",
+        "reason": "Optical measurement lacks relevance to materials science."
+      },
+      {
+        "comm_id": 45,
+        "label": "Electromagnetic Technologies",
+        "verdict": "out_of_scope",
+        "reason": "Electromagnetic technologies do not connect to materials science."
+      },
+      {
+        "comm_id": 4,
+        "label": "Neurodegenerative Diseases",
+        "verdict": "out_of_scope",
+        "reason": "Neurodegenerative diseases lack relevance to materials science."
+      },
+      {
+        "comm_id": 24,
+        "label": "Surgical Oncology",
+        "verdict": "out_of_scope",
+        "reason": "Surgical oncology does not connect to materials science."
+      },
+      {
+        "comm_id": 49,
+        "label": "Space Weather Studies",
+        "verdict": "out_of_scope",
+        "reason": "Space weather studies lack relevance to materials science."
+      },
+      {
+        "comm_id": 31,
+        "label": "Quantum Computing",
+        "verdict": "out_of_scope",
+        "reason": "Quantum computing does not connect to materials science."
+      },
+      {
+        "comm_id": 12,
+        "label": "COVID-19 Health Impacts",
+        "verdict": "out_of_scope",
+        "reason": "COVID-19 health impacts lack relevance to materials science."
+      },
+      {
+        "comm_id": 30,
+        "label": "Ocular Health Research",
+        "verdict": "out_of_scope",
+        "reason": "Ocular health research does not connect to materials science."
+      },
+      {
+        "comm_id": 14,
+        "label": "Cardiovascular And Metabolic Health",
+        "verdict": "out_of_scope",
+        "reason": "Cardiovascular and metabolic health lacks relevance to materials science."
+      }
+    ]
+  },
+  "Frontiers in Robotics and AI": {
+    "model": "gpt-4o-mini",
+    "prompt_version": "v2",
+    "primary_ids": [
+      0,
+      3,
+      4,
+      8,
+      15,
+      20,
+      27
+    ],
+    "candidate_ids": [
+      1,
+      2,
+      9,
+      10,
+      12,
+      13,
+      14,
+      16,
+      17,
+      18,
+      21,
+      22,
+      23,
+      24,
+      28,
+      29,
+      31,
+      33,
+      45,
+      46,
+      47,
+      49
+    ],
+    "borderline_ids": [
+      2,
+      13,
+      17,
+      28
+    ],
+    "decisions": [
+      {
+        "comm_id": 28,
+        "label": "Immersive Learning Technologies",
+        "verdict": "borderline",
+        "reason": "Immersive technologies can be applied in robotics and AI education."
+      },
+      {
+        "comm_id": 49,
+        "label": "Space Weather Studies",
+        "verdict": "out_of_scope",
+        "reason": "Space weather studies do not relate to robotics or AI."
+      },
+      {
+        "comm_id": 45,
+        "label": "Electromagnetic Technologies",
+        "verdict": "out_of_scope",
+        "reason": "Electromagnetic technologies lack direct relevance to robotics and AI."
+      },
+      {
+        "comm_id": 17,
+        "label": "Fault Diagnosis",
+        "verdict": "borderline",
+        "reason": "Fault diagnosis techniques can be relevant in robotics maintenance."
+      },
+      {
+        "comm_id": 2,
+        "label": "Environmental Monitoring",
+        "verdict": "borderline",
+        "reason": "Environmental monitoring can involve robotics for data collection."
+      },
+      {
+        "comm_id": 1,
+        "label": "Cancer Immunotherapy",
+        "verdict": "out_of_scope",
+        "reason": "Cancer immunotherapy is unrelated to robotics or AI."
+      },
+      {
+        "comm_id": 24,
+        "label": "Surgical Oncology",
+        "verdict": "out_of_scope",
+        "reason": "Surgical oncology does not connect with robotics or AI."
+      },
+      {
+        "comm_id": 18,
+        "label": "Cybersecurity In IoT",
+        "verdict": "out_of_scope",
+        "reason": "Cybersecurity in IoT lacks direct application to robotics and AI."
+      },
+      {
+        "comm_id": 10,
+        "label": "Advanced Materials Engineering",
+        "verdict": "out_of_scope",
+        "reason": "Materials engineering does not directly apply to robotics or AI."
+      },
+      {
+        "comm_id": 13,
+        "label": "Geological And Environmental Sciences",
+        "verdict": "borderline",
+        "reason": "Geological and environmental sciences can involve robotics for exploration."
+      },
+      {
+        "comm_id": 12,
+        "label": "COVID-19 Health Impacts",
+        "verdict": "out_of_scope",
+        "reason": "COVID-19 health impacts are unrelated to robotics or AI."
+      },
+      {
+        "comm_id": 21,
+        "label": "Orthopedic Surgery",
+        "verdict": "out_of_scope",
+        "reason": "Orthopedic surgery does not connect with robotics or AI."
+      },
+      {
+        "comm_id": 31,
+        "label": "Quantum Computing",
+        "verdict": "out_of_scope",
+        "reason": "Quantum computing lacks direct relevance to robotics and AI."
+      },
+      {
+        "comm_id": 29,
+        "label": "Dental Health",
+        "verdict": "out_of_scope",
+        "reason": "Dental health is unrelated to robotics or AI."
+      },
+      {
+        "comm_id": 14,
+        "label": "Cardiovascular And Metabolic Health",
+        "verdict": "out_of_scope",
+        "reason": "Cardiovascular health does not connect with robotics or AI."
+      },
+      {
+        "comm_id": 22,
+        "label": "Aging Health Interventions",
+        "verdict": "out_of_scope",
+        "reason": "Aging health interventions are unrelated to robotics or AI."
+      },
+      {
+        "comm_id": 23,
+        "label": "Evolutionary Biology",
+        "verdict": "out_of_scope",
+        "reason": "Evolutionary biology does not relate to robotics or AI."
+      },
+      {
+        "comm_id": 46,
+        "label": "Optical Measurement",
+        "verdict": "out_of_scope",
+        "reason": "Optical measurement lacks direct application to robotics and AI."
+      },
+      {
+        "comm_id": 16,
+        "label": "Thermal Energy Systems",
+        "verdict": "out_of_scope",
+        "reason": "Thermal energy systems do not connect with robotics or AI."
+      },
+      {
+        "comm_id": 9,
+        "label": "Construction Materials",
+        "verdict": "out_of_scope",
+        "reason": "Construction materials are unrelated to robotics or AI."
+      },
+      {
+        "comm_id": 47,
+        "label": "Urban Mobility",
+        "verdict": "out_of_scope",
+        "reason": "Urban mobility does not connect with robotics or AI."
+      },
+      {
+        "comm_id": 33,
+        "label": "Nutrition And Health",
+        "verdict": "out_of_scope",
+        "reason": "Nutrition and health are unrelated to robotics or AI."
+      }
+    ]
+  }
+}

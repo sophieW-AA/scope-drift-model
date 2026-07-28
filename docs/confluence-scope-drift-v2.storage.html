@@ -1,0 +1,204 @@
+<p>Methods and GT accuracy notes for <strong>Scope Drift scope-check v2</strong> (LLM borderline + hard-negatives + paper-level demotion). Parent page: <a href="https://confluence.frontiersin.net/spaces/DA/pages/725460028/Scope+Drift">Scope Drift</a>.</p>
+<p><em>Run evaluated:</em> <code>20260721_122750</code> · cluster level <code>macro</code> (50 communities) · GT from <code>manual_scope_check_truth.ods</code>.</p>
+
+<hr />
+
+<h2>Context</h2>
+<p>The scope-drift model places Frontiers journal papers into citation-network communities, then labels papers as in-scope vs out-of-scope. Early v1 used <strong>primary communities</strong> (coverage-greedy core) plus optional <strong>layout-distance rescue</strong> for amber &quot;borderline&quot; communities. Distance rescue over-included method-broad clusters and disagreed with manual GT labels.</p>
+<p>v2 replaces distance rescue with an editorial-style LLM borderline judgment, then adds deterministic title hard-negatives and a paper-level LLM demotion pass inside risky primary communities. Soft in-scope for OOS% is still primary ∪ borderline, minus demoted papers.</p>
+
+<hr />
+
+<h2>Objective / scope</h2>
+<ul>
+  <li>Reduce false positives where the model called papers In Scope that GT marked Out of Scope.</li>
+  <li>Keep community-level amber borderline for interdisciplinary domain applications.</li>
+  <li>Preserve primary coverage logic (default 80%); do not redesign meso primaries in this pass.</li>
+</ul>
+<p><strong>Out of scope this pass:</strong> abstract export; changing <code>PRIMARY_COVERAGE</code>; re-enabling distance rescue.</p>
+
+<hr />
+
+<h2>Decision flow (v2)</h2>
+<pre>Journal papers
+  → Primary clusters (~80% coverage)
+  → Community LLM borderline (prompt v2) on non-primary communities
+  → soft_in_scope = primary ∪ borderline
+  → Title hard-negatives (force OOS)
+  → Paper LLM demotion on suspicious titles in risky primaries
+  → Per-paper label: In Scope / Borderline / Out of Scope</pre>
+<table>
+  <tbody>
+    <tr><th>Layer</th><th>What it does</th><th>Default</th></tr>
+    <tr><td>Primary communities</td><td>Smallest set covering PRIMARY_COVERAGE of journal papers</td><td>On (0.8)</td></tr>
+    <tr><td>Community LLM borderline</td><td>Classifies non-primary communities as borderline vs hard OOS</td><td>On (<code>gpt-4o-mini</code>, prompt v2)</td></tr>
+    <tr><td>Hard-negatives</td><td>Title regexes force OOS even inside primary/borderline</td><td>On — <code>config/journal_hard_negatives.json</code></td></tr>
+    <tr><td>Paper LLM demotion</td><td>Demotes suspicious titles in risky primaries to OOS</td><td>On — titles only, batched</td></tr>
+    <tr><td>Distance rescue (legacy)</td><td>Layout-distance amber rescue</td><td><strong>Off</strong></td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Methods detail</h2>
+
+<h3>1. Primary communities</h3>
+<p>Unchanged: for each journal, take communities in descending paper count until cumulative share ≥ <code>PRIMARY_COVERAGE</code> (default 80%). Papers in those communities are the hard core.</p>
+
+<h3>2. Community LLM borderline (prompt v2)</h3>
+<p>For each journal, non-primary communities with meaningful share (≥3 papers or ≥0.3%) are sent to the LLM with primary context. Cache key includes model + candidate/primary IDs + <code>prompt_version=v2</code> under <code>cwts_output/scope_llm_borderline_{RUN}_macro.json</code>.</p>
+<p><strong>System prompt (exact):</strong></p>
+<pre>You are an editorial scope analyst for Frontiers journals.
+
+You judge whether citation-network communities that fall outside a journal's
+primary scope core are HARD out-of-scope, or BORDERLINE (plausibly adjacent /
+interdisciplinary / occasionally acceptable, but not core).
+
+Definitions:
+- primary / in-scope: the journal's core topical communities (already given; do not reclassify them).
+- borderline: not core, but the community's methods or topics are applied TO THIS JOURNAL'S
+  DOMAIN. Examples that SHOULD be borderline:
+  • AI / remote sensing / control methods used for wetlands, coastal monitoring, geology
+  • VR / mixed reality used for surgical education or clinical training
+  • Adjacent clinical/biological phenomena clearly relevant to the journal's mission
+- out_of_scope: methods-only or buzzword overlap WITHOUT the journal's domain. Examples:
+  • Generic deep learning / computer vision / robotics with no neuro/rehab/BCI link
+  • Civil/structural construction engineering without geoscience
+  • Fintech, management, PE curriculum, or &quot;sustainability&quot; business topics without
+    environmental measurement or ecological substance
+  • Superficial keyword overlap only
+
+Be conservative with borderline: most non-primary communities should stay out_of_scope.
+Rescue interdisciplinary *domain applications*; reject opportunistic method dumping.
+
+Respond with ONLY a JSON object:
+{
+  &quot;decisions&quot;: [
+    {
+      &quot;comm_id&quot;: 12,
+      &quot;verdict&quot;: &quot;borderline&quot; | &quot;out_of_scope&quot;,
+      &quot;reason&quot;: &quot;one short sentence&quot;
+    }
+  ]
+}
+Include every candidate community exactly once. No markdown fences.</pre>
+<p><strong>User message shape:</strong> journal name + JSON of primary communities + JSON of candidate communities (id, label, paper counts/shares).</p>
+
+<h3>3. Hard-negatives</h3>
+<p>Deterministic title rules in <code>config/journal_hard_negatives.json</code>. If a force pattern matches and no unless (domain) pattern matches, the paper is forced OOS.</p>
+<ul>
+  <li><strong>Neurorobotics</strong> — industrial CV / defect / traffic / vehicle re-ID / face restoration / etc., unless neuro/BCI/EEG/rehab cues</li>
+  <li><strong>Earth Science</strong> — civil construction (retaining wall, foundation pit, pumped concrete…), unless geology/seismic cues</li>
+  <li><strong>Environmental Science</strong> — fintech / ERP / PE / startups / smart-city services…, unless pollution/ecosystem cues</li>
+</ul>
+
+<h3>4. Paper-level LLM demotion</h3>
+<p>Only for papers still in-scope after hard-negatives that sit in <strong>risky primary</strong> communities (e.g. Deep Learning Applications, Construction Materials, Sustainable Development). Further filtered to &quot;suspicious&quot; title patterns and capped per journal (default 60) to keep API volume tractable. Titles only (no abstracts in v1). Cache: <code>cwts_output/scope_paper_llm_{RUN}_macro.json</code>.</p>
+<p><strong>System prompt (exact):</strong></p>
+<pre>You are an editorial scope analyst for a Frontiers journal.
+
+You review paper TITLES that currently sit in a broad primary (core) citation community.
+Some of those communities are method-broad and contain opportunistic out-of-scope papers.
+
+For each paper, decide:
+- in_scope: title clearly fits the journal's scholarly mission / domain
+- out_of_scope: title is methods-only drift, wrong field, or only superficial keyword overlap
+
+Be strict on method dumping (generic CV/DL, civil engineering, fintech/management) when
+there is no clear link to the journal domain. When unsure but domain cues are present,
+prefer in_scope.
+
+Respond with ONLY a JSON object:
+{
+  &quot;decisions&quot;: [
+    {
+      &quot;int_id&quot;: 123,
+      &quot;verdict&quot;: &quot;in_scope&quot; | &quot;out_of_scope&quot;,
+      &quot;reason&quot;: &quot;one short sentence&quot;
+    }
+  ]
+}
+Include every paper exactly once. No markdown fences.</pre>
+<p><strong>User message shape:</strong> journal name + batched JSON of <code>int_id</code>, title, community_label (~20 per call).</p>
+<p>Demotions are stored on the dashboard as <code>paper_scope_overrides</code> and applied in the GT network map by <code>int_id</code>.</p>
+
+<hr />
+
+<h2>GT accuracy (v2 vs prior)</h2>
+<p>Scoring rules used for these numbers:</p>
+<ul>
+  <li>Only <strong>on-network</strong> GT papers (17 out-of-network excluded — not counted as disagreement)</li>
+  <li>Model <strong>Borderline counts as agreement</strong> with GT</li>
+  <li>n = 140 mapped GT papers across 5 journals in the GT pack</li>
+</ul>
+<table>
+  <tbody>
+    <tr><th>Metric</th><th>Before (distance / early LLM borderline)</th><th>After (v2)</th></tr>
+    <tr><td>Agreement</td><td>56.4% (79/140)</td><td><strong>75.7% (106/140)</strong></td></tr>
+    <tr><td>False positives (model In, GT Out)</td><td>53</td><td><strong>26</strong></td></tr>
+    <tr><td>False negatives (model Out, GT In)</td><td>8</td><td>8</td></tr>
+  </tbody>
+</table>
+<p><strong>Agreement by journal (v2):</strong></p>
+<table>
+  <tbody>
+    <tr><th>Journal</th><th>Agreement</th><th>False positives</th></tr>
+    <tr><td>Frontiers in Earth Science</td><td>86.1% (31/36)</td><td>4</td></tr>
+    <tr><td>Frontiers in Environmental Science</td><td>77.8% (28/36)</td><td>5</td></tr>
+    <tr><td>Frontiers in Neurorobotics</td><td>75.8% (25/33)</td><td>8</td></tr>
+    <tr><td>Frontiers in Surgery</td><td>75.0% (12/16)</td><td>2</td></tr>
+    <tr><td>Frontiers in Aging Neuroscience</td><td>52.6% (10/19)</td><td>7</td></tr>
+  </tbody>
+</table>
+<blockquote><p><strong>Note:</strong> Remaining FPs are still concentrated in broad primaries (e.g. Aging Neuro neurodegenerative / immunotherapy bleed). FNs are mostly interdisciplinary papers parked in non-primary communities (AI for env/geology, VR surgical education) that community borderline did not fully rescue.</p></blockquote>
+
+<hr />
+
+<h2>Outputs / dashboards</h2>
+<p>Local HTML under the <code>scope-drift-model</code> repo (open in a browser):</p>
+<table>
+  <tbody>
+    <tr><th>Dashboard</th><th>Path</th><th>What to look at</th></tr>
+    <tr><td>GT network map</td><td><code>output/gt_network_map.html</code></td><td>GT vs model; amber = borderline; paper demotions as OOS</td></tr>
+    <tr><td>Network maps</td><td><code>output/network_maps.html</code></td><td>Community bubbles: green primary / amber borderline / red OOS</td></tr>
+    <tr><td>Scope dashboard</td><td><code>output/scope_dashboard.html</code></td><td>OOS%, overrides metadata, communities</td></tr>
+    <tr><td>Combined</td><td><code>output/combined_dashboard.html</code></td><td>All-in-one entry point</td></tr>
+  </tbody>
+</table>
+<p>Quick open from repo root:</p>
+<pre>start output\gt_network_map.html
+start output\network_maps.html
+start output\combined_dashboard.html</pre>
+
+<hr />
+
+<h2>Repo / how to re-run</h2>
+<table>
+  <tbody>
+    <tr><th>Item</th><th>Location</th></tr>
+    <tr><td>Core logic + prompts</td><td><code>src/build_unified_dashboard.py</code></td></tr>
+    <tr><td>Hard-neg / risky community config</td><td><code>config/journal_hard_negatives.json</code></td></tr>
+    <tr><td>Apply without full layout rebuild</td><td><code>scripts/apply_scope_improvements.py</code></td></tr>
+    <tr><td>GT map builder</td><td><code>scripts/build_gt_network_map.py</code></td></tr>
+    <tr><td>Pipeline Step 3 env knobs</td><td><code>run_pipeline.ipynb</code></td></tr>
+  </tbody>
+</table>
+<p><strong>Env knobs (Step 3 / apply script):</strong></p>
+<ul>
+  <li><code>SCOPE_LLM_BORDERLINE_ENABLED=1</code>, <code>SCOPE_LLM_BORDERLINE_PROMPT_VERSION=v2</code></li>
+  <li><code>SCOPE_HARD_NEGATIVES_ENABLED=1</code></li>
+  <li><code>SCOPE_PAPER_LLM_ENABLED=1</code>, <code>SCOPE_PAPER_LLM_MODEL=gpt-4o-mini</code></li>
+  <li><code>SCOPE_DISTANCE_ENABLED=0</code></li>
+</ul>
+<p>Re-apply on existing dashboard (loads titles from BigQuery for <code>RUN_TIMESTAMP</code>):</p>
+<pre>python scripts/apply_scope_improvements.py</pre>
+
+<hr />
+
+<h2>Owners / next steps</h2>
+<ul>
+  <li><strong>Owner:</strong> Sophie Wilson</li>
+  <li>Review remaining Aging Neuroscience FPs; consider journal-specific hard-negatives or tighter paper LLM candidate patterns</li>
+  <li>Optional: extend paper LLM to title + abstract (requires metadata export change)</li>
+  <li>Optional: rescue FN communities more aggressively (Immersive Learning for Surgery; AI Applications for Env/Earth) via borderline prompt or paper-level promote</li>
+</ul>

@@ -1,0 +1,1298 @@
+# Analytical Data Model — ocean-breeze-tier-2.salesforce
+# Narrow Data Model (NDM) -- Version 2
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-17
+# Source: dataset-model-ADM/ocean-breeze-tier-2.salesforce_ADM_V2.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • Salesforce uses SpaceId__c (Salesforce record Id GUID) not integer space_id.
+#   There is no direct integer FK to reporting_data_mart.space from this dataset.
+# • All custom Frontiers fields (ArticleId__c, LoopId__c, etc.) are stored as
+#   STRING in Salesforce; use SAFE_CAST(col AS INT64) when joining to DWH.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one         : many rows here → same parent row (standard FK)
+# one_to_one          : at most one row here per referenced parent row
+# optional_many_to_one: FK is nullable / zero-or-one participation
+# [PROPOSED]          : inferred — validate before use
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ── Transform note ────────────────────────────────────────────────────────────
+# transform: SAFE_CAST to INT64   →  column is STRING in SF; cast before joining.
+# transform: SAFE_CAST to INT64 (FLOAT source) → column is FLOAT in SF (e.g. AIRAId__c).
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+  ######################## JOURNAL ########################
+
+  - name: JournalSection__c
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-2.salesforce.JournalSection__c
+    description: "[PROPOSED] One row per JournalSection__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Journal__c
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-2.salesforce.Journal__c
+    description: "[PROPOSED] One row per Journal__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: Journal_API_Id__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "is the DWH journal"
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Taxonomy__c
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-2.salesforce.Taxonomy__c
+    description: "[PROPOSED] One row per Taxonomy__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  ######################## ARTICLE ########################
+
+  - name: ArticleAuthor__c
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.salesforce.ArticleAuthor__c
+    description: "[PROPOSED] One row per ArticleAuthor__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ArticleId__c
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Article__c
+            column: ArticleId__c
+            cardinality: many_to_one
+            transform: "shared DWH article key — join on ArticleId__c = Article__c.ArticleId__c"
+            relationship: "belongs to SF article"
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "belongs to DWH article"
+      - name: LoopId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "is authored by"
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: ArticleEditor__History
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.salesforce.ArticleEditor__History
+    description: "[PROPOSED] One row per ArticleEditor__History."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: ArticleEditor__c
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: ArticleEditor__c
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.salesforce.ArticleEditor__c
+    description: "[PROPOSED] One row per ArticleEditor__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: LoopId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "identifies the DWH user (editor)"
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: ArticleReviewer__c
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.salesforce.ArticleReviewer__c
+    description: "[PROPOSED] One row per ArticleReviewer__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: LoopId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "identifies the DWH user (reviewer)"
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: ArticleWorkflowDelay__c
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.salesforce.ArticleWorkflowDelay__c
+    description: "[PROPOSED] One row per ArticleWorkflowDelay__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Article__History
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.salesforce.Article__History
+    description: "[PROPOSED] One row per Article__History."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Article__c
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: Article__c
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.salesforce.Article__c
+    description: "[PROPOSED] One row per Article__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ArticleId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "is the DWH article"
+      - name: SpaceId__c
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Space__c
+            column: Id
+            cardinality: many_to_one
+            relationship: "belongs to"
+      - name: DOI__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: DOI
+            cardinality: many_to_one
+            transform: "UPPER() on both sides"
+            relationship: "is the DWH article"
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  ######################### USER #########################
+
+  - name: User
+    domain: USER
+    source_table: ocean-breeze-tier-2.salesforce.User
+    description: "[PROPOSED] One row per User."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: UserRoleId
+        type: String
+      - name: ProfileId
+        type: String
+      - name: DelegatedApproverId
+        type: String
+      - name: ManagerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: ContactId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Contact
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "is linked to contact"
+      - name: AccountId
+        type: String
+      - name: CallCenterId
+        type: String
+      - name: IndividualId
+        type: String
+
+  ################# CUSTOMER_ACQUISITION #################
+
+  # ─── CAMPAIGN ────────────────────────────────────────────────────────
+
+  - name: Campaign
+    domain: CUSTOMER_ACQUISITION
+    subdomain: CAMPAIGN
+    source_table: ocean-breeze-tier-2.salesforce.Campaign
+    description: "[PROPOSED] One row per Campaign."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Campaign
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "is child of campaign"
+      - name: RecordTypeId
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: CampaignMemberRecordTypeId
+        type: String
+
+  - name: CampaignMember
+    domain: CUSTOMER_ACQUISITION
+    subdomain: CAMPAIGN
+    source_table: ocean-breeze-tier-2.salesforce.CampaignMember
+    description: "[PROPOSED] One row per CampaignMember."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: CampaignId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Campaign
+            column: Id
+            cardinality: many_to_one
+            relationship: "belongs to campaign"
+      - name: LeadId
+        type: String
+      - name: ContactId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Contact
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "is the contact"
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: LeadOrContactId
+        type: String
+      - name: LeadOrContactOwnerId
+        type: String
+
+  ######################## UNKNOWN ########################
+
+  - name: Account
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Account
+    description: "[PROPOSED] One row per Account."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: MasterRecordId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Account
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "is child of account"
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: JigsawCompanyId
+        type: String
+      - name: ActivityMetricId
+        type: String
+
+  - name: AIContent__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.AIContent__c
+    description: "[PROPOSED] One row per AIContent__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: AudienceAllocation__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.AudienceAllocation__c
+    description: "[PROPOSED] One row per AudienceAllocation__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Case
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Case
+    description: "[PROPOSED] One row per Case."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: MasterRecordId
+        type: String
+      - name: ContactId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Contact
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "is raised by contact"
+      - name: AccountId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Account
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "is raised by account"
+      - name: AssetId
+        type: String
+      - name: ProductId
+        type: String
+      - name: EntitlementId
+        type: String
+      - name: SourceId
+        type: String
+      - name: BusinessHoursId
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Case
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "is child of case"
+      - name: RecordTypeId
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: ServiceContractId
+        type: String
+
+  - name: CaseHistory
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.CaseHistory
+    description: "[PROPOSED] One row per CaseHistory."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: CaseId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Case
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: Contact
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Contact
+    description: "[PROPOSED] One row per Contact."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: MasterRecordId
+        type: String
+      - name: AccountId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Account
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "belongs to account"
+      - name: UserId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "is the DWH user"
+      - name: AIRAId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.airak
+            entity: author
+            column: AuthorId
+            cardinality: optional_many_to_one
+            transform: "SAFE_CAST to INT64 (source is FLOAT)"
+            relationship: "is the AIRAK author"
+      - name: RecordTypeId
+        type: String
+      - name: ReportsToId
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: JigsawContactId
+        type: String
+      - name: IndividualId
+        type: String
+      - name: ActivityMetricId
+        type: String
+
+  - name: ContactHistory
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.ContactHistory
+    description: "[PROPOSED] One row per ContactHistory."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ContactId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Contact
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: Contract
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Contract
+    description: "[PROPOSED] One row per Contract."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: AccountId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Account
+            column: Id
+            cardinality: many_to_one
+            relationship: "belongs to account"
+      - name: Pricebook2Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CompanySignedId
+        type: String
+      - name: CustomerSignedId
+        type: String
+      - name: ActivatedById
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: ActivityMetricId
+        type: String
+
+  - name: Discount_Code__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Discount_Code__c
+    description: "[PROPOSED] One row per Discount_Code__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Domain
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Domain
+    description: "[PROPOSED] One row per Domain."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: EditorialBoardMember__History
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.EditorialBoardMember__History
+    description: "[PROPOSED] One row per EditorialBoardMember__History."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: EditorialBoardMember__c
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: EditorialBoardMember__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.EditorialBoardMember__c
+    description: "[PROPOSED] One row per EditorialBoardMember__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: LoopId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "identifies the DWH user (editorial board member)"
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: EmailMessage
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.EmailMessage
+    description: "[PROPOSED] One row per EmailMessage."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ParentId
+        type: String
+      - name: ActivityId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: ReplyToEmailMessageId
+        type: String
+      - name: FromId
+        type: String
+      - name: RelatedToId
+        type: String
+      - name: EmailTemplateId
+        type: String
+      - name: EmailRoutingAddressId
+        type: String
+
+  - name: EmailPreference__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.EmailPreference__c
+    description: "[PROPOSED] One row per EmailPreference__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Event
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Event
+    description: "[PROPOSED] One row per Event."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: WhoId
+        type: String
+      - name: WhatId
+        type: String
+      - name: AccountId
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: RecurrenceActivityId
+        type: String
+
+  - name: Field__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Field__c
+    description: "[PROPOSED] One row per Field__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Lead
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Lead
+    description: "[PROPOSED] One row per Lead."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: MasterRecordId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: OwnerId
+        type: String
+      - name: ConvertedAccountId
+        type: String
+      - name: ConvertedContactId
+        type: String
+      - name: ConvertedOpportunityId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: JigsawContactId
+        type: String
+      - name: IndividualId
+        type: String
+      - name: ActivityMetricId
+        type: String
+
+  - name: LeadHistory
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.LeadHistory
+    description: "[PROPOSED] One row per LeadHistory."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: LeadId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Lead
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: LiveChatTranscript
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.LiveChatTranscript
+    description: "[PROPOSED] One row per LiveChatTranscript."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: LiveChatVisitorId
+        type: String
+      - name: ContactId
+        type: String
+      - name: LeadId
+        type: String
+      - name: CaseId
+        type: String
+      - name: AccountId
+        type: String
+      - name: LiveChatDeploymentId
+        type: String
+      - name: LiveChatButtonId
+        type: String
+      - name: SkillId
+        type: String
+
+  - name: LoopInformation__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.LoopInformation__c
+    description: "[PROPOSED] One row per LoopInformation__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Opportunity
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Opportunity
+    description: "[PROPOSED] One row per Opportunity."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: AccountId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Account
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "belongs to account"
+      - name: RecordTypeId
+        type: String
+      - name: CampaignId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Campaign
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "sourced from campaign"
+      - name: Pricebook2Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: ContactId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Contact
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "linked to contact"
+      - name: SyncedQuoteId
+        type: String
+      - name: ContractId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Contract
+            column: Id
+            cardinality: optional_many_to_one
+            relationship: "governed by contract"
+      - name: LastAmountChangedHistoryId
+        type: String
+      - name: LastCloseDateChangedHistoryId
+        type: String
+      - name: ActivityMetricId
+        type: String
+
+  - name: OpportunityContactRole
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.OpportunityContactRole
+    description: "[PROPOSED] One row per OpportunityContactRole."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OpportunityId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Opportunity
+            column: Id
+            cardinality: many_to_one
+            relationship: "belongs to opportunity"
+      - name: ContactId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Contact
+            column: Id
+            cardinality: many_to_one
+            relationship: "is the contact"
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: OpportunityStage
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.OpportunityStage
+    description: "[PROPOSED] One row per OpportunityStage."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: OpportunityStageDuration__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.OpportunityStageDuration__c
+    description: "[PROPOSED] One row per OpportunityStageDuration__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Opportunity__hd
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Opportunity__hd
+    description: "[PROPOSED] One row per Opportunity__hd."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: Opportunity
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: QualtricsSurveyAnswer__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.QualtricsSurveyAnswer__c
+    description: "[PROPOSED] One row per QualtricsSurveyAnswer__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: QualtricsSurveyReply__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.QualtricsSurveyReply__c
+    description: "[PROPOSED] One row per QualtricsSurveyReply__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: RecordType
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.RecordType
+    description: "[PROPOSED] One row per RecordType."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: BusinessProcessId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Region__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Region__c
+    description: "[PROPOSED] One row per Region__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: ResearchTopicContributor__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.ResearchTopicContributor__c
+    description: "[PROPOSED] One row per ResearchTopicContributor__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: ResearchTopicEditor__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.ResearchTopicEditor__c
+    description: "[PROPOSED] One row per ResearchTopicEditor__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: LoopId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "identifies the DWH user (research topic editor)"
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: ResearchTopic__History
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.ResearchTopic__History
+    description: "[PROPOSED] One row per ResearchTopic__History."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ParentId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: ResearchTopic__c
+            column: Id
+            cardinality: many_to_one
+            relationship: "is history of"
+      - name: CreatedById
+        type: String
+
+  - name: ResearchTopic__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.ResearchTopic__c
+    description: "[PROPOSED] One row per ResearchTopic__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: ResearchTopicId__c
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: research_topic
+            column: research_topic_id_original
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "is the DWH research topic"
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: ReservedRecord__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.ReservedRecord__c
+    description: "[PROPOSED] One row per ReservedRecord__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Space__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Space__c
+    description: "One row per publishing Space (tenant). A Space represents an independent publishing environment."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: SpaceId__c
+        type: Float
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: one_to_one
+            transform: "SAFE_CAST to INT64"
+      - name: OwnerId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Specialty__c
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Specialty__c
+    description: "[PROPOSED] One row per Specialty__c."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: OwnerId
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+
+  - name: Task
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-2.salesforce.Task
+    description: "[PROPOSED] One row per Task."
+    grain: Id
+    primary_key: Id
+    columns:
+      - name: Id
+        type: String
+      - name: RecordTypeId
+        type: String
+      - name: WhoId
+        type: String
+      - name: WhatId
+        type: String
+      - name: OwnerId
+        type: String
+      - name: AccountId
+        type: String
+      - name: CreatedById
+        type: String
+      - name: LastModifiedById
+        type: String
+      - name: RecurrenceActivityId
+        type: String
+

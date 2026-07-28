@@ -1,0 +1,38 @@
+---
+description: SQL Server T-SQL querying — triggers dwh-schema skill for full schema reference
+globs:
+  - "**/*.ipynb"
+  - "**/*.sql"
+  - "**/*.py"
+alwaysApply: false
+---
+
+# SQL Server querying (this repo)
+
+When writing or editing SQL Server / T-SQL queries, **always read the `dwh-schema` skill** at `.cursor/skills/dwh-schema/SKILL.md` for:
+
+- Full schema reference and column listings
+- Connection patterns (pyodbc, Windows auth)
+- Object naming (3-part names, bracket conventions)
+- Join patterns for common tables
+- BigQuery → T-SQL conversion guide
+- SQL style conventions
+
+**Do not** rewrite bracketed `[…].[…].[…]` objects as BigQuery backticks—see `bigquery-querying.mdc` for GCP.
+
+## Database priority
+
+1. **FrontiersReports** — First choice (star-schema reporting)
+2. **ReportingDataMart** — Second choice (wide denormalized tables)
+3. **TenantsDataMarts** — Last resort (granular/transactional)
+
+## Quick reference
+
+| Priority | Key table | Use for |
+|---|---|---|
+| 1st | `[FrontiersReports].[EOf].[ReviewBoardChartsDS]` | Review-board / invitation analytics |
+| 1st | `[FrontiersReports].[BIRep].[ArticlesDS.Articles]` | Article dimensions |
+| 2nd | `[ReportingDataMart].[Reporting].[Articles]` | Wide denormalized article analytics (400+ columns) |
+| 3rd | `[TenantsDataMarts].[Journal].[Articles_Review.Events]` | Event-level review lifecycle |
+
+For full details, column names, and join patterns → read the skill file.

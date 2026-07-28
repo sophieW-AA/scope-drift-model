@@ -1,0 +1,96 @@
+{
+  "default_risky_primary_labels": [
+    "Deep Learning Applications",
+    "Construction Materials",
+    "Sustainable Development",
+    "Control Systems Optimization",
+    "Neurodegenerative Diseases",
+    "Environmental Monitoring"
+  ],
+  "journals": {
+    "Frontiers in Neurorobotics": {
+      "risky_primary_labels": [
+        "Deep Learning Applications",
+        "Control Systems Optimization",
+        "Rehabilitation Engineering",
+        "Neurodegenerative Diseases"
+      ],
+      "force_oos_patterns": [
+        "(?i)\\b(steel|rail)\\s+(surface\\s+)?defect",
+        "(?i)\\bvehicle\\s+re[- ]?identif",
+        "(?i)\\b(traffic|uav[- ]based)\\s+(surveillance|detection)",
+        "(?i)\\bface\\s+restor",
+        "(?i)\\brain\\s+removal",
+        "(?i)\\bpneumonia\\b.*\\b(x[- ]?ray|chest)\\b",
+        "(?i)\\b(chest\\s+x[- ]?ray).*(yolo|diagnos)",
+        "(?i)\\bhazardous\\s+material\\s+vehicle",
+        "(?i)\\bancient\\s+architectural",
+        "(?i)\\bnasal\\s+endoscopy\\s+surgery",
+        "(?i)\\btable\\s+tennis\\b",
+        "(?i)\\bmultimodal\\s+robotic\\s+music"
+      ],
+      "unless_patterns": [
+        "(?i)\\b(neuro|neural|brain|bci|eeg|emg|rehab|stroke|motor\\s+imagery|neurorobot)"
+      ]
+    },
+    "Frontiers in Earth Science": {
+      "risky_primary_labels": [
+        "Construction Materials",
+        "Geological And Environmental Sciences",
+        "Environmental Monitoring"
+      ],
+      "force_oos_patterns": [
+        "(?i)\\bretaining\\s+wall",
+        "(?i)\\bfoundation\\s+pit",
+        "(?i)\\bdiaphragm\\s+wall",
+        "(?i)\\bpumped\\s+concrete",
+        "(?i)\\bhydraulic\\s+support\\s+column",
+        "(?i)\\btailings\\s+(backfill|cemented\\s+paste)",
+        "(?i)\\bmanufactured\\s+sand\\s+concrete",
+        "(?i)\\bdeep\\s+excavation\\s+structure",
+        "(?i)\\bclose[- ]multiple\\s+coal\\s+seams"
+      ],
+      "unless_patterns": [
+        "(?i)\\b(seismic|earthquake|volcan|tectonic|sediment|stratigraph|paleoclim|geophys|geolog)"
+      ]
+    },
+    "Frontiers in Environmental Science": {
+      "risky_primary_labels": [
+        "Sustainable Development",
+        "Environmental Monitoring",
+        "Agricultural And Environmental Sciences"
+      ],
+      "force_oos_patterns": [
+        "(?i)\\bfintech\\b",
+        "(?i)\\bdigital\\s+finance",
+        "(?i)\\benterprise\\s+resource\\s+planning\\b|\\berp\\b",
+        "(?i)\\bphysical\\s+education\\b",
+        "(?i)\\bcommercial\\s+startup",
+        "(?i)\\bsocial\\s+entrepreneur",
+        "(?i)\\bmonopoly\\s+appropriation\\s+of\\s+labor",
+        "(?i)\\bsmart\\s+city\\s+services",
+        "(?i)\\bbuilding\\s+air\\s+conditioning\\s+load"
+      ],
+      "unless_patterns": [
+        "(?i)\\b(pollut|emission|biodiversity|ecosystem|wetland|watershed|air\\s+quality|water\\s+quality|climate|carbon\\s+sequestr)"
+      ]
+    },
+    "Frontiers in Aging Neuroscience": {
+      "risky_primary_labels": [
+        "Neurodegenerative Diseases",
+        "Cancer Immunotherapy"
+      ],
+      "force_oos_patterns": [],
+      "unless_patterns": []
+    },
+    "Frontiers in Surgery": {
+      "risky_primary_labels": [
+        "Cancer Immunotherapy",
+        "Perioperative Care",
+        "Reproductive Health"
+      ],
+      "force_oos_patterns": [],
+      "unless_patterns": []
+    }
+  }
+}
