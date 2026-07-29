@@ -6028,6 +6028,328 @@
       "verdict": "in_scope",
       "reason": "Study of landslide early warning models is relevant to Earth Science.",
       "community_id": 9
+    },
+    "9632032": {
+      "model": "gpt-4o-mini",
+      "title": "Inverse geo-electromagnetic modeling: a systematic review and bibliometric assessment",
+      "verdict": "in_scope",
+      "reason": "The title addresses geo-electromagnetic modeling relevant to geological sciences.",
+      "community_id": 13
+    },
+    "2750305": {
+      "model": "gpt-4o-mini",
+      "title": "Control mechanism of the migration of heavy metal ions from gangue backfill bodies in mined-out areas",
+      "verdict": "out_of_scope",
+      "reason": "The focus on heavy metal migration in construction materials lacks direct relevance to Earth science.",
+      "community_id": 9
+    },
+    "9566527": {
+      "model": "gpt-4o-mini",
+      "title": "Deep learning driven reconstruction of acoustic logging signal in energy exploration and development",
+      "verdict": "in_scope",
+      "reason": "The title relates to acoustic logging in energy exploration, fitting geological and environmental sciences.",
+      "community_id": 13
+    },
+    "2564315": {
+      "model": "gpt-4o-mini",
+      "title": "Key predisposing factors and susceptibility assessment of landslides along the Yunnan\u2013Tibet traffic corridor, Tibetan plateau: Comparison with the LR, RF, NB, and MLP techniques",
+      "verdict": "out_of_scope",
+      "reason": "The title primarily discusses landslide susceptibility in a construction context, not Earth science.",
+      "community_id": 9
+    },
+    "9035970": {
+      "model": "gpt-4o-mini",
+      "title": "Large-scale shaking table test and numerical analysis of seismic performance of geocell retaining wall",
+      "verdict": "out_of_scope",
+      "reason": "The focus on seismic performance of a retaining wall is more construction-oriented than Earth science.",
+      "community_id": 9
+    },
+    "387172": {
+      "model": "gpt-4o-mini",
+      "title": "Toward an \u201cAncient\u201d Virtual World: Improvement Methods on X-ray CT Data Processing and Virtual Reconstruction of Fossil Skulls",
+      "verdict": "in_scope",
+      "reason": "The title discusses fossil skull reconstruction, relevant to geological sciences.",
+      "community_id": 13
+    },
+    "6294396": {
+      "model": "gpt-4o-mini",
+      "title": "Seabed classification of multibeam echosounder data into bedrock/non-bedrock using deep learning",
+      "verdict": "in_scope",
+      "reason": "The seabed classification using deep learning is relevant to environmental monitoring in Earth science.",
+      "community_id": 2
+    },
+    "3915954": {
+      "model": "gpt-4o-mini",
+      "title": "Automatic batch recognition of rock deformation areas based on image segmentation methods",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on rock deformation in a construction context, lacking direct relevance to Earth science.",
+      "community_id": 9
+    },
+    "7146103": {
+      "model": "gpt-4o-mini",
+      "title": "External factors driving surface temperature changes above geothermal systems: answers from deep learning",
+      "verdict": "in_scope",
+      "reason": "The title addresses surface temperature changes above geothermal systems, relevant to geological sciences.",
+      "community_id": 13
+    },
+    "5711647": {
+      "model": "gpt-4o-mini",
+      "title": "Risk assessment of deep excavation construction based on combined weighting and nonlinear FAHP",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on risk assessment in construction, lacking direct relevance to Earth science.",
+      "community_id": 9
+    },
+    "5042732": {
+      "model": "gpt-4o-mini",
+      "title": "Transformer assisted dual U-net for seismic fault detection",
+      "verdict": "in_scope",
+      "reason": "The title discusses seismic fault detection, relevant to geological sciences.",
+      "community_id": 13
+    },
+    "6374478": {
+      "model": "gpt-4o-mini",
+      "title": "Intelligent reconstruction for spatially irregular seismic data by combining compressed sensing with deep learning",
+      "verdict": "in_scope",
+      "reason": "The title addresses seismic data reconstruction, relevant to geological sciences.",
+      "community_id": 13
+    },
+    "4854956": {
+      "model": "gpt-4o-mini",
+      "title": "Prediction of compressive strength of recycled aggregate concrete using machine learning and Bayesian optimization methods",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on concrete strength prediction in a construction context, lacking direct relevance to Earth science.",
+      "community_id": 9
+    },
+    "8002553": {
+      "model": "gpt-4o-mini",
+      "title": "Study on its application and unstable risk subarea estimation method of mountainous traffic engineering&#39;s spoil ground",
+      "verdict": "out_of_scope",
+      "reason": "The title discusses traffic engineering spoil ground, which is more construction-oriented than Earth science.",
+      "community_id": 9
+    },
+    "9558393": {
+      "model": "gpt-4o-mini",
+      "title": "Geological information-driven deep learning for lithology identification from well logs",
+      "verdict": "in_scope",
+      "reason": "The title discusses lithology identification from well logs, relevant to geological sciences.",
+      "community_id": 13
+    },
+    "6506351": {
+      "model": "gpt-4o-mini",
+      "title": "Study on the mechanical characteristics of sand pebble surrounding rock considering the disturbance effect of tunnel excavation",
+      "verdict": "in_scope",
+      "reason": "The title addresses mechanical characteristics of surrounding rock, relevant to geological sciences.",
+      "community_id": 13
+    },
+    "2938099": {
+      "model": "gpt-4o-mini",
+      "title": "The Sealing Mechanisms of a Fracture in Opalinus Clay as Revealed by in situ Synchrotron X-Ray Micro-Tomography",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on sealing mechanisms in clay, which is more construction-oriented than Earth science.",
+      "community_id": 9
+    },
+    "2263656": {
+      "model": "gpt-4o-mini",
+      "title": "Dynamics of Water Absorption in Callovo-Oxfordian Claystone Revealed With Multimodal X-Ray and Neutron Tomography",
+      "verdict": "out_of_scope",
+      "reason": "The title discusses water absorption in claystone in a construction context, lacking direct relevance to Earth science.",
+      "community_id": 9
+    },
+    "4696925": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental tests and theoretical analysis for mechanical behaviors of side wall opening construction in mined excavation subway station",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on mechanical behaviors in subway construction, lacking direct relevance to Earth science.",
+      "community_id": 9
+    },
+    "265510": {
+      "model": "gpt-4o-mini",
+      "title": "Deformation characteristics and reactivation mechanism of an old landslide induced by combined action of excavation and heavy rainfall",
+      "verdict": "out_of_scope",
+      "reason": "The title discusses landslide reactivation in a construction context, lacking direct relevance to Earth science.",
+      "community_id": 9
+    },
+    "7185373": {
+      "model": "gpt-4o-mini",
+      "title": "UAV and field survey investigation of a landslide triggered debris flow and dam formation in Eastern Carpathians",
+      "verdict": "in_scope",
+      "reason": "The study investigates a landslide and debris flow, relevant to Earth Science.",
+      "community_id": 9
+    },
+    "7115460": {
+      "model": "gpt-4o-mini",
+      "title": "Uncertainty of microseismic sources identification and probabilistic location in underground excavation",
+      "verdict": "out_of_scope",
+      "reason": "Focuses on microseismic sources in underground excavation, not aligned with Earth Science.",
+      "community_id": 9
+    },
+    "339276": {
+      "model": "gpt-4o-mini",
+      "title": "Volcanic Ash and Small Uncrewed Aerial Vehicle (sUAV) Interaction: In-situ Observations and Laboratory Experiments on Aircraft Failure",
+      "verdict": "in_scope",
+      "reason": "Explores volcanic ash interaction with UAVs, relevant to geological studies.",
+      "community_id": 13
+    },
+    "9917770": {
+      "model": "gpt-4o-mini",
+      "title": "Suction-controlled ring shear test of the silt and concrete interface",
+      "verdict": "out_of_scope",
+      "reason": "Methodological focus on a shear test, lacking direct relevance to Earth Science.",
+      "community_id": 9
+    },
+    "3316321": {
+      "model": "gpt-4o-mini",
+      "title": "Effects on a Nearby Bridge of Dismantling Temporary Lining During Excavation of a Shallow-Buried Rectangular Tunnel",
+      "verdict": "out_of_scope",
+      "reason": "Examines bridge effects during excavation, not directly related to Earth Science.",
+      "community_id": 9
+    },
+    "987108": {
+      "model": "gpt-4o-mini",
+      "title": "A novel Dynahead-Yolo neural network for the detection of landslides with variable proportions using remote sensing images",
+      "verdict": "in_scope",
+      "reason": "Utilizes remote sensing for landslide detection, relevant to Earth Science.",
+      "community_id": 9
+    },
+    "1463422": {
+      "model": "gpt-4o-mini",
+      "title": "Study on anti-collision behavior of new precast concrete curb components in a highway tunnel",
+      "verdict": "out_of_scope",
+      "reason": "Focuses on precast concrete in highway tunnels, not aligned with Earth Science.",
+      "community_id": 9
+    },
+    "4366295": {
+      "model": "gpt-4o-mini",
+      "title": "Rapid construction of Rayleigh wave dispersion curve based on deep learning",
+      "verdict": "in_scope",
+      "reason": "Rapid construction of dispersion curves relates to geological analysis.",
+      "community_id": 13
+    },
+    "5909052": {
+      "model": "gpt-4o-mini",
+      "title": "Mapping mining-induced ground fissures and their evolution using UAV photogrammetry",
+      "verdict": "out_of_scope",
+      "reason": "Mapping mining-induced fissures is more construction-focused than Earth Science.",
+      "community_id": 9
+    },
+    "1624260": {
+      "model": "gpt-4o-mini",
+      "title": "Numerical Method for the Deformation Calculation of the Shallow Buried Tunnel Caused by the Excavation of Overlying Soil Based on Soil Rebounding Characteristics",
+      "verdict": "out_of_scope",
+      "reason": "Numerical method for tunnel deformation lacks direct relevance to Earth Science.",
+      "community_id": 9
+    },
+    "353021": {
+      "model": "gpt-4o-mini",
+      "title": "Ablation Patterns of the Debris Covered Tongue of Halong Glacier Revealed by Short Term Unmanned Aerial Vehicle Surveys",
+      "verdict": "in_scope",
+      "reason": "Studies glacier ablation patterns, relevant to environmental monitoring in Earth Science.",
+      "community_id": 2
+    },
+    "44958": {
+      "model": "gpt-4o-mini",
+      "title": "Quantitative provenance analysis through deep learning of rare earth element geochemistry: A case from the Liuling Group of the East Qinling Orogen, Central China",
+      "verdict": "in_scope",
+      "reason": "Analyzes rare earth element geochemistry, relevant to geological sciences.",
+      "community_id": 13
+    },
+    "9344670": {
+      "model": "gpt-4o-mini",
+      "title": "Non-destructive 3D internal structure analysis of sedimentary samples using highresolution X-ray computed tomography",
+      "verdict": "out_of_scope",
+      "reason": "Focuses on sedimentary sample analysis, more construction-related than Earth Science.",
+      "community_id": 9
+    },
+    "7124444": {
+      "model": "gpt-4o-mini",
+      "title": "Slope deformation prediction based on noise reduction and deep learning: a point prediction and probability analysis method",
+      "verdict": "out_of_scope",
+      "reason": "Predicts slope deformation using deep learning, lacking direct Earth Science relevance.",
+      "community_id": 9
+    },
+    "2610906": {
+      "model": "gpt-4o-mini",
+      "title": "An efficient local imaging strategy based on illumination analysis with deep learning",
+      "verdict": "in_scope",
+      "reason": "Local imaging strategy relates to geological and environmental sciences.",
+      "community_id": 13
+    },
+    "9491743": {
+      "model": "gpt-4o-mini",
+      "title": "UAV aeromagnetic survey of the Acraman impact structure: insights into the central magnetic anomaly",
+      "verdict": "in_scope",
+      "reason": "UAV survey of an impact structure provides geological insights.",
+      "community_id": 13
+    },
+    "3370640": {
+      "model": "gpt-4o-mini",
+      "title": "The Calculation of Inelastic Zone Width of Coal Pillar in Highwall Mining With Backfill",
+      "verdict": "out_of_scope",
+      "reason": "Calculates coal pillar width, more focused on construction than Earth Science.",
+      "community_id": 9
+    },
+    "9607020": {
+      "model": "gpt-4o-mini",
+      "title": "A combined approach to lithology identification using reinforcement learning and transformer algorithms",
+      "verdict": "in_scope",
+      "reason": "Lithology identification using algorithms is relevant to geological studies.",
+      "community_id": 13
+    },
+    "1625474": {
+      "model": "gpt-4o-mini",
+      "title": "Assembled design and compressive performance simulation of mine waterproof wall based on concrete 3D printing",
+      "verdict": "out_of_scope",
+      "reason": "Focuses on concrete 3D printing for mine walls, not aligned with Earth Science.",
+      "community_id": 9
+    },
+    "6377899": {
+      "model": "gpt-4o-mini",
+      "title": "Estimation method of earthwork excavation using shield tunneling data -- a case study of Chengdu Metro",
+      "verdict": "out_of_scope",
+      "reason": "Estimation of earthwork excavation is construction-focused, lacking Earth Science relevance.",
+      "community_id": 9
+    },
+    "5593529": {
+      "model": "gpt-4o-mini",
+      "title": "Improved forecasting of extreme hurricane events by integrating spatio-temporal CNN-RF learning of tropical cyclone characteristics",
+      "verdict": "in_scope",
+      "reason": "The paper focuses on forecasting extreme hurricane events, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "960821": {
+      "model": "gpt-4o-mini",
+      "title": "Railway traffic monitoring with trackside fiber-optic cable by distributed acoustic sensing Technology",
+      "verdict": "in_scope",
+      "reason": "The use of fiber-optic technology for railway traffic monitoring relates to geological and environmental sciences.",
+      "community_id": 13
+    },
+    "5017674": {
+      "model": "gpt-4o-mini",
+      "title": "Climatic and seismic data-driven deep learning model for earthquake magnitude prediction",
+      "verdict": "in_scope",
+      "reason": "The study on earthquake magnitude prediction is directly relevant to geological sciences.",
+      "community_id": 13
+    },
+    "2819778": {
+      "model": "gpt-4o-mini",
+      "title": "CT Segmentation of Dinosaur Fossils by Deep Learning",
+      "verdict": "out_of_scope",
+      "reason": "CT segmentation of dinosaur fossils does not align with the journal's focus on earth sciences.",
+      "community_id": 2
+    },
+    "3458210": {
+      "model": "gpt-4o-mini",
+      "title": "Impact of new undercrossing tunnel excavation on the stability of the existing tunnel",
+      "verdict": "out_of_scope",
+      "reason": "The paper on tunnel excavation stability is more related to civil engineering than earth sciences.",
+      "community_id": 9
+    },
+    "5395517": {
+      "model": "gpt-4o-mini",
+      "title": "Research on thermal stress fracture performance of low-temperature asphalt concrete in castel high altitude area",
+      "verdict": "out_of_scope",
+      "reason": "Research on asphalt concrete performance is focused on construction materials, not earth sciences.",
+      "community_id": 9
     }
   },
   "Frontiers in Environmental Science": {
@@ -6309,6 +6631,272 @@
       "title": "MaRTiny\u2014A Low-Cost Biometeorological Sensing Device With Embedded Computer Vision for Urban Climate Research",
       "verdict": "in_scope",
       "reason": "The title discusses a biometeorological sensing device for urban climate research, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "10167813": {
+      "model": "gpt-4o-mini",
+      "title": "A China-centered bibliometric study of cooking fumes research with an international comparative perspective",
+      "verdict": "in_scope",
+      "reason": "The study focuses on cooking fumes research, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "866818": {
+      "model": "gpt-4o-mini",
+      "title": "Mapping the big data analytics in sharing economy: A bibliometric literature review",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on big data analytics in sharing economy, lacking direct environmental relevance.",
+      "community_id": 3
+    },
+    "6415259": {
+      "model": "gpt-4o-mini",
+      "title": "How do smart city pilots affect the ESG performance of manufacturing firms? evidence from China",
+      "verdict": "in_scope",
+      "reason": "The impact on ESG performance relates to sustainable development and environmental considerations.",
+      "community_id": 3
+    },
+    "8017921": {
+      "model": "gpt-4o-mini",
+      "title": "A BIBLIOMETRIC REVIEW OF GLOBAL RESEARCH ON THE HUMAN-WILDLIFE CONFLICTS",
+      "verdict": "in_scope",
+      "reason": "The review addresses human-wildlife conflicts, which is pertinent to environmental monitoring.",
+      "community_id": 2
+    },
+    "1697150": {
+      "model": "gpt-4o-mini",
+      "title": "Impact of airport operations and road traffic on the particle number concentration in the vicinity of a suburban airport",
+      "verdict": "in_scope",
+      "reason": "The study examines air quality impacts from airport operations, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "7426491": {
+      "model": "gpt-4o-mini",
+      "title": "Bibliometric analysis of research on China\u2019s rural environmental governance in CNKI and WOS",
+      "verdict": "in_scope",
+      "reason": "The analysis of rural environmental governance is relevant to sustainable development.",
+      "community_id": 3
+    },
+    "1570848": {
+      "model": "gpt-4o-mini",
+      "title": "The Spatio-Temporal Evolution of China\u2019s Hydrogen Fuel Cell Vehicle Innovation Network: Evidence From Patent Citation at Provincial Level",
+      "verdict": "out_of_scope",
+      "reason": "The focus on hydrogen fuel cell vehicle innovation lacks direct environmental impact discussion.",
+      "community_id": 3
+    },
+    "865560": {
+      "model": "gpt-4o-mini",
+      "title": "Estimating NOX, VOC, and CO variability over India\u2019s 1st smart city: Bhubaneswar",
+      "verdict": "in_scope",
+      "reason": "The estimation of air pollutants is directly relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "3046917": {
+      "model": "gpt-4o-mini",
+      "title": "Assessing the effects of burn severity on post-fire tree structures using the fused drone and mobile laser scanning point clouds",
+      "verdict": "in_scope",
+      "reason": "The assessment of post-fire tree structures relates to environmental monitoring.",
+      "community_id": 2
+    },
+    "939607": {
+      "model": "gpt-4o-mini",
+      "title": "UAV to Inform Restoration: A Case Study From a California Tidal Marsh",
+      "verdict": "in_scope",
+      "reason": "The use of UAV for restoration is relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "623677": {
+      "model": "gpt-4o-mini",
+      "title": "Temporal Difference-Based Graph Transformer Networks For Air Quality PM2.5 Prediction: A Case Study in China",
+      "verdict": "in_scope",
+      "reason": "The study on PM2.5 prediction is relevant to air quality and environmental monitoring.",
+      "community_id": 2
+    },
+    "3731547": {
+      "model": "gpt-4o-mini",
+      "title": "Synergetic use of unmanned aerial vehicle and satellite images for detecting non-native tree species: An insight into Acacia saligna invasion in the Mediterranean coast",
+      "verdict": "in_scope",
+      "reason": "The detection of non-native species relates to environmental monitoring.",
+      "community_id": 2
+    },
+    "1696543": {
+      "model": "gpt-4o-mini",
+      "title": "Soil-geomorphological mapping of Samoylov Island based on UAV imaging",
+      "verdict": "out_of_scope",
+      "reason": "The focus on soil-geomorphological mapping lacks direct environmental impact discussion.",
+      "community_id": 7
+    },
+    "7897914": {
+      "model": "gpt-4o-mini",
+      "title": "Can Smart City Construction Be the Answer to Sustainable Development? Evidence from Chinese Corporates",
+      "verdict": "in_scope",
+      "reason": "The study on smart city construction relates to sustainable development.",
+      "community_id": 3
+    },
+    "1076706": {
+      "model": "gpt-4o-mini",
+      "title": "Impact of the COVID-19 Restrictive Measures on Urban Traffic-Related Air Pollution in Serbia",
+      "verdict": "in_scope",
+      "reason": "The impact of COVID-19 on air pollution is relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "1840332": {
+      "model": "gpt-4o-mini",
+      "title": "Aerodynamic Properties and Shelter Effects of a Concrete Plate-Insert Sand Fence Along the Lanzhou-Xinjiang High-Speed Railway in Gobi Regions Under Strong Winds",
+      "verdict": "in_scope",
+      "reason": "The study on aerodynamic properties relates to environmental monitoring.",
+      "community_id": 2
+    },
+    "10631257": {
+      "model": "gpt-4o-mini",
+      "title": "From policy fragmentation to coordinated action: re-engineering local governance for smart city development and carbon targets",
+      "verdict": "in_scope",
+      "reason": "The focus on local governance for smart city development relates to sustainable development.",
+      "community_id": 3
+    },
+    "1769728": {
+      "model": "gpt-4o-mini",
+      "title": "Merging and Downscaling Soil Moisture Data From CMIP6 Projections Using Deep Learning Method",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on deep learning methods without clear environmental application.",
+      "community_id": 2
+    },
+    "6975998": {
+      "model": "gpt-4o-mini",
+      "title": "Evolution of hotspots and research trends in agricultural mulch film research: a bibliometric review",
+      "verdict": "out_of_scope",
+      "reason": "The bibliometric review on agricultural mulch film lacks direct environmental impact discussion.",
+      "community_id": 7
+    },
+    "6337159": {
+      "model": "gpt-4o-mini",
+      "title": "Spatial prediction of physical and chemical properties of soil using optical satellite imagery: a state-of-the-art hybridization of deep learning algorithm",
+      "verdict": "out_of_scope",
+      "reason": "The focus on hybrid deep learning algorithms lacks direct environmental relevance.",
+      "community_id": 7
+    },
+    "1177830": {
+      "model": "gpt-4o-mini",
+      "title": "Spatiotemporal model based on transformer for bias correction and temporal downscaling of forecasts",
+      "verdict": "in_scope",
+      "reason": "The title addresses bias correction and temporal downscaling relevant to environmental forecasts.",
+      "community_id": 2
+    },
+    "10558466": {
+      "model": "gpt-4o-mini",
+      "title": "An integrated framework combining multi-resolution satellite data, deep learning, and process-based modeling for urban carbon accounting",
+      "verdict": "in_scope",
+      "reason": "The framework integrates satellite data and modeling for urban carbon accounting, linking to environmental sciences.",
+      "community_id": 7
+    },
+    "5355401": {
+      "model": "gpt-4o-mini",
+      "title": "Water quality parameters retrieval of coastal mariculture ponds based on UAV multispectral remote sensing",
+      "verdict": "in_scope",
+      "reason": "The title focuses on water quality retrieval using remote sensing, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "963990": {
+      "model": "gpt-4o-mini",
+      "title": "Green Finance and Carbon Emission Reduction: A Bibliometric Analysis and Systematic Review",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on finance and carbon emissions without a clear environmental science context.",
+      "community_id": 3
+    },
+    "3870892": {
+      "model": "gpt-4o-mini",
+      "title": "An Ensemble Prediction System Based on Artificial Neural Networks and Deep Learning Methods for Deterministic and Probabilistic Carbon Price Forecasting",
+      "verdict": "out_of_scope",
+      "reason": "The title is centered on carbon price forecasting, lacking direct relevance to environmental science.",
+      "community_id": 3
+    },
+    "2888720": {
+      "model": "gpt-4o-mini",
+      "title": "Bibliometric study on environmental, social, and governance research using CiteSpace",
+      "verdict": "out_of_scope",
+      "reason": "The bibliometric study does not directly contribute to environmental science.",
+      "community_id": 3
+    },
+    "1439606": {
+      "model": "gpt-4o-mini",
+      "title": "Sustainable Crafts: Describing Conceptual Evolution Through a Bibliometric Analysis and Systematic Literature Review",
+      "verdict": "out_of_scope",
+      "reason": "The title discusses sustainable crafts without a clear link to environmental science.",
+      "community_id": 3
+    },
+    "309703": {
+      "model": "gpt-4o-mini",
+      "title": "Editorial: Application of Big Data, Deep Learning, Machine Learning, and Other Advanced Analytical Techniques in Environmental Economics and Policy",
+      "verdict": "out_of_scope",
+      "reason": "The editorial focuses on analytical techniques without specific environmental applications.",
+      "community_id": 3
+    },
+    "9793850": {
+      "model": "gpt-4o-mini",
+      "title": "Segmentation of arctic coastal shoreline and bluff edges using optical satellite imagery and deep learning",
+      "verdict": "in_scope",
+      "reason": "The title involves segmentation of coastal shorelines using satellite imagery, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "6419618": {
+      "model": "gpt-4o-mini",
+      "title": "Does the electric vehicle industry help achieve sustainable development goals?\u2014evidence from China",
+      "verdict": "out_of_scope",
+      "reason": "The title discusses the electric vehicle industry without a direct environmental science focus.",
+      "community_id": 3
+    },
+    "1816266": {
+      "model": "gpt-4o-mini",
+      "title": "Road grade estimation for vehicle emissions modeling using electronic atmospheric pressure sensors",
+      "verdict": "in_scope",
+      "reason": "The title relates to vehicle emissions modeling, which is pertinent to environmental monitoring.",
+      "community_id": 2
+    },
+    "7524222": {
+      "model": "gpt-4o-mini",
+      "title": "Data-driven novel deep learning applications for the prediction of rainfall using meteorological data",
+      "verdict": "in_scope",
+      "reason": "The title discusses rainfall prediction using meteorological data, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "10648452": {
+      "model": "gpt-4o-mini",
+      "title": "Transformer encoder for one-step-ahead AQI forecasting using multivariate air-quality monitoring data",
+      "verdict": "in_scope",
+      "reason": "The title focuses on air quality forecasting using monitoring data, relevant to environmental science.",
+      "community_id": 2
+    },
+    "9035395": {
+      "model": "gpt-4o-mini",
+      "title": "Forecasting Sea Level Rise Using Enhanced Deep Learning Models",
+      "verdict": "in_scope",
+      "reason": "The title addresses sea level rise forecasting, which is relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "3641389": {
+      "model": "gpt-4o-mini",
+      "title": "K-textures, a self-supervised hard clustering deep learning algorithm for satellite image segmentation",
+      "verdict": "in_scope",
+      "reason": "The title discusses satellite image segmentation, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "266336": {
+      "model": "gpt-4o-mini",
+      "title": "New techniques for old fires: Using deep learning to augment fire maps from the early satellite era",
+      "verdict": "in_scope",
+      "reason": "The title involves using deep learning for fire maps, relevant to environmental monitoring.",
+      "community_id": 2
+    },
+    "7806829": {
+      "model": "gpt-4o-mini",
+      "title": "A vulnerable soil environment study in karst areas: a bibliometric analysis",
+      "verdict": "out_of_scope",
+      "reason": "The title is a bibliometric analysis without a direct link to environmental science.",
+      "community_id": 7
+    },
+    "5273983": {
+      "model": "gpt-4o-mini",
+      "title": "BVLOS UAV missions for vegetation mapping in maritime Antarctic",
+      "verdict": "in_scope",
+      "reason": "The title discusses UAV missions for vegetation mapping, relevant to environmental monitoring.",
       "community_id": 2
     }
   },
@@ -7050,6 +7638,384 @@
       "title": "Bending Performance of Epoxy Adhesive Joints of Prefabricated Concrete Elements",
       "verdict": "in_scope",
       "reason": "Examines bending performance of concrete joints, relevant to construction materials.",
+      "community_id": 9
+    },
+    "5245688": {
+      "model": "gpt-4o-mini",
+      "title": "Transport properties of moisture and ionic chelators in concrete",
+      "verdict": "in_scope",
+      "reason": "Focuses on transport properties relevant to concrete materials.",
+      "community_id": 9
+    },
+    "6707066": {
+      "model": "gpt-4o-mini",
+      "title": "Interface bonding properties of new and old concrete: A review",
+      "verdict": "in_scope",
+      "reason": "Discusses interface bonding properties in concrete.",
+      "community_id": 9
+    },
+    "3026427": {
+      "model": "gpt-4o-mini",
+      "title": "Application of machine learning algorithms to evaluate the influence of various parameters on the flexural strength of ultra-high-performance concrete",
+      "verdict": "in_scope",
+      "reason": "Applies machine learning to evaluate concrete strength parameters.",
+      "community_id": 9
+    },
+    "6412968": {
+      "model": "gpt-4o-mini",
+      "title": "Environmentally friendly concrete material with early strength and fast hardening using coal as an aggregate: a case for supporting empty roadways",
+      "verdict": "in_scope",
+      "reason": "Explores environmentally friendly concrete materials.",
+      "community_id": 9
+    },
+    "8807983": {
+      "model": "gpt-4o-mini",
+      "title": "Energy Dissipation Properties of Backfill Materials under Compaction in Solid Waste Backfill Mining",
+      "verdict": "in_scope",
+      "reason": "Investigates energy dissipation properties of backfill materials.",
+      "community_id": 9
+    },
+    "2817988": {
+      "model": "gpt-4o-mini",
+      "title": "Influence of fault forms on the evolution of concrete damage patterns in tunnels",
+      "verdict": "in_scope",
+      "reason": "Analyzes concrete damage patterns in tunnels.",
+      "community_id": 9
+    },
+    "7189775": {
+      "model": "gpt-4o-mini",
+      "title": "Improving stability and safety in concrete structures against high-energy projectiles: a machine learning perspective",
+      "verdict": "in_scope",
+      "reason": "Focuses on stability and safety of concrete structures.",
+      "community_id": 9
+    },
+    "10649782": {
+      "model": "gpt-4o-mini",
+      "title": "Effect of fly ash and metakaolin on early-age autogenous shrinkage and mechanical properties of ultra-high-performance concrete",
+      "verdict": "in_scope",
+      "reason": "Studies effects of additives on concrete properties.",
+      "community_id": 9
+    },
+    "7875841": {
+      "model": "gpt-4o-mini",
+      "title": "Frost resistance and improvement techniques of recycled concrete: a comprehensive review",
+      "verdict": "in_scope",
+      "reason": "Reviews frost resistance techniques for recycled concrete.",
+      "community_id": 9
+    },
+    "1495026": {
+      "model": "gpt-4o-mini",
+      "title": "Simulation of the Flowability of Fresh Concrete by Discrete Element Method",
+      "verdict": "in_scope",
+      "reason": "Simulates flowability of fresh concrete.",
+      "community_id": 9
+    },
+    "4164242": {
+      "model": "gpt-4o-mini",
+      "title": "Residual Bond Behavior of Steel Reinforced Recycled Aggregate Concrete After Exposure to Elevated Temperatures",
+      "verdict": "in_scope",
+      "reason": "Examines bond behavior of recycled aggregate concrete.",
+      "community_id": 9
+    },
+    "8363063": {
+      "model": "gpt-4o-mini",
+      "title": "Research on optimization design of high-performance manufactured sand concrete material composition in seasonal frozen areas",
+      "verdict": "in_scope",
+      "reason": "Researches optimization of concrete material composition.",
+      "community_id": 9
+    },
+    "6104664": {
+      "model": "gpt-4o-mini",
+      "title": "Assessment of chlorine resistance in concrete in the tidal range and splash zone of a torrid marine region",
+      "verdict": "in_scope",
+      "reason": "Assesses chlorine resistance in concrete in marine environments.",
+      "community_id": 9
+    },
+    "4938370": {
+      "model": "gpt-4o-mini",
+      "title": "Fracture characteristics of a cement concrete pavement plate considering subgrade modulus decay based on a meshless finite block method",
+      "verdict": "in_scope",
+      "reason": "Studies fracture characteristics of concrete pavement.",
+      "community_id": 9
+    },
+    "3575782": {
+      "model": "gpt-4o-mini",
+      "title": "Seismic Performance of Recycled Concrete Filled Circular Steel Tube Columns",
+      "verdict": "in_scope",
+      "reason": "Analyzes seismic performance of recycled concrete structures.",
+      "community_id": 9
+    },
+    "1011483": {
+      "model": "gpt-4o-mini",
+      "title": "Temperature Effect on Mohr\u2013Coulomb\u2019s Effective Strength Parameters of Paste Backfill",
+      "verdict": "in_scope",
+      "reason": "Investigates temperature effects on backfill strength parameters.",
+      "community_id": 9
+    },
+    "1745929": {
+      "model": "gpt-4o-mini",
+      "title": "Machine learning techniques to evaluate the ultrasonic pulse velocity of hybrid fiber-reinforced concrete modified with nano-silica",
+      "verdict": "in_scope",
+      "reason": "Evaluates ultrasonic pulse velocity in hybrid fiber-reinforced concrete.",
+      "community_id": 9
+    },
+    "1178302": {
+      "model": "gpt-4o-mini",
+      "title": "Mechanical Characteristics and Stress Evolution of Cemented Paste Backfill: Effect of Curing Time, Solid Content, and Binder Content",
+      "verdict": "in_scope",
+      "reason": "Studies mechanical characteristics of cemented paste backfill.",
+      "community_id": 9
+    },
+    "5907076": {
+      "model": "gpt-4o-mini",
+      "title": "Study on mechanical properties and microstructure of steel-polypropylene fiber coal gangue concrete",
+      "verdict": "in_scope",
+      "reason": "Researches mechanical properties of fiber-reinforced concrete.",
+      "community_id": 9
+    },
+    "8646520": {
+      "model": "gpt-4o-mini",
+      "title": "Study on Mechanical Properties of Modified Steel Slag Powder Concrete after High Temperature",
+      "verdict": "in_scope",
+      "reason": "Studies mechanical properties of modified concrete after high temperature.",
+      "community_id": 9
+    },
+    "3099706": {
+      "model": "gpt-4o-mini",
+      "title": "Editorial: Corrosion of Reinforced Concrete Structures",
+      "verdict": "in_scope",
+      "reason": "Focuses on corrosion in concrete structures, relevant to materials science.",
+      "community_id": 9
+    },
+    "7491100": {
+      "model": "gpt-4o-mini",
+      "title": "Study on the modification effect and mechanism of composite solid waste and steel fiber on the mechanical properties of concrete",
+      "verdict": "in_scope",
+      "reason": "Investigates mechanical properties of modified concrete, fitting materials research.",
+      "community_id": 9
+    },
+    "2807657": {
+      "model": "gpt-4o-mini",
+      "title": "Analysis of Long-Term Durability Monitoring Data of High-Piled Wharf with Anode-Ladder Sensors Embedded in Concrete",
+      "verdict": "in_scope",
+      "reason": "Analyzes durability of concrete structures, relevant to materials engineering.",
+      "community_id": 9
+    },
+    "465355": {
+      "model": "gpt-4o-mini",
+      "title": "Factors Affecting Brittleness Behavior of Coal-Gangue Ceramsite Lightweight Aggregate Concrete",
+      "verdict": "in_scope",
+      "reason": "Examines brittleness in concrete aggregates, pertinent to materials science.",
+      "community_id": 9
+    },
+    "3095798": {
+      "model": "gpt-4o-mini",
+      "title": "Overall feasibility assessment of polyester polyurethane concrete used as steel bridge deck pavement",
+      "verdict": "in_scope",
+      "reason": "Assesses feasibility of concrete for bridge applications, relevant to materials.",
+      "community_id": 9
+    },
+    "2720719": {
+      "model": "gpt-4o-mini",
+      "title": "Numerical Analysis of Structural Performance of Concrete-GFRP Composite I-Beam",
+      "verdict": "in_scope",
+      "reason": "Focuses on structural performance of composite concrete, relevant to materials.",
+      "community_id": 9
+    },
+    "10097261": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental analysis of bending performance of secondary steel fibre-reinforced concrete and fuzzy optimisation of damage constitutive model",
+      "verdict": "in_scope",
+      "reason": "Experimental analysis of concrete performance, relevant to materials science.",
+      "community_id": 9
+    },
+    "2842836": {
+      "model": "gpt-4o-mini",
+      "title": "Mechanism of long-term strength retrogression of silica-enriched Portland cement assessed by quantitative X-ray diffraction analysis",
+      "verdict": "in_scope",
+      "reason": "Studies strength retrogression in cement, relevant to materials research.",
+      "community_id": 9
+    },
+    "23659": {
+      "model": "gpt-4o-mini",
+      "title": "Flexural Behavior of Simply Supported Beams Consisting of Gradient Concrete and GFRP Bars",
+      "verdict": "in_scope",
+      "reason": "Investigates flexural behavior of concrete beams, relevant to materials science.",
+      "community_id": 9
+    },
+    "2870279": {
+      "model": "gpt-4o-mini",
+      "title": "Numerical Simulation on Impact Test of CFRP Strengthened Reinforced Concrete Beams",
+      "verdict": "in_scope",
+      "reason": "Simulates impact tests on concrete beams, relevant to materials engineering.",
+      "community_id": 9
+    },
+    "3078946": {
+      "model": "gpt-4o-mini",
+      "title": "Dynamic Performance of Foam Concrete With Recycled Coir Fiber",
+      "verdict": "in_scope",
+      "reason": "Studies dynamic performance of foam concrete, relevant to materials science.",
+      "community_id": 9
+    },
+    "1312450": {
+      "model": "gpt-4o-mini",
+      "title": "Mechanical Properties and Microstructure Evolution of Cemented Tailings Backfill Under Seepage Pressure",
+      "verdict": "in_scope",
+      "reason": "Analyzes mechanical properties of backfill materials, relevant to materials.",
+      "community_id": 9
+    },
+    "8780445": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental research on microstructure characteristics and mechanical performance of interfaces between concrete layers",
+      "verdict": "in_scope",
+      "reason": "Researches microstructure of concrete interfaces, relevant to materials science.",
+      "community_id": 9
+    },
+    "1699180": {
+      "model": "gpt-4o-mini",
+      "title": "Adapting Artificial Intelligence to Improve In Situ Concrete Compressive Strength Estimations in Rebound Hammer Tests",
+      "verdict": "in_scope",
+      "reason": "Applies AI to concrete strength estimation, relevant to materials engineering.",
+      "community_id": 9
+    },
+    "1098987": {
+      "model": "gpt-4o-mini",
+      "title": "Editorial: Intelligent Concrete, New Functionalities and Nanotechnology",
+      "verdict": "in_scope",
+      "reason": "Discusses intelligent concrete and nanotechnology, relevant to materials science.",
+      "community_id": 9
+    },
+    "578382": {
+      "model": "gpt-4o-mini",
+      "title": "Steel rebar corrosion and corrosion-induced cracking in reinforced foamed concrete",
+      "verdict": "in_scope",
+      "reason": "Examines corrosion in foamed concrete, relevant to materials research.",
+      "community_id": 9
+    },
+    "3005799": {
+      "model": "gpt-4o-mini",
+      "title": "Impact of Chemically Treated Waste Rubber Tire Aggregates on Mechanical, Durability and Thermal Properties of Concrete",
+      "verdict": "in_scope",
+      "reason": "Studies effects of waste rubber on concrete properties, relevant to materials.",
+      "community_id": 9
+    },
+    "45811": {
+      "model": "gpt-4o-mini",
+      "title": "Durability and life prediction analysis of recycled aggregate concrete with ceramic waste powder under freeze-thaw conditions based on impact-echo method and Grey-Markov model",
+      "verdict": "in_scope",
+      "reason": "Analyzes durability of recycled concrete, relevant to materials science.",
+      "community_id": 9
+    },
+    "2662161": {
+      "model": "gpt-4o-mini",
+      "title": "Residual Properties and Axial Bearing Capacity of Steel Reinforced Recycled Aggregate Concrete Column Exposed to Elevated Temperatures",
+      "verdict": "in_scope",
+      "reason": "Investigates properties of recycled concrete under temperature exposure, relevant to materials.",
+      "community_id": 9
+    },
+    "7271814": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental study on mechanical properties of basalt fiber reinforced nano-SiO2 concrete after high temperature",
+      "verdict": "in_scope",
+      "reason": "Studies mechanical properties of high-temperature concrete, relevant to materials science.",
+      "community_id": 9
+    },
+    "8741969": {
+      "model": "gpt-4o-mini",
+      "title": "Analytical investigation on resolution calculation method for nonlinear temperature load of steel-concrete composite girders",
+      "verdict": "in_scope",
+      "reason": "Focuses on a method relevant to the analysis of construction materials.",
+      "community_id": 9
+    },
+    "9416503": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental and numerical analysis on frost heave cracking of prestressed high-strength concrete (PHC) pipe piles in cold regions",
+      "verdict": "in_scope",
+      "reason": "Addresses frost heave cracking in concrete, relevant to construction materials.",
+      "community_id": 9
+    },
+    "3406889": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental Investigation on Strength and Failure Characteristics of Cemented Paste Backfill",
+      "verdict": "in_scope",
+      "reason": "Investigates characteristics of cemented paste backfill, a construction material.",
+      "community_id": 9
+    },
+    "5898920": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental study of high temperature on the shear properties of early-age concrete",
+      "verdict": "in_scope",
+      "reason": "Studies the effects of high temperature on concrete properties, relevant to materials.",
+      "community_id": 9
+    },
+    "1836076": {
+      "model": "gpt-4o-mini",
+      "title": "Chemically treated plastic replacing fine aggregate in structural concrete",
+      "verdict": "in_scope",
+      "reason": "Explores the use of treated plastic in concrete, relevant to material innovation.",
+      "community_id": 9
+    },
+    "4814909": {
+      "model": "gpt-4o-mini",
+      "title": "Effect of thermal cycles on the engineering properties and durability of sustainable fibrous high-strength concrete",
+      "verdict": "in_scope",
+      "reason": "Examines thermal cycles on concrete durability, relevant to construction materials.",
+      "community_id": 9
+    },
+    "4950122": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental investigation and optimization of lightweight concrete bricks developed using vermiculite",
+      "verdict": "in_scope",
+      "reason": "Investigates lightweight concrete bricks, relevant to construction materials.",
+      "community_id": 9
+    },
+    "5907893": {
+      "model": "gpt-4o-mini",
+      "title": "Investigation on permanent deformation in steel-concrete composite beam bridge deck pavement under temperature-load coupling effect",
+      "verdict": "in_scope",
+      "reason": "Focuses on deformation in composite beam bridge decks, relevant to construction materials.",
+      "community_id": 9
+    },
+    "6109327": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental investigation on the flexural behavior of concrete reinforced by various types of steel fibers",
+      "verdict": "in_scope",
+      "reason": "Studies the flexural behavior of concrete with steel fibers, relevant to material properties.",
+      "community_id": 9
+    },
+    "3546235": {
+      "model": "gpt-4o-mini",
+      "title": "Structural Design and Analysis for a Timber-Concrete Hybrid Building",
+      "verdict": "in_scope",
+      "reason": "Discusses structural design involving timber-concrete, relevant to construction materials.",
+      "community_id": 9
+    },
+    "10653086": {
+      "model": "gpt-4o-mini",
+      "title": "Rate dependence of corrosion-induced surface cracking in concrete: lattice modelling and experiments",
+      "verdict": "in_scope",
+      "reason": "Analyzes corrosion-induced cracking in concrete, relevant to material durability.",
+      "community_id": 9
+    },
+    "2894235": {
+      "model": "gpt-4o-mini",
+      "title": "Investigation on Shear Capacity of Joints between Steel Reinforced Concrete Special-Shaped Column and Reinforced Concrete Beam",
+      "verdict": "in_scope",
+      "reason": "Investigates shear capacity in reinforced concrete joints, relevant to construction materials.",
+      "community_id": 9
+    },
+    "241652": {
+      "model": "gpt-4o-mini",
+      "title": "Analysis of Biaxial Mechanical Properties and Failure Criterion of Self-Compacting Concrete",
+      "verdict": "in_scope",
+      "reason": "Analyzes mechanical properties of self-compacting concrete, relevant to construction materials.",
+      "community_id": 9
+    },
+    "5682645": {
+      "model": "gpt-4o-mini",
+      "title": "Long-term mechanical performance of high fluidity fiber reinforced concrete modified by metakaolin",
+      "verdict": "in_scope",
+      "reason": "Studies the performance of fiber reinforced concrete, relevant to material properties.",
       "community_id": 9
     }
   },
