@@ -102,17 +102,24 @@
   /* ── Community table ── */
   const tb2=document.querySelector("#tblComm tbody");
   if (tb2) {
+    const esc=(s)=>String(s||"")
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
     C.slice(0,20).forEach(c=>{
-      const trueDom = (c.true_dominant_journal||"Unknown").slice(0,35);
-      const trueDomPct = (c.true_dominant_pct||0).toFixed(1);
-      const topFront = (c.top_frontiers_journal||c.dominant_journal||"Unknown").slice(0,30);
-      const topFrontPct = (c.top_frontiers_pct||c.dominant_pct||0).toFixed(2);
+      const theme=esc((c.label||("C"+c.id)).slice(0,55));
+      const longLab=esc(c.long_label||"");
+      const desc=esc(c.description||c.summary||c.long_label||"");
+      const kws=(c.keywords||[]).map(k=>esc(k)).filter(Boolean);
+      const kwHtml=kws.length
+        ? "<div class='muted' style='margin-top:4px;font-size:0.85em'><b>Keywords:</b> "+kws.join("; ")+"</div>"
+        : "";
+      const longHtml=(longLab && longLab!==theme)
+        ? "<div class='muted' style='font-size:0.85em;margin-top:2px'>"+longLab+"</div>"
+        : "";
       const tr=document.createElement("tr");
-      tr.innerHTML="<td><b>"+(c.label||("C"+c.id)).slice(0,55)+"</b></td>"
+      tr.innerHTML="<td><b>"+theme+"</b>"+longHtml+"</td>"
         +"<td class='num'>"+c.size.toLocaleString()+"</td>"
-        +"<td class='num'>"+c.frontiers_pct.toFixed(1)+"%</td>"
-        +"<td>"+trueDom+" <span class='muted'>("+trueDomPct+"%)</span></td>"
-        +"<td>"+topFront+" <span class='muted'>("+topFrontPct+"%)</span></td>";
+        +"<td style='max-width:520px;white-space:normal;line-height:1.35'>"+desc+kwHtml+"</td>";
       tb2.appendChild(tr);
     });
   }

@@ -174,6 +174,53 @@ def top_oos_labels(j: dict, n: int = 2) -> str:
     return f"{labels[0]}, {labels[1]}"
 
 
+def _join_labels(labels: list[str], limit: int = 3) -> str:
+    labels = [str(x).strip() for x in labels if str(x).strip()][:limit]
+    if not labels:
+        return "its main topics"
+    if len(labels) == 1:
+        return labels[0]
+    if len(labels) == 2:
+        return f"{labels[0]} and {labels[1]}"
+    return f"{', '.join(labels[:-1])}, and {labels[-1]}"
+
+
+def primary_shift_sentence(j: dict, short: str) -> str:
+    """One sentence on whether primary clusters changed since ~2020 and where they went."""
+    ps = j.get("primary_shift") or {}
+    if not ps or ps.get("insufficient_data"):
+        return (
+            f"There is not enough year-level volume to say cleanly whether "
+            f"{short}'s primary clusters have changed since 2020."
+        )
+
+    by = int(ps.get("baseline_year") or 2020)
+    ly = int(ps.get("latest_year") or 2026)
+    base_labels = [r.get("label") for r in (ps.get("baseline_top") or [])]
+    late_labels = [r.get("label") for r in (ps.get("latest_top") or [])]
+    gained = [x for x in (ps.get("gained_labels") or []) if x]
+    lost = [x for x in (ps.get("lost_labels") or []) if x]
+    changed = ps.get("changed")
+
+    if changed is False:
+        return (
+            f"Its primary clusters have not meaningfully changed since {by} — "
+            f"still centred on {_join_labels(base_labels or late_labels)}."
+        )
+
+    # changed or unknown-but-present
+    bits = [f"Its primary clusters have changed since {by}."]
+    if lost:
+        bits.append(f"Areas that have left the core include {_join_labels(lost, 2)}.")
+    if gained:
+        bits.append(f"Newer core areas include {_join_labels(gained, 2)}.")
+    bits.append(
+        f"In {ly} the largest core topics are {_join_labels(late_labels)} "
+        f"(versus {_join_labels(base_labels)} in {by})."
+    )
+    return " ".join(bits)
+
+
 def commentary(j: dict, jsd: float, entropy_delta: float, band: str) -> list[str]:
     short = bare_journal(j["name"])
     arts = int(j.get("articles") or 0)
@@ -215,16 +262,49 @@ def commentary(j: dict, jsd: float, entropy_delta: float, band: str) -> list[str
         f"Right now, about {round(oos_pct)}% of {short}'s papers ({fmt_int(oos)} out of "
         f"{fmt_int(arts)}) fall outside its core subject clusters — mostly work related to "
         f"{oos_topics}. {trend_clause} {entropy_phrase(entropy_delta)} Its largest single "
-        f"topic area today is “{top_label}.”"
+        f"topic area today is “{top_label}.” {primary_shift_sentence(j, short)}"
     )
     return [p1, p2]
 
 
-def example_split(j: dict, n: int = 5) -> tuple[list[str], list[str]]:
+def example_split(
+    j: dict, n: int = 5, prefer_year: int = 2026
+) -> tuple[list[str], list[str]]:
+    """Prefer prefer_year titles; fill from more recent years, then older.
+
+    Out-of-scope prefers really-OOS examples in prefer_year: clear flags
+    (hard_negative / paper_demoted), then titles that do not look on-topic.
+    """
     examples = j.get("example_papers") or []
-    ins = [str(e.get("title") or "") for e in examples if e.get("is_in_scope")][:n]
-    outs = [str(e.get("title") or "") for e in examples if not e.get("is_in_scope")][:n]
-    return [t for t in ins if t], [t for t in outs if t]
+
+    def _oos_rank(e: dict) -> tuple:
+        clear = 1 if (e.get("clear_oos") or e.get("hard_negative") or e.get("paper_demoted")) else 0
+        # Prefer titles that do NOT still look on-scope for the journal.
+        off_topic = 0 if e.get("title_on_scope") else 1
+        foreign = 1 if e.get("foreign_community") else 0
+        return (
+            0 if e.get("year") == prefer_year else 1,
+            -clear,
+            -off_topic,
+            -foreign,
+            -(int(e.get("year") or 0)),
+        )
+
+    def _pick(in_scope: bool) -> list[str]:
+        pool = [e for e in examples if bool(e.get("is_in_scope")) == in_scope]
+        if in_scope:
+            preferred = [e for e in pool if e.get("year") == prefer_year]
+            rest = sorted(
+                [e for e in pool if e.get("year") != prefer_year],
+                key=lambda e: -(int(e.get("year") or 0)),
+            )
+            ordered = preferred + rest
+        else:
+            ordered = sorted(pool, key=_oos_rank)
+        titles = [str(e.get("title") or "") for e in ordered]
+        return [t for t in titles if t][:n]
+
+    return _pick(True), _pick(False)
 
 
 def build_rows(scope: dict, drift: dict) -> list[dict]:
@@ -970,7 +1050,10 @@ def build_pdf(
     for r in rows:
         j = r["journal"]
         paras = commentary(j, r["jsd"], r["entropy_delta"], r["band"])
-        ins, outs = example_split(j)
+        # Long titles on these journals overflow; fewer examples keep each to one sheet.
+        name = j.get("name") or ""
+        n_examples = 3 if ("Environmental Science" in name or "Surgery" in name) else 5
+        ins, outs = example_split(j, n=n_examples)
         story.append(PageBreak())
         story.append(journal_title_row(j["name"], r["band"], styles))
         story.append(Spacer(1, 6))

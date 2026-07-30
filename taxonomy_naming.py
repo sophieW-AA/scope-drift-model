@@ -24,6 +24,7 @@ Usage:
 
 Output:
     cwts_output/cluster_taxonomy_labels.csv
+    cwts_output/{macro|meso|micro}_labels.csv  (dashboard-compatible; replaces GPT labels)
 """
 
 import json
@@ -58,7 +59,7 @@ log = logging.getLogger(__name__)
 PROJECT_BILL = "ocean-tech-adv-analytics-c-esf"
 PROJECT_DATA = "ocean-tech-adv-analytics-c-esf"
 BQ_SRC_PROJECT = "ocean-tech-adv-analytics-c-tfs"
-BQ_SRC_DATASET = "scope_drift_raw"
+BQ_SRC_DATASET = "raw_citation_network_data"
 
 # Source tables
 TBL_SCORES = f"{PROJECT_DATA}.aa_taxonomy.article_taxonomy_scores_current"
@@ -921,6 +922,60 @@ def flatten_results(llm_results: dict, community_ids: list) -> pd.DataFrame:
     return df_out
 
 
+def export_dashboard_labels(df_out: pd.DataFrame, cluster_level: str) -> Path:
+    """Write {level}_labels.csv so build_unified_dashboard can load taxonomy names.
+
+    Uses the top-ranked core taxonomy name per community as short_label.
+    """
+    if df_out.empty:
+        raise ValueError("No taxonomy label rows to export")
+
+    core = df_out[df_out["tier"] == "core"].copy()
+    if core.empty:
+        core = df_out.copy()
+    core = core.sort_values(["community_id", "cluster_rank"])
+    top = core.groupby("community_id", as_index=False).first()
+
+    rows = []
+    for _, r in top.iterrows():
+        name = str(r.get("cluster_name") or "").strip()
+        if not name:
+            name = f"Cluster {int(r['community_id'])}"
+        # Title Case for dashboard consistency with former GPT labels
+        short = " ".join(
+            w if w.isupper() else w.capitalize()
+            for w in name.replace("_", " ").split()
+        )
+        bleed = df_out[
+            (df_out["community_id"] == r["community_id"]) & (df_out["tier"] == "bleed")
+        ].sort_values("cluster_rank")
+        keywords = [str(x) for x in bleed["cluster_name"].dropna().tolist()[:10]]
+        rows.append(
+            {
+                "short_label": short,
+                "long_label": short,
+                "keywords": repr(keywords),
+                "summary": str(r.get("llm_reasoning") or ""),
+                "wikipedia_page": "",
+                "coverage_pct": "",
+                "level": cluster_level,
+                "cluster_id": int(r["community_id"]),
+                "n_papers": int(r.get("n_community_papers") or 0),
+                "taxonomy_key": str(r.get("cluster_key") or ""),
+                "taxonomy_level": str(r.get("taxonomy_level") or ""),
+                "match_mode": str(r.get("match_mode") or ""),
+                "source": "taxonomy",
+            }
+        )
+
+    out = pd.DataFrame(rows).sort_values("cluster_id")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    path = OUTPUT_DIR / f"{cluster_level}_labels.csv"
+    out.to_csv(path, index=False)
+    log.info("Dashboard labels saved to %s (%d clusters)", path, len(out))
+    return path
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 10. MAIN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -973,6 +1028,9 @@ def main(run_timestamp: str):
     output_path = OUTPUT_DIR / "cluster_taxonomy_labels.csv"
     df_out.to_csv(output_path, index=False)
     log.info("Saved to %s", output_path)
+
+    # Also write {level}_labels.csv for dashboards (replaces GPT label_clusters output)
+    export_dashboard_labels(df_out, CLUSTER_LEVEL)
     
     # Summary
     log.info("=" * 60)

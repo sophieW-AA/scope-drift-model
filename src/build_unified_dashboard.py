@@ -303,11 +303,21 @@ def load_gpt_labels_all() -> dict:
             df = pd.read_csv(labels_file)
             for _, row in df.iterrows():
                 cluster_id = int(row["cluster_id"])
+                raw_kw = row["keywords"] if "keywords" in row.index else None
+                try:
+                    keywords = eval(raw_kw) if pd.notna(raw_kw) else []
+                except Exception:
+                    keywords = []
+                if not isinstance(keywords, list):
+                    keywords = []
                 labels[level][cluster_id] = {
                     "short_label": row["short_label"],
                     "long_label": row.get("long_label", row["short_label"]),
-                    "keywords": (
-                        eval(row["keywords"]) if pd.notna(row.get("keywords")) else []
+                    "keywords": keywords,
+                    "summary": (
+                        str(row["summary"])
+                        if "summary" in row.index and pd.notna(row.get("summary"))
+                        else ""
                     ),
                 }
             log.info(f"       {level}_labels.csv: {len(labels[level])} labels")
@@ -411,6 +421,13 @@ def compute_scatter_positions(df: pd.DataFrame, df_cit: pd.DataFrame) -> dict:
 def compute_primary_clusters(df: pd.DataFrame, journal: str) -> set:
     """Find smallest set of clusters covering PRIMARY_COVERAGE of papers."""
     jdf = df[df["journal"] == journal]
+    return compute_primary_clusters_from_frame(jdf)
+
+
+def compute_primary_clusters_from_frame(jdf: pd.DataFrame) -> set:
+    """Primary clusters for an already-filtered journal frame."""
+    if jdf.empty:
+        return set()
     counts = jdf[CLUSTER_LEVEL].value_counts()
     total = counts.sum()
 
@@ -422,6 +439,325 @@ def compute_primary_clusters(df: pd.DataFrame, journal: str) -> set:
         if cumsum >= total * PRIMARY_COVERAGE:
             break
     return primary
+
+
+def _primary_share_rows(jdf: pd.DataFrame, primary: set, top_n: int = 5) -> list[dict]:
+    """Rank primary clusters by share within a year/journal slice."""
+    if jdf.empty or not primary:
+        return []
+    counts = jdf[CLUSTER_LEVEL].value_counts()
+    total = int(counts.sum()) or 1
+    rows = []
+    for comm in primary:
+        n = int(counts.get(comm, 0))
+        rows.append(
+            {
+                "comm_id": int(comm),
+                "label": GPT_LABELS.get(int(comm), f"Cluster {comm}"),
+                "papers": n,
+                "share_of_year": round(n / total * 100, 1),
+            }
+        )
+    rows.sort(key=lambda r: (-r["papers"], r["comm_id"]))
+    return rows[:top_n]
+
+
+def compute_primary_shift(
+    jdf: pd.DataFrame,
+    baseline_year: int = 2020,
+    latest_year: int | None = None,
+    min_papers: int = 10,
+) -> dict:
+    """
+    Compare primary-cluster sets for baseline_year vs the latest year with enough papers.
+    Used in PDF commentary (“have primary clusters changed since 2020?”).
+    """
+    years = sorted(int(y) for y in jdf["pub_year"].dropna().unique())
+    if not years:
+        return {}
+
+    if latest_year is None:
+        latest_year = years[-1]
+    if latest_year not in years:
+        latest_year = years[-1]
+
+    base_year = baseline_year if baseline_year in years else years[0]
+    base_df = jdf[jdf["pub_year"] == base_year]
+    late_df = jdf[jdf["pub_year"] == latest_year]
+    if len(base_df) < min_papers or len(late_df) < min_papers:
+        return {
+            "baseline_year": int(base_year),
+            "latest_year": int(latest_year),
+            "changed": None,
+            "insufficient_data": True,
+            "baseline_top": [],
+            "latest_top": [],
+            "gained_labels": [],
+            "lost_labels": [],
+        }
+
+    base_primary = compute_primary_clusters_from_frame(base_df)
+    late_primary = compute_primary_clusters_from_frame(late_df)
+    base_top = _primary_share_rows(base_df, base_primary)
+    late_top = _primary_share_rows(late_df, late_primary)
+
+    base_ids = {r["comm_id"] for r in base_top}
+    late_ids = {r["comm_id"] for r in late_top}
+    # Also compare full primary sets (not only top_n rows)
+    full_base = {int(c) for c in base_primary}
+    full_late = {int(c) for c in late_primary}
+    gained_ids = sorted(full_late - full_base)
+    lost_ids = sorted(full_base - full_late)
+    changed = full_base != full_late
+
+    return {
+        "baseline_year": int(base_year),
+        "latest_year": int(latest_year),
+        "changed": changed,
+        "insufficient_data": False,
+        "baseline_primary_ids": sorted(full_base),
+        "latest_primary_ids": sorted(full_late),
+        "baseline_top": base_top,
+        "latest_top": late_top,
+        "gained_labels": [
+            GPT_LABELS.get(cid, f"Cluster {cid}") for cid in gained_ids
+        ],
+        "lost_labels": [
+            GPT_LABELS.get(cid, f"Cluster {cid}") for cid in lost_ids
+        ],
+        # Convenience for light overlap checks
+        "top_overlap": sorted(base_ids & late_ids),
+    }
+
+
+def _default_on_scope_title_patterns(journal: str) -> list[str]:
+    """Heuristic title patterns that suggest a paper still belongs to the journal."""
+    bare = re.sub(r"(?i)^frontiers\s+in\s+", "", journal or "").strip().lower()
+    extras = {
+        "surgery": [
+            r"(?i)\b(surg(?:ery|ical|eon)?|operati(?:on|ve)|perioperati(?:ve)?|"
+            r"postoperati(?:ve)?|intraoperati(?:ve)?|laparoscop\w*|laparotom\w*|"
+            r"endoscop\w*|resect\w*|arthroscop\w*|anesthes\w*|thyroidectomy|"
+            r"portoenterostom\w*|fasciotom\w*|fracture|ercp|orthop\w*|implant|"
+            r"catheter|anastomosis|hernia|transplant|biopsy|incision|wound|"
+            r"flap|graft|tka|osseointegr\w*|tumor|sarcoma|metastas\w*|"
+            r"pseudotumor|reconstruct\w*|patellar|femoral|condyle|perforator|"
+            r"mammary|clinical|patient|case\s+report|rhizotomy|cholecyst\w*|"
+            r"neuromonitor\w*|carpal\s+tunnel|rotator\s+cuff|brachial\s+plexus|"
+            r"glioma|corneal|abdominal|tubal|fertility|cadaveric|spasticity)\b"
+        ],
+        "neurorobotics": [
+            r"(?i)\b(neuro(?:robotics?)?|robot(?:ic|ics)?|bci|eeg|emg|"
+            r"prosthetic|motor\s+imagery|brain[- ]computer|sensorimotor)\b"
+        ],
+        "earth science": [
+            r"(?i)\b(geolog\w*|seismic|earthquake|volcan\w*|tectonic|"
+            r"sediment\w*|stratigraph\w*|paleoclim\w*|geophys\w*|geoinformatic)\b"
+        ],
+        "environmental science": [
+            r"(?i)\b(environment\w*|ecolog\w*|pollut\w*|emission\w*|"
+            r"biodiversity|ecosystem|wetland|watershed|air\s+quality|"
+            r"water\s+quality|climate|carbon\s+sequestr\w*|invasive\s+species|"
+            r"coastal|earth\s+observation|species\s+distribution|monitoring|"
+            r"cadmium|soil|plantation|land\s+use|sustainab\w*|heritage|"
+            r"geospatial|contamination|remediat\w*)\b"
+        ],
+        "aging neuroscience": [
+            r"(?i)\b(aging|ageing|alzheimer|parkinson|neurodegener\w*|"
+            r"dementia|cognitive|brain\s+aging)\b"
+        ],
+        "chemistry": [r"(?i)\b(chem(?:istry|ical)|synthesis|catalyst|molecule|polymer)\b"],
+        "materials": [r"(?i)\b(material\w*|alloy|ceramic|composite|polymer|nano\w*)\b"],
+        "robotics and ai": [
+            r"(?i)\b(robot(?:ic|ics)?|reinforcement\s+learning|autonom(?:ous|y)|"
+            r"manipulator|humanoid)\b"
+        ],
+    }
+    pats = list(extras.get(bare, []))
+    for tok in re.split(r"\W+", bare):
+        if len(tok) >= 5:
+            pats.append(rf"(?i)\b{re.escape(tok)}")
+    return pats
+
+
+def _on_scope_title_patterns(journal: str) -> list[re.Pattern]:
+    cfg = load_hard_negative_config()
+    jcfg = (cfg.get("journals") or {}).get(journal) or {}
+    raw = jcfg.get("on_scope_title_patterns") or _default_on_scope_title_patterns(journal)
+    compiled = []
+    for p in raw:
+        try:
+            compiled.append(re.compile(p))
+        except re.error:
+            continue
+    return compiled
+
+
+def _title_suggests_on_scope(title: str, patterns: list[re.Pattern]) -> bool:
+    if not title or not patterns:
+        return False
+    return any(p.search(title) for p in patterns)
+
+
+def sample_example_papers(
+    jdf: pd.DataFrame,
+    n_each: int = 20,
+    prefer_year: int = 2026,
+    random_state: int = 42,
+    journal: str | None = None,
+) -> list[dict]:
+    """
+    Sample in-scope and out-of-scope example titles, preferring prefer_year
+    (fallback to more recent years, then older).
+
+    Out-of-scope examples prefer really-OOS papers in prefer_year:
+    hard-negative / paper-LLM demotions first, then titles that do not look
+    on-topic for the journal (avoids surgical papers falsely clustered OOS, etc.).
+    """
+
+    def _pick_by_year(pool: pd.DataFrame, n: int) -> pd.DataFrame:
+        if pool.empty or n <= 0:
+            return pool.iloc[0:0]
+        preferred = pool[pool["pub_year"] == prefer_year]
+        if len(preferred) >= n:
+            return preferred.sample(n=n, random_state=random_state)
+        parts = [preferred] if len(preferred) else []
+        need = n - len(preferred)
+        others = pool[pool["pub_year"] != prefer_year]
+        for y in sorted(others["pub_year"].dropna().unique(), reverse=True):
+            if need <= 0:
+                break
+            ydf = others[others["pub_year"] == y]
+            take_n = min(need, len(ydf))
+            parts.append(ydf.sample(n=take_n, random_state=random_state))
+            need -= take_n
+        return pd.concat(parts) if parts else pool.iloc[0:0]
+
+    def _sample_n(pool: pd.DataFrame, n: int) -> pd.DataFrame:
+        if pool.empty or n <= 0:
+            return pool.iloc[0:0]
+        take = min(n, len(pool))
+        return pool.sample(n=take, random_state=random_state)
+
+    def _pick_oos(pool: pd.DataFrame, n: int) -> pd.DataFrame:
+        """Year-major: clear OOS, then off-topic titles, then remaining."""
+        if pool.empty or n <= 0:
+            return pool.iloc[0:0]
+        jname = journal or (
+            str(pool["journal"].iloc[0]) if "journal" in pool.columns and len(pool) else ""
+        )
+        on_scope_re = _on_scope_title_patterns(jname)
+        hn = (
+            pool["hard_negative"].fillna(False).astype(bool)
+            if "hard_negative" in pool.columns
+            else pd.Series(False, index=pool.index)
+        )
+        dem = (
+            pool["paper_demoted"].fillna(False).astype(bool)
+            if "paper_demoted" in pool.columns
+            else pd.Series(False, index=pool.index)
+        )
+        clear_mask = hn | dem
+        titles = pool["title"].fillna("").astype(str)
+        on_scope_mask = titles.map(lambda t: _title_suggests_on_scope(t, on_scope_re))
+
+        # Communities whose labels share tokens with in-scope communities are less
+        # persuasive as "really OOS" examples.
+        in_scope_ids = set(
+            int(c)
+            for c in jdf.loc[~jdf["is_oos"], CLUSTER_LEVEL].dropna().unique()
+        )
+        in_tokens: set[str] = set()
+        for cid in in_scope_ids:
+            lab = str(GPT_LABELS.get(int(cid), "")).lower()
+            in_tokens.update(t for t in re.split(r"\W+", lab) if len(t) >= 4)
+
+        def _foreign_comm(cid) -> bool:
+            lab = str(GPT_LABELS.get(int(cid), "")).lower()
+            tokens = {t for t in re.split(r"\W+", lab) if len(t) >= 4}
+            return not (tokens & in_tokens)
+
+        foreign_mask = pool[CLUSTER_LEVEL].map(_foreign_comm)
+
+        years = []
+        if (pool["pub_year"] == prefer_year).any():
+            years.append(prefer_year)
+        years.extend(
+            int(y)
+            for y in sorted(pool["pub_year"].dropna().unique(), reverse=True)
+            if int(y) != prefer_year
+        )
+
+        parts: list[pd.DataFrame] = []
+        need = n
+        for y in years:
+            if need <= 0:
+                break
+            ymask = pool["pub_year"] == y
+            for tier_mask in (
+                clear_mask,
+                ~clear_mask & ~on_scope_mask & foreign_mask,
+                ~clear_mask & ~on_scope_mask & ~foreign_mask,
+                ~clear_mask & on_scope_mask,
+            ):
+                if need <= 0:
+                    break
+                pick = _sample_n(pool[ymask & tier_mask], need)
+                if len(pick):
+                    parts.append(pick)
+                    need -= len(pick)
+        return pd.concat(parts) if parts else pool.iloc[0:0]
+
+    in_scope_df = _pick_by_year(jdf[~jdf["is_oos"]], n_each)
+    out_scope_df = _pick_oos(jdf[jdf["is_oos"]], n_each)
+    jname = journal or (
+        str(jdf["journal"].iloc[0]) if "journal" in jdf.columns and len(jdf) else ""
+    )
+    on_scope_re = _on_scope_title_patterns(jname)
+    in_scope_ids = set(
+        int(c) for c in jdf.loc[~jdf["is_oos"], CLUSTER_LEVEL].dropna().unique()
+    )
+    in_tokens: set[str] = set()
+    for cid in in_scope_ids:
+        lab = str(GPT_LABELS.get(int(cid), "")).lower()
+        in_tokens.update(t for t in re.split(r"\W+", lab) if len(t) >= 4)
+
+    example_papers = []
+    for _, row in in_scope_df.iterrows():
+        comm_id = int(row[CLUSTER_LEVEL])
+        example_papers.append(
+            {
+                "title": str(row["title"] or "Untitled"),
+                "year": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
+                "is_in_scope": True,
+                "is_borderline": bool(row["is_borderline"]),
+                "community_id": comm_id,
+                "community_label": GPT_LABELS.get(comm_id, f"Cluster {comm_id}"),
+            }
+        )
+    for _, row in out_scope_df.iterrows():
+        comm_id = int(row[CLUSTER_LEVEL])
+        title = str(row["title"] or "Untitled")
+        hn = bool(row.get("hard_negative"))
+        dem = bool(row.get("paper_demoted"))
+        lab = str(GPT_LABELS.get(comm_id, "")).lower()
+        tokens = {t for t in re.split(r"\W+", lab) if len(t) >= 4}
+        example_papers.append(
+            {
+                "title": title,
+                "year": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
+                "is_in_scope": False,
+                "is_borderline": False,
+                "community_id": comm_id,
+                "community_label": GPT_LABELS.get(comm_id, f"Cluster {comm_id}"),
+                "hard_negative": hn,
+                "paper_demoted": dem,
+                "clear_oos": hn or dem,
+                "title_on_scope": _title_suggests_on_scope(title, on_scope_re),
+                "foreign_community": not (tokens & in_tokens),
+            }
+        )
+    return example_papers
 
 
 def _community_centroids(jdf: pd.DataFrame, positions: dict) -> dict:
@@ -1316,37 +1652,12 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                     "s": s,
                 })
 
-        # Get example papers (20 in-scope, 20 out-of-scope)
-        in_scope_df = jdf[~jdf["is_oos"]].sample(
-            n=min(20, len(jdf[~jdf["is_oos"]])), random_state=42
+        # Prefer 2026 titles when available; fall back to more recent years.
+        # OOS examples prefer clear/hard-negative demotions, then off-topic titles.
+        example_papers = sample_example_papers(
+            jdf, n_each=20, prefer_year=2026, random_state=42, journal=journal
         )
-        out_scope_df = jdf[jdf["is_oos"]].sample(
-            n=min(20, len(jdf[jdf["is_oos"]])), random_state=42
-        )
-
-        example_papers = []
-        for _, row in in_scope_df.iterrows():
-            comm_id = int(row[CLUSTER_LEVEL])
-            example_papers.append({
-                "title": str(row["title"] or "Untitled"),
-                "year": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
-                "is_in_scope": True,
-                "is_borderline": bool(row["is_borderline"]),
-                "community_id": comm_id,
-                "community_label": GPT_LABELS.get(comm_id, f"Cluster {comm_id}"),
-            })
-        for _, row in out_scope_df.iterrows():
-            comm_id = int(row[CLUSTER_LEVEL])
-            example_papers.append({
-                "title": str(row["title"] or "Untitled"),
-                "year": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
-                "is_in_scope": False,
-                "is_borderline": False,
-                "community_id": comm_id,
-                "community_label": GPT_LABELS.get(comm_id, f"Cluster {comm_id}"),
-                "hard_negative": bool(row.get("hard_negative")),
-                "paper_demoted": bool(row.get("paper_demoted")),
-            })
+        primary_shift = compute_primary_shift(jdf, baseline_year=2020)
 
         borderline_ids = [int(c) for c in sorted(borderline_clusters, key=int)]
         journals_data.append({
@@ -1372,6 +1683,7 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
             "paper_scope_overrides": paper_overrides,
             "top_communities": top_comms,
             "oos_by_year": oos_by_year,
+            "primary_shift": primary_shift,
             "example_papers": example_papers,
             "scatter": scatter,
         })
@@ -1445,9 +1757,19 @@ def compute_community_stats_scope(df: pd.DataFrame, df_all: pd.DataFrame = None)
         ]
 
         label = GPT_LABELS.get(int(comm_id), f"Cluster {comm_id}")
+        info = GPT_LABELS_ALL.get(CLUSTER_LEVEL, {}).get(int(comm_id), {}) or {}
+        long_label = info.get("long_label") or label
+        keywords = info.get("keywords") or []
+        if not isinstance(keywords, list):
+            keywords = []
+        summary = str(info.get("summary") or "").strip()
         communities.append({
             "id": int(comm_id),
             "label": label,
+            "long_label": long_label,
+            "keywords": [str(k) for k in keywords],
+            "summary": summary,
+            "description": summary or long_label,
             "size": int(total_size),  # Total cluster size
             "frontiers_size": frontiers_size,  # Just our target journals
             "frontiers_pct": frontiers_pct,
@@ -1579,8 +1901,7 @@ footer {
     <h2>Community Composition</h2>
     <table id="tblComm">
       <thead><tr>
-        <th>Theme</th><th class="num">Size</th><th class="num">Frontiers %</th>
-        <th>Dominant Journal (All)</th><th>Top Frontiers Journal</th>
+        <th>Theme</th><th class="num">Size</th><th>Description</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -2503,7 +2824,7 @@ body {
 }
 .tab-btn:hover { color: var(--text); background: var(--bg); }
 .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--blue-light); }
-.tab-content { flex: 1; display: none; overflow: hidden; }
+.tab-content { flex: 1; display: none; overflow: hidden; min-height: 0; }
 .tab-content.active { display: block; }
 .tab-content iframe { width: 100%; height: 100%; border: none; }
 </style>
@@ -2518,28 +2839,54 @@ __TAB_BUTTONS__
 </nav>
 __TAB_CONTENTS__
 <script>
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const tabId = btn.dataset.tab;
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.getElementById('tab-' + tabId).classList.add('active');
-  });
-});
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tabId = btn.dataset.tab;
-    const iframe = document.querySelector('#tab-' + tabId + ' iframe');
-    if (iframe && !iframe.src && iframe.dataset.src) {
-      iframe.src = iframe.dataset.src;
+function notifyIframeResize(iframe) {
+  if (!iframe || !iframe.contentWindow) return;
+  try {
+    const w = iframe.contentWindow;
+    if (typeof w.resizeNetworkMaps === 'function') w.resizeNetworkMaps();
+    if (w.Plotly && w.Plotly.Plots && typeof w.Plotly.Plots.resize === 'function') {
+      w.document.querySelectorAll('.js-plotly-plot').forEach(el => {
+        try { w.Plotly.Plots.resize(el); } catch (e) {}
+      });
     }
-  });
-});
-const firstIframe = document.querySelector('.tab-content.active iframe');
-if (firstIframe && firstIframe.dataset.src) {
-  firstIframe.src = firstIframe.dataset.src;
+    w.dispatchEvent(new Event('resize'));
+  } catch (e) {}
 }
+
+function activateTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tabId);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => {
+    c.classList.toggle('active', c.id === 'tab-' + tabId);
+  });
+  const iframe = document.querySelector('#tab-' + tabId + ' iframe');
+  if (iframe && !iframe.src && iframe.dataset.src) {
+    iframe.src = iframe.dataset.src;
+    iframe.addEventListener('load', () => {
+      notifyIframeResize(iframe);
+      setTimeout(() => notifyIframeResize(iframe), 200);
+    }, { once: true });
+  } else {
+    notifyIframeResize(iframe);
+    setTimeout(() => notifyIframeResize(iframe), 50);
+    setTimeout(() => notifyIframeResize(iframe), 250);
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+});
+
+const firstActive = document.querySelector('.tab-btn.active') || document.querySelector('.tab-btn');
+if (firstActive) activateTab(firstActive.dataset.tab);
+
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.tab-content.active iframe').forEach(notifyIframeResize);
+});
+document.addEventListener('fullscreenchange', () => {
+  document.querySelectorAll('.tab-content.active iframe').forEach(notifyIframeResize);
+});
 </script>
 </body>
 </html>
@@ -2561,33 +2908,98 @@ NETWORK_MAPS_TEMPLATE = """<!DOCTYPE html>
   --muted: #5f6b7c;
   --border: #e3e7ee;
   --green: #1f8a4c;
+  --amber: #d4a300;
   --red: #c93030;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 header {
   background: var(--card);
-  padding: 20px 24px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 header h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
 header p { color: var(--muted); font-size: 0.85rem; }
-.main { padding: 20px 24px; }
-.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.toolbar .label { color: var(--muted); font-size: 0.8rem; margin-right: 4px; }
+.filter-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+.filter-btn.active { color: #fff; border-color: transparent; }
+.filter-btn[data-scope="primary"].active { background: var(--green); }
+.filter-btn[data-scope="borderline"].active { background: var(--amber); }
+.filter-btn[data-scope="oos"].active { background: var(--red); }
+.filter-btn:not(.active) { opacity: 0.55; }
+.main {
+  padding: 16px 24px 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
+  align-items: stretch;
+}
 .card {
   background: var(--card);
   border-radius: 10px;
   padding: 16px;
   border: 1px solid var(--border);
-  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
-.card h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; }
-.plot.scatter { height: 450px; }
+.card h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.plot-wrap {
+  flex: 1;
+  min-height: 360px;
+  height: clamp(360px, 42vh, 620px);
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+.plot.scatter {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+.plot.scatter .js-plotly-plot,
+.plot.scatter .plot-container,
+.plot.scatter .svg-container {
+  width: 100% !important;
+  height: 100% !important;
+}
 </style>
 </head>
 <body>
@@ -2596,9 +3008,15 @@ header p { color: var(--muted); font-size: 0.85rem; }
   <p>
     Each bubble = community centroid.
     <span style="color: var(--green);">Green = primary in-scope</span>,
-    <span style="color: #d4a300;">Amber = borderline (LLM scope judgment)</span>,
+    <span style="color: var(--amber);">Amber = borderline (LLM scope judgment)</span>,
     <span style="color: var(--red);">Red = out-of-scope</span>. Size = paper count.
   </p>
+  <div class="toolbar" id="scopeFilters" aria-label="Scope visibility filters">
+    <span class="label">Show:</span>
+    <button type="button" class="filter-btn active" data-scope="primary">Primary in-scope</button>
+    <button type="button" class="filter-btn active" data-scope="borderline">Borderline</button>
+    <button type="button" class="filter-btn active" data-scope="oos">Out of scope</button>
+  </div>
 </header>
 <div class="main">
   <div id="scatterGrid" class="grid"></div>
@@ -2608,76 +3026,155 @@ const DATA = __DATA_JSON__;
 const J = DATA.journals || [];
 const C = DATA.communities || [];
 const FONT = { family:'-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color:"#1a1f36", size:12 };
-const BASE = { paper_bgcolor:"#ffffff", plot_bgcolor:"#ffffff", font:FONT };
+const BASE = { paper_bgcolor:"#ffffff", plot_bgcolor:"#ffffff", font:FONT, autosize:true };
 const CFG  = { responsive:true, displayModeBar:false };
 const ext  = (a,b)=>Object.assign({},a,b);
 const grid = document.getElementById("scatterGrid");
 const commLabels = {};
 C.forEach(c => { commLabels[c.id] = c.label || ("Community " + c.id); });
 
-J.forEach((j, jIdx) => {
+const visibility = { primary: true, borderline: true, oos: true };
+const plotIds = [];
+const journalBundles = [];
+
+function buildBundle(j) {
   const scatter = j.scatter || [];
-  if (!scatter.length) return;
+  if (!scatter.length) return null;
   const primaryIds = new Set((j.top_communities || []).filter(c => c.is_primary).map(c => c.comm_id));
   const borderlineIds = new Set(j.borderline_cluster_ids || j.distance_rescued_cluster_ids || []);
   const inScopeIds = new Set(j.in_scope_cluster_ids || [...primaryIds, ...borderlineIds]);
   const byCom = {};
   scatter.forEach(p => { (byCom[p.c] = byCom[p.c] || []).push(p); });
-  const inX=[], inY=[], inSz=[], inLbl=[], inN=[];
-  const resX=[], resY=[], resSz=[], resLbl=[], resN=[];
-  const outX=[], outY=[], outSz=[], outLbl=[], outN=[];
-  const allN=[];
+  const buckets = {
+    primary: { x:[], y:[], sizes:[], labels:[], counts:[] },
+    borderline: { x:[], y:[], sizes:[], labels:[], counts:[] },
+    oos: { x:[], y:[], sizes:[], labels:[], counts:[] },
+  };
+  const allN = [];
   Object.keys(byCom).forEach(cid => {
     const pts = byCom[cid], n = pts.length;
     const cx = pts.reduce((s,p)=>s+p.x,0)/n;
     const cy = pts.reduce((s,p)=>s+p.y,0)/n;
-    const id = parseInt(cid);
+    const id = parseInt(cid, 10);
     const lbl = commLabels[cid] || ("Community " + cid);
     allN.push(n);
-    if (primaryIds.has(id)) {
-      inX.push(cx); inY.push(cy); inSz.push(n); inLbl.push(lbl); inN.push(n);
-    } else if (borderlineIds.has(id) || inScopeIds.has(id)) {
-      resX.push(cx); resY.push(cy); resSz.push(n); resLbl.push(lbl); resN.push(n);
-    } else {
-      outX.push(cx); outY.push(cy); outSz.push(n); outLbl.push(lbl); outN.push(n);
-    }
+    let key = "oos";
+    if (primaryIds.has(id)) key = "primary";
+    else if (borderlineIds.has(id) || inScopeIds.has(id)) key = "borderline";
+    const b = buckets[key];
+    b.x.push(cx); b.y.push(cy); b.sizes.push(n); b.labels.push(lbl); b.counts.push(n);
   });
   const maxN = Math.max(...allN, 1);
-  const sz = n => Math.max(20, Math.sqrt(n / maxN) * 120);
-  const mkT = (x,y,sizes,labels,counts,color,name) => ({
-    type:"scatter", mode:"markers", name,
-    x, y, text:labels, customdata:counts,
-    marker:{
-      size: sizes.map(sz), sizemode:"diameter",
-      color, opacity:0.55,
-      line:{ color:"rgba(255,255,255,0.7)", width:1.5 }
-    },
-    hovertemplate:"<b>%{text}</b><br>Articles: %{customdata:,}<br>"+name+"<extra></extra>"
-  });
+  const sizePx = n => Math.max(18, Math.sqrt(n / maxN) * 110);
+  const meta = {
+    primary: { color:"#1f8a4c", name:"Primary in-scope" },
+    borderline: { color:"#d4a300", name:"Borderline" },
+    oos: { color:"#c93030", name:"Out of scope" },
+  };
+  const order = ["primary", "borderline", "oos"];
   const traces = [];
-  if (inX.length) traces.push(mkT(inX,inY,inSz,inLbl,inN,"#1f8a4c","Primary in-scope"));
-  if (resX.length) traces.push(mkT(resX,resY,resSz,resLbl,resN,"#d4a300","Borderline"));
-  if (outX.length) traces.push(mkT(outX,outY,outSz,outLbl,outN,"#c93030","Out of scope"));
+  const traceKeys = [];
+  order.forEach(key => {
+    const b = buckets[key];
+    if (!b.x.length) return;
+    const m = meta[key];
+    traces.push({
+      type:"scatter", mode:"markers", name:m.name,
+      x:b.x, y:b.y, text:b.labels, customdata:b.counts,
+      visible: visibility[key],
+      marker:{
+        size: b.sizes.map(sizePx), sizemode:"diameter",
+        color:m.color, opacity:0.55,
+        line:{ color:"rgba(255,255,255,0.7)", width:1.5 }
+      },
+      hovertemplate:"<b>%{text}</b><br>Articles: %{customdata:,}<br>"+m.name+"<extra></extra>"
+    });
+    traceKeys.push(key);
+  });
+  return { j, scatter, traces, traceKeys };
+}
+
+function layoutOpts() {
+  return ext(BASE, {
+    font: ext(FONT, {size:11}),
+    autosize: true,
+    xaxis:{ showgrid:false, zeroline:false, showticklabels:false, showline:false },
+    yaxis:{ showgrid:false, zeroline:false, showticklabels:false, showline:false, scaleanchor:"x", scaleratio:1 },
+    legend:{ orientation:"h", y:-0.08, yanchor:"top", font:{size:11} },
+    margin:{ l:12, r:12, t:12, b:56 },
+    hovermode:"closest"
+  });
+}
+
+function resizeAllPlots() {
+  plotIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      try { Plotly.Plots.resize(el); } catch (e) {}
+    }
+  });
+}
+
+function applyVisibility() {
+  journalBundles.forEach(bundle => {
+    if (!bundle || !bundle.gd) return;
+    const vis = bundle.traceKeys.map(k => visibility[k]);
+    Plotly.restyle(bundle.gd, { visible: vis });
+  });
+  resizeAllPlots();
+}
+
+J.forEach((j, jIdx) => {
+  const bundle = buildBundle(j);
+  if (!bundle) return;
   const rescuedN = j.n_borderline_clusters || j.n_distance_rescued_clusters || 0;
+  const plotId = "scatter" + jIdx;
   const card = document.createElement("div");
   card.className = "card";
   card.innerHTML = '<h2>' + j.name
     + ' <span style="color:#8893a6;font-weight:400;font-size:13px;">— '
-    + scatter.length.toLocaleString() + ' papers · '
+    + bundle.scatter.length.toLocaleString() + ' papers · '
     + j.out_of_scope_pct.toFixed(1) + '% out of scope'
     + (rescuedN ? (' · ' + rescuedN + ' borderline') : '')
     + '</span></h2>'
-    + '<div id="scatter' + jIdx + '" class="plot scatter"></div>';
+    + '<div class="plot-wrap"><div id="' + plotId + '" class="plot scatter"></div></div>';
   grid.appendChild(card);
-  Plotly.newPlot("scatter" + jIdx, traces, ext(BASE, {
-    font: ext(FONT, {size:11}),
-    xaxis:{ showgrid:false, zeroline:false, showticklabels:false, showline:false },
-    yaxis:{ showgrid:false, zeroline:false, showticklabels:false, showline:false },
-    legend:{ orientation:"h", y:-0.04, font:{size:11} },
-    margin:{ l:10, r:10, t:10, b:50 },
-    hovermode:"closest"
-  }), CFG);
+  plotIds.push(plotId);
+  Plotly.newPlot(plotId, bundle.traces, layoutOpts(), CFG).then(gd => {
+    bundle.gd = gd;
+    journalBundles.push(bundle);
+    Plotly.Plots.resize(gd);
+  });
 });
+
+document.querySelectorAll("#scopeFilters .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const key = btn.dataset.scope;
+    visibility[key] = !visibility[key];
+    btn.classList.toggle("active", visibility[key]);
+    // Keep at least one category visible
+    if (!visibility.primary && !visibility.borderline && !visibility.oos) {
+      visibility[key] = true;
+      btn.classList.add("active");
+      return;
+    }
+    applyVisibility();
+  });
+});
+
+window.addEventListener("resize", resizeAllPlots);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) resizeAllPlots();
+});
+if (window.ResizeObserver) {
+  const ro = new ResizeObserver(() => resizeAllPlots());
+  document.querySelectorAll(".plot-wrap").forEach(el => ro.observe(el));
+  ro.observe(document.body);
+}
+// Combined-dashboard iframe: parent may call this after tab show / fullscreen
+window.resizeNetworkMaps = resizeAllPlots;
+setTimeout(resizeAllPlots, 50);
+setTimeout(resizeAllPlots, 300);
 </script>
 </body>
 </html>"""

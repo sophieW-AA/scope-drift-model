@@ -90,7 +90,10 @@
         "Reproductive Health"
       ],
       "force_oos_patterns": [],
-      "unless_patterns": []
+      "unless_patterns": [],
+      "on_scope_title_patterns": [
+        "(?i)\\b(surg(?:ery|ical|eon)?|operati(?:on|ve)|perioperati(?:ve)?|postoperati(?:ve)?|intraoperati(?:ve)?|laparoscop\\w*|laparotom\\w*|endoscop\\w*|resect\\w*|arthroscop\\w*|anesthes\\w*|thyroidectomy|portoenterostom\\w*|fasciotom\\w*|fracture|ercp|orthop\\w*|implant|catheter|anastomosis|hernia|transplant|biopsy|incision|wound|flap|graft|tka|osseointegr\\w*|tumor|sarcoma|metastas\\w*|pseudotumor|reconstruct\\w*|patellar|femoral|condyle|perforator|mammary|clinical|patient|case\\s+report|rhizotomy|cholecyst\\w*|neuromonitor\\w*|carpal\\s+tunnel|rotator\\s+cuff|brachial\\s+plexus|glioma|corneal|abdominal|tubal|fertility|cadaveric|spasticity)\\b"
+      ]
     }
   }
 }
