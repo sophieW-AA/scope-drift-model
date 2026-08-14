@@ -1,0 +1,24 @@
+2026-07-10 14:44:00,970 [INFO] ============================================================
+2026-07-10 14:44:00,970 [INFO] Configuration
+2026-07-10 14:44:00,971 [INFO] ============================================================
+2026-07-10 14:44:00,971 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-p-usr
+2026-07-10 14:44:00,971 [INFO]   AIRAK_DATASET           : ocean-breeze-tier-1.airak
+2026-07-10 14:44:00,971 [INFO]   NETWORK_MODE            : global
+2026-07-10 14:44:00,971 [INFO]   START_YEAR              : 2020
+2026-07-10 14:44:00,971 [INFO]   END_YEAR                : 2026
+2026-07-10 14:44:00,971 [INFO]   TOP_N_JOURNALS          : 5
+2026-07-10 14:44:00,971 [INFO]   JOURNAL_IDS_OVERRIDE    : (none)
+2026-07-10 14:44:00,971 [INFO]   ENABLE_EDGE_WEIGHTS     : True
+2026-07-10 14:44:00,971 [INFO]   TEMPORAL_DECAY_TAU      : 5.0
+2026-07-10 14:44:00,971 [INFO]   SELF_CITE_JOURNAL_WEIGHT: 0.5
+2026-07-10 14:44:00,971 [INFO]   ENABLE_BC_EDGES         : True
+2026-07-10 14:44:00,971 [INFO]   BC_MIN_SHARED_REFS      : 3
+2026-07-10 14:44:00,971 [INFO]   MAX_EXTERNAL_PAPERS     : 50000
+2026-07-10 14:44:00,971 [INFO]   OUTPUT_DIR              : cwts_output
+2026-07-10 14:44:00,971 [INFO] ============================================================
+2026-07-10 14:44:00,971 [INFO] ============================================================
+2026-07-10 14:44:00,971 [INFO] CWTS Export — Edge Weight Builder
+2026-07-10 14:44:00,971 [INFO]   Mode: GLOBAL  |  Years: 2020-2026
+2026-07-10 14:44:00,971 [INFO]   Edge weights: ON
+2026-07-10 14:44:00,971 [INFO] ============================================================
+2026-07-10 14:44:00,971 [INFO] Fetching top 5 Frontiers journals by publication count...
