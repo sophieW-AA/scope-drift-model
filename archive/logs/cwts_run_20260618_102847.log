@@ -1,0 +1,38 @@
+CWTS Publication Classification Run
+==================================================
+Timestamp : 20260618_102847
+
+Input Files
+------------------------------
+  pubs                : cwts_output/pubs.txt
+  cit_links           : cwts_output/cit_links.txt
+  output              : cwts_output/classification.txt
+  jar                 : publicationclassification.jar
+
+Parameters
+------------------------------
+  largest_component_only    : true
+  iterations                : 100
+  micro_resolution          : 5e-3
+  micro_min_cluster_size    : 500
+  meso_resolution           : 1e-4
+  meso_min_cluster_size     : 1000
+  macro_resolution          : 5e-6
+  macro_min_cluster_size    : 10000
+
+Return Code: 1
+
+STDOUT
+------------------------------
+PublicationClassificationCreator version 1.1.0
+By Nees Jan van Eck
+Centre for Science and Technology Studies (CWTS), Leiden University
+
+Reading citation network from file... 
+STDERR
+------------------------------
+Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 188157 out of bounds for length 188157
+	at nl.cwts.networkanalysis.Network.<init>(Network.java:1433)
+	at nl.cwts.networkanalysis.Network.<init>(Network.java:159)
+	at nl.cwts.publicationclassification.run.FileIO.readNetwork(FileIO.java:162)
+	at nl.cwts.publicationclassification.run.PublicationClassificationCreator.main(PublicationClassificationCreator.java:255)
