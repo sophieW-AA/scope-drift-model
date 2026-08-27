@@ -1,0 +1,32 @@
+2026-08-27 08:13:11,513 [INFO] CWTS Publication Classification Run
+
+2026-08-27 08:13:11,513 [INFO] ==================================================
+
+2026-08-27 08:13:11,513 [INFO] Timestamp : 20260827_081311
+
+
+2026-08-27 08:13:11,513 [INFO] 
+Parameters
+------------------------------
+
+2026-08-27 08:13:11,513 [INFO]   largest_component_only    : true
+
+2026-08-27 08:13:11,513 [INFO]   iterations                : 1000
+
+2026-08-27 08:13:11,513 [INFO]   micro_resolution          : 1e-5
+
+2026-08-27 08:13:11,513 [INFO]   micro_min_cluster_size    : 500
+
+2026-08-27 08:13:11,513 [INFO]   meso_resolution           : 2e-6
+
+2026-08-27 08:13:11,513 [INFO]   meso_min_cluster_size     : 5000
+
+2026-08-27 08:13:11,513 [INFO]   macro_resolution          : 2e-7
+
+2026-08-27 08:13:11,513 [INFO]   macro_min_cluster_size    : 100000
+
+2026-08-27 08:13:11,513 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-c-tfs
+2026-08-27 08:13:11,513 [INFO]   AIRAK_DATASET           : raw_citation_network_data
+2026-08-27 08:13:15,040 [INFO] pubs_df loaded successfully
+2026-08-27 08:13:31,481 [INFO] cit_links_df loaded successfully
+2026-08-27 08:17:55,922 [INFO] temp files created for leiden

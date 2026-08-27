@@ -1,0 +1,35 @@
+2026-07-21 12:18:21,206 [INFO] ============================================================
+2026-07-21 12:18:21,206 [INFO] Configuration
+2026-07-21 12:18:21,206 [INFO] ============================================================
+2026-07-21 12:18:21,206 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-p-usr
+2026-07-21 12:18:21,206 [INFO]   AIRAK_DATASET           : ocean-breeze-tier-1.airak
+2026-07-21 12:18:21,206 [INFO]   NETWORK_MODE            : ego
+2026-07-21 12:18:21,206 [INFO]   START_YEAR              : 2026
+2026-07-21 12:18:21,206 [INFO]   END_YEAR                : 2026
+2026-07-21 12:18:21,206 [INFO]   TOP_N_JOURNALS          : 5
+2026-07-21 12:18:21,206 [INFO]   JOURNAL_IDS_OVERRIDE    : 1675037245440,1589137899520,2336462209024,2774548873217,120259084288,764504178688,1005022347264,558345748481
+2026-07-21 12:18:21,206 [INFO]   ENABLE_EDGE_WEIGHTS     : True
+2026-07-21 12:18:21,206 [INFO]   TEMPORAL_DECAY_TAU      : 5.0
+2026-07-21 12:18:21,206 [INFO]   SELF_CITE_JOURNAL_WEIGHT: 0.5
+2026-07-21 12:18:21,206 [INFO]   ENABLE_BC_EDGES         : True
+2026-07-21 12:18:21,206 [INFO]   BC_MIN_SHARED_REFS      : 3
+2026-07-21 12:18:21,206 [INFO]   MAX_EXTERNAL_PAPERS     : 50000
+2026-07-21 12:18:21,206 [INFO]   LOG_DIR              : cwts_logs
+2026-07-21 12:18:21,206 [INFO]   RUN_CLASSIFICATION      : True
+2026-07-21 12:18:21,206 [INFO]   CWTS_JAR_PATH           : publicationclassification.jar
+2026-07-21 12:18:21,206 [INFO]   JAVA_HEAP_SIZE          : 
+2026-07-21 12:18:21,206 [INFO] ============================================================
+2026-07-21 12:18:21,206 [INFO] ============================================================
+2026-07-21 12:18:21,206 [INFO] CWTS Export — Edge Weight Builder
+2026-07-21 12:18:21,206 [INFO]   Mode: EGO  |  Years: 2026-2026
+2026-07-21 12:18:21,206 [INFO]   Edge weights: ON
+2026-07-21 12:18:21,206 [INFO] ============================================================
+2026-07-21 12:18:21,206 [INFO] Using specified journal IDs: [1675037245440, 1589137899520, 2336462209024, 2774548873217, 120259084288, 764504178688, 1005022347264, 558345748481]
+2026-07-21 12:18:21,206 [INFO] Fetching Frontiers publication IDs...
+2026-07-21 12:18:24,380 [INFO]   2,960 Frontiers publications
+2026-07-21 12:18:24,381 [INFO] Building ego network (top 50,000 external papers)...
+2026-07-21 12:18:24,381 [INFO]   Ego batch 1/1...
+2026-07-21 12:18:32,632 [INFO]   Raw edges: 98,643
+2026-07-21 12:18:32,796 [INFO]   Filtered: 54,938 edges, 52,146 nodes
+2026-07-21 12:18:32,803 [INFO] Fetching metadata for 52,146 nodes...
+2026-07-21 12:18:32,807 [INFO]   Metadata batch 1/3...

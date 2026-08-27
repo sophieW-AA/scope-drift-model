@@ -1,0 +1,59 @@
+2026-07-17 14:25:00,073 [INFO] ============================================================
+2026-07-17 14:25:00,074 [INFO] Configuration
+2026-07-17 14:25:00,074 [INFO] ============================================================
+2026-07-17 14:25:00,074 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-p-usr
+2026-07-17 14:25:00,074 [INFO]   AIRAK_DATASET           : ocean-breeze-tier-1.airak
+2026-07-17 14:25:00,074 [INFO]   NETWORK_MODE            : ego
+2026-07-17 14:25:00,074 [INFO]   START_YEAR              : 2025
+2026-07-17 14:25:00,074 [INFO]   END_YEAR                : 2026
+2026-07-17 14:25:00,075 [INFO]   TOP_N_JOURNALS          : 5
+2026-07-17 14:25:00,075 [INFO]   JOURNAL_IDS_OVERRIDE    : 1675037245440,1589137899520,2336462209024,2774548873217,120259084288,764504178688,1005022347264,558345748481
+2026-07-17 14:25:00,075 [INFO]   ENABLE_EDGE_WEIGHTS     : True
+2026-07-17 14:25:00,075 [INFO]   TEMPORAL_DECAY_TAU      : 5.0
+2026-07-17 14:25:00,075 [INFO]   SELF_CITE_JOURNAL_WEIGHT: 0.5
+2026-07-17 14:25:00,075 [INFO]   ENABLE_BC_EDGES         : True
+2026-07-17 14:25:00,075 [INFO]   BC_MIN_SHARED_REFS      : 3
+2026-07-17 14:25:00,075 [INFO]   MAX_EXTERNAL_PAPERS     : 50000
+2026-07-17 14:25:00,075 [INFO]   OUTPUT_DIR              : cwts_output
+2026-07-17 14:25:00,075 [INFO]   RUN_CLASSIFICATION      : False
+2026-07-17 14:25:00,075 [INFO] ============================================================
+2026-07-17 14:25:00,075 [INFO] ============================================================
+2026-07-17 14:25:00,075 [INFO] CWTS Export — Edge Weight Builder
+2026-07-17 14:25:00,075 [INFO]   Mode: EGO  |  Years: 2025-2026
+2026-07-17 14:25:00,075 [INFO]   Edge weights: ON
+2026-07-17 14:25:00,075 [INFO] ============================================================
+2026-07-17 14:25:00,075 [INFO] Using specified journal IDs: [1675037245440, 1589137899520, 2336462209024, 2774548873217, 120259084288, 764504178688, 1005022347264, 558345748481]
+2026-07-17 14:25:00,075 [INFO] Fetching Frontiers publication IDs...
+2026-07-17 14:25:03,161 [INFO]   7,716 Frontiers publications
+2026-07-17 14:25:03,161 [INFO] Building ego network (top 50,000 external papers)...
+2026-07-17 14:25:03,162 [INFO]   Ego batch 1/1...
+2026-07-17 14:25:10,974 [INFO]   Raw edges: 307,724
+2026-07-17 14:25:11,367 [INFO]   Filtered: 84,424 edges, 56,105 nodes
+2026-07-17 14:25:11,382 [INFO] Fetching metadata for 56,105 nodes...
+2026-07-17 14:25:11,386 [INFO]   Metadata batch 1/3...
+2026-07-17 14:25:16,526 [INFO]   Metadata batch 2/3...
+2026-07-17 14:25:21,895 [INFO]   Metadata batch 3/3...
+2026-07-17 14:25:26,372 [INFO]   56,105 nodes (6,978 Frontiers core)
+2026-07-17 14:25:26,377 [INFO] Applying edge weights (temporal decay + self-citation discount)...
+2026-07-17 14:25:26,730 [INFO]   Decay mean=0.283  |  Self-citations: 1,728
+2026-07-17 14:25:26,730 [INFO]   Combined weight mean=0.277
+2026-07-17 14:25:26,733 [INFO] Computing bibliographic coupling (min shared refs=3)...
+2026-07-17 14:25:26,734 [INFO]   BC batch 1/1...
+2026-07-17 14:25:33,720 [INFO]     9,116 BC edges
+2026-07-17 14:25:33,722 [INFO]   Total BC edges: 9,116
+2026-07-17 14:25:33,722 [INFO] Merging direct citation and BC edges...
+2026-07-17 14:25:33,768 [INFO]   Merged: 88,815 edges (mean weight=0.272)
+2026-07-17 14:25:33,789 [INFO] Writing CWTS files to cwts_output/  (56,105 nodes)...
+2026-07-17 14:25:34,236 [INFO]   pubs.txt        : 56,105 rows  (6,978 Frontiers)
+2026-07-17 14:25:38,381 [INFO] 56105 out of 56105 rows loaded.
+2026-07-17 14:25:38,382 [INFO]   → BigQuery: raw_citation_network_data.pubs_raw_20260717_142500
+2026-07-17 14:25:38,824 [INFO]   pub_metadata.txt: 56,105 rows
+2026-07-17 14:25:44,815 [INFO] 56105 out of 56105 rows loaded.
+2026-07-17 14:25:44,815 [INFO]   → BigQuery: raw_citation_network_data.pub_metadata_raw_20260717_142500
+2026-07-17 14:25:45,363 [INFO]   cit_links.txt   : 177,630 rows  (88,815 unique × 2 directions)
+2026-07-17 14:25:48,491 [INFO] 177630 out of 177630 rows loaded.
+2026-07-17 14:25:48,492 [INFO]   → BigQuery: raw_citation_network_data.cit_links_raw_20260717_142500
+2026-07-17 14:25:48,492 [INFO] Classification step skipped (RUN_CLASSIFICATION=false)
+2026-07-17 14:25:53,312 [INFO] 1 out of 1 rows loaded.
+2026-07-17 14:25:53,313 [INFO]   → BigQuery: raw_citation_network_data.run_metadata_20260717_142500
+2026-07-17 14:25:53,313 [INFO] Done!!!!

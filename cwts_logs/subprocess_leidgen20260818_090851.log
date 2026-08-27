@@ -1,0 +1,214 @@
+2026-08-25 10:48:28,003 [INFO] CWTS Publication Classification Run
+
+2026-08-25 10:48:28,003 [INFO] ==================================================
+
+2026-08-25 10:48:28,003 [INFO] Timestamp : 20260818_090851
+
+
+2026-08-25 10:48:28,003 [INFO] 
+Parameters
+------------------------------
+
+2026-08-25 10:48:28,003 [INFO]   largest_component_only    : true
+
+2026-08-25 10:48:28,003 [INFO]   iterations                : 1000
+
+2026-08-25 10:48:28,004 [INFO]   micro_resolution          : 1e-5
+
+2026-08-25 10:48:28,004 [INFO]   micro_min_cluster_size    : 500
+
+2026-08-25 10:48:28,004 [INFO]   meso_resolution           : 2e-6
+
+2026-08-25 10:48:28,004 [INFO]   meso_min_cluster_size     : 5000
+
+2026-08-25 10:48:28,004 [INFO]   macro_resolution          : 8e-8
+
+2026-08-25 10:48:28,004 [INFO]   macro_min_cluster_size    : 80000
+
+2026-08-25 10:48:28,004 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-c-tfs
+2026-08-25 10:48:28,004 [INFO]   AIRAK_DATASET           : raw_citation_network_data
+2026-08-25 10:48:38,091 [INFO] pubs_df loaded successfully
+2026-08-25 10:49:03,477 [INFO] cit_links_df loaded successfully
+2026-08-25 10:53:28,589 [INFO] temp files created for leiden
+2026-08-26 00:04:44,294 [INFO] LEIDEN HAS RUN!1
+2026-08-26 00:04:44,294 [INFO] stdout: PublicationClassificationCreator version 1.1.0
+By Nees Jan van Eck
+Centre for Science and Technology Studies (CWTS), Leiden University
+
+Reading citation network from file... Finished!
+Reading citation network from file took 0h 0m 58s.
+Citation network:
+	Number of publications: 17136717
+	Number of citation links: 95322030
+	Total publication weight: 17136717
+	Total citation link weight: 59020520
+
+Identifying largest connected component in citation network... Finished!
+Identifying largest connected component in citation network took 0h 0m 9s.
+Largest connected component:
+	Number of publications: 16683447
+	Number of citation links: 95045148
+	Total publication weight: 16683447
+	Total citation link weight: 58857592
+
+Creating publication classification...
+	Clustering algorithm: Leiden algorithm
+	Number of iterations: 1000
+	Random seed: 0
+
+Adding micro-level classification...
+Creating clustering... Finished! 440105 clusters created.
+Reassigning small clusters... Finished! 3031 clusters remaining.
+Adding micro-level classification took 13h 8m 48s.
+Micro-level classification:
+	Resolution: 1.0E-5
+	Threshold: 500
+	Number of clusters: 3031
+
+Adding meso-level classification...
+Creating clustering... Finished! 1247 clusters created.
+Reassigning small clusters... Finished! 406 clusters remaining.
+Adding meso-level classification took 0h 1m 7s.
+Meso-level classification:
+	Resolution: 2.0E-6
+	Threshold: 5000
+	Number of clusters: 406
+
+Adding macro-level classification...
+Creating clustering... Finished! 18 clusters created.
+Reassigning small clusters... Finished! 8 clusters remaining.
+Adding macro-level classification took 0h 0m 8s.
+Macro-level classification:
+	Resolution: 8.0E-8
+	Threshold: 80000
+	Number of clusters: 8
+
+Writing publication classification to file... Finished!
+Writing publication classification to file took 0h 0m 2s.
+
+2026-08-26 00:04:47,132 [INFO] 
+Return Code: 0
+
+2026-08-26 00:04:47,133 [INFO] 
+STDOUT
+------------------------------
+
+2026-08-26 00:04:47,133 [INFO] PublicationClassificationCreator version 1.1.0
+By Nees Jan van Eck
+Centre for Science and Technology Studies (CWTS), Leiden University
+
+Reading citation network from file... Finished!
+Reading citation network from file took 0h 0m 58s.
+Citation network:
+	Number of publications: 17136717
+	Number of citation links: 95322030
+	Total publication weight: 17136717
+	Total citation link weight: 59020520
+
+Identifying largest connected component in citation network... Finished!
+Identifying largest connected component in citation network took 0h 0m 9s.
+Largest connected component:
+	Number of publications: 16683447
+	Number of citation links: 95045148
+	Total publication weight: 16683447
+	Total citation link weight: 58857592
+
+Creating publication classification...
+	Clustering algorithm: Leiden algorithm
+	Number of iterations: 1000
+	Random seed: 0
+
+Adding micro-level classification...
+Creating clustering... Finished! 440105 clusters created.
+Reassigning small clusters... Finished! 3031 clusters remaining.
+Adding micro-level classification took 13h 8m 48s.
+Micro-level classification:
+	Resolution: 1.0E-5
+	Threshold: 500
+	Number of clusters: 3031
+
+Adding meso-level classification...
+Creating clustering... Finished! 1247 clusters created.
+Reassigning small clusters... Finished! 406 clusters remaining.
+Adding meso-level classification took 0h 1m 7s.
+Meso-level classification:
+	Resolution: 2.0E-6
+	Threshold: 5000
+	Number of clusters: 406
+
+Adding macro-level classification...
+Creating clustering... Finished! 18 clusters created.
+Reassigning small clusters... Finished! 8 clusters remaining.
+Adding macro-level classification took 0h 0m 8s.
+Macro-level classification:
+	Resolution: 8.0E-8
+	Threshold: 80000
+	Number of clusters: 8
+
+Writing publication classification to file... Finished!
+Writing publication classification to file took 0h 0m 2s.
+
+2026-08-26 00:04:47,133 [INFO] 
+STDERR
+------------------------------
+
+2026-08-26 00:04:47,133 [INFO] (empty)
+
+2026-08-26 00:04:47,133 [INFO] PublicationClassificationCreator version 1.1.0
+By Nees Jan van Eck
+Centre for Science and Technology Studies (CWTS), Leiden University
+
+Reading citation network from file... Finished!
+Reading citation network from file took 0h 0m 58s.
+Citation network:
+	Number of publications: 17136717
+	Number of citation links: 95322030
+	Total publication weight: 17136717
+	Total citation link weight: 59020520
+
+Identifying largest connected component in citation network... Finished!
+Identifying largest connected component in citation network took 0h 0m 9s.
+Largest connected component:
+	Number of publications: 16683447
+	Number of citation links: 95045148
+	Total publication weight: 16683447
+	Total citation link weight: 58857592
+
+Creating publication classification...
+	Clustering algorithm: Leiden algorithm
+	Number of iterations: 1000
+	Random seed: 0
+
+Adding micro-level classification...
+Creating clustering... Finished! 440105 clusters created.
+Reassigning small clusters... Finished! 3031 clusters remaining.
+Adding micro-level classification took 13h 8m 48s.
+Micro-level classification:
+	Resolution: 1.0E-5
+	Threshold: 500
+	Number of clusters: 3031
+
+Adding meso-level classification...
+Creating clustering... Finished! 1247 clusters created.
+Reassigning small clusters... Finished! 406 clusters remaining.
+Adding meso-level classification took 0h 1m 7s.
+Meso-level classification:
+	Resolution: 2.0E-6
+	Threshold: 5000
+	Number of clusters: 406
+
+Adding macro-level classification...
+Creating clustering... Finished! 18 clusters created.
+Reassigning small clusters... Finished! 8 clusters remaining.
+Adding macro-level classification took 0h 0m 8s.
+Macro-level classification:
+	Resolution: 8.0E-8
+	Threshold: 80000
+	Number of clusters: 8
+
+Writing publication classification to file... Finished!
+Writing publication classification to file took 0h 0m 2s.
+
+2026-08-26 00:05:14,825 [INFO] 16683447 out of 16683447 rows loaded.
+2026-08-26 00:05:15,286 [INFO] leiden_input files removed
+2026-08-26 00:05:15,287 [INFO] Script finished success!!
