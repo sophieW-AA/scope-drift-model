@@ -1,0 +1,869 @@
+---
+description: BigQuery SQL and Python — repo notebook patterns plus Frontiers AA team lakehouse rules (tiers, safety, table reference, filtering patterns, data quality issues, UK English).
+globs:
+  - "**/*.ipynb"
+  - "**/*.sql"
+  - "**/*.bq"
+alwaysApply: false
+---
+
+# BigQuery querying
+
+When writing or editing BigQuery SQL or `google.cloud.bigquery` code, follow these rules. **Do not invent** project, dataset, or table names; if unknown, mark **TBD** and ask or point to an existing query.
+
+**Primary data location — Ocean Breeze:** Prefer tables in the **`ocean-breeze-tier-1`** … **`ocean-breeze-tier-4`** projects (curated marts, internal systems, reference, analytics). Default `bigquery.Client(project=…)` and fully qualified names to **`ocean-breeze-tier-1`** unless the question clearly needs another tier or a table that only exists elsewhere.
+
+**Style precedence:** For new work, follow **Language & communication** and **SQL style** below. When editing an existing notebook, stay consistent with **neighbouring cells** (including short aliases like `pf`, `fs` where already used).
+
+---
+
+## Safety rules — critical
+
+- **Never** generate or run `DROP`, `DELETE`, `TRUNCATE`, or `UPDATE` statements.
+- **Never** use `INSERT` or `MERGE` against production tables without explicit user confirmation.
+- Always use `SELECT` first to validate logic before any write operation.
+- Wrap destructive operations in transactions when unavoidable and test with `LIMIT`.
+- Validate row counts before and after major transformations.
+
+---
+
+## Language and communication
+
+- Use **UK English** in comments, aliases, and documentation.
+- Use simple, clear language — many team members speak English as a second language.
+- Comment non-obvious business logic; do not narrate what the SQL already says.
+
+---
+
+## GCP projects — this repo’s clients
+
+**Ocean Breeze first:** Use the tier table in the next section to pick `ocean-breeze-tier-1` (default) → `tier-2` / `tier-3` / `tier-4` as depth requires.
+
+| Client `project=` | When to use |
+|-------------------|-------------|
+| **`ocean-breeze-tier-1`** | **Default** — `reporting_data_mart.*`, `airak` publication graph (`Publication`, `PublicationCitation`, `PublicationFieldOfStudy`, `FieldOfStudy`), Scope drift / Leiden-style work. |
+| **`ocean-breeze-tier-2`** … **`tier-4`** | See tier system below — still **Ocean Breeze**; prefer these over non–Ocean Breeze projects when the dataset exists here. |
+| `ocean-tech-adv-analytics-p-usr` | **Secondary** — when a table or mart only lives here: e.g. `airak_v2.*`, `datawarehouse_reporting_datamart_unified_v2_0.*`, `qualtrics_v6.*`, personal/sandbox (`Sophie.*`), `reference_data_v7.*`. Do not default here if an equivalent exists under **`ocean-breeze-tier-*`**. |
+| `gcp-innovation-hub` | **Secondary** — experimental / innovation datasets (impact platform, `prime`, etc.); use when not available on Ocean Breeze. |
+| Other (e.g. `frontiers-ocean.*`) | Only when the ticket or existing query already uses that project. **Match the project** to where the table actually lives. |
+
+### Project-specific datasets (AA team)
+
+These datasets live outside Ocean Breeze tiers but are used for specific AA workstreams:
+
+| Project.Dataset | Contents |
+|---|---|
+| `ocean-tech-adv-analytics-c-esf.fos_evaluated.pub_earlyfos` | EarlyFoS model output — field-of-study scores for publications (438M rows). Available at submission time (title + abstract only). |
+| `ocean-tech-adv-analytics-c-asc.competitor_mapping.*` | Competitor mapping pipeline tables |
+| `ocean-tech-adv-analytics-c-asc.journal_markets_and_market_opportunities.*` | Market listings for opportunity mapping |
+| `ocean-tech-adv-analytics-c-faf.article_forecast_data.*` | Frontiers Article Forecast model outputs |
+| `ocean-pub-market-intell-s-dit.data_analytics.*` | Fact and dimension tables for journal analytics (Out of Scope assessment) |
+| `ocean-tech-admau-alex-e-dev.airak_v2.*` | AIRAK v2 editorial tables (board roles, contributions) — newer schema, see AIRAK v2 editorial section |
+| `frontiers-cdp.facts_all_tenants_live_v2.*` | Impact/CDP data — article views, downloads, citations (see Impact/CDP section) |
+| `ocean-tech-audience-mgr-c-pro.airak_v2.*` | Audience Manager researcher profiles and segments |
+
+---
+
+## Data architecture — tier system (lakehouse)
+
+All tiers below are **Ocean Breeze** projects — this is the preferred stack. Start from **Tier 1** for product/analytics questions; move to Tier 2–4 only when Tier 1 lacks the fields or grain you need. Reach for **`ocean-tech-adv-analytics-p-usr`** or **`gcp-innovation-hub`** only when the specific table does not exist on Ocean Breeze (or the ticket already standardises on that project).
+
+### Tier 1 — `ocean-breeze-tier-1` (curated / business-ready) ← start here
+
+Pre-joined, denormalised tables ready for analysis.
+
+| Table | Key columns | Description |
+|-------|-------------|-------------|
+| `reporting_data_mart.article` | `article_id`, `doi`, `title`, `stage`, `is_submitted`, `is_accepted`, `is_published`, `is_rejected`, `is_decided`, `create_date`, `article_type`, `journal_id`, `journal`, `domain`, `field` | **485 columns** — article lifecycle, review times, metrics. **Never `SELECT *`.** |
+| `reporting_data_mart.journal` | `journal_id`, `journal_name`, `section`, `domain`, `field`, `specialty`, `issn`, `status` | Journal and section taxonomy. |
+| `reporting_data_mart.person` | `personuser_id`, `person_user_id`, `person_id`, `person_email`, `primary_organization`, `country`, `continent` | **19M rows.** People (authors, editors, reviewers). See **RDM person identifiers** section. |
+| `reporting_data_mart.contributor` | `contributor_id`, `contributor_email`, … | RT contributors. |
+| `reporting_data_mart.author` | `author_id`, `author_person_user_id`, `author_article_id`, … | **8.5M rows, 250 columns.** Author publication history. **Never `SELECT *`.** |
+| `reporting_data_mart.editorial_board_member` | `editorial_board_member_person_user_id`, `role`, `is_active`, `join_date`, `end_date`, `end_reason` | **442K rows.** Board composition, roles (AE, RE, SCE), tenure. |
+| `reporting_data_mart.review_board_member` | `review_board_member_person_user_id`, `article_id`, `role_abbr`, `role`, `h_index`, `invite_date`, `review_board_status_id` | Article-level reviewer assignments with h-index. Filter `review_board_status_id = 1` for accepted, `role_abbr = 'REV'` for reviewers. |
+| `reporting_data_mart.editorial_board_invitations` | | Invitation lifecycle data. |
+| `reporting_data_mart.research_topic` | `research_topic_id`, stage, participating journals, ebook info | **80K rows.** RT metadata, status, dates. |
+| `reporting_data_mart.research_topic_editor` | `editor_person_user_id`, `editor_research_topic_id`, `editor_order` | **254K rows.** Use `editor_order = 1` to identify the **host/lead editor**. |
+| `reporting_data_mart.organization` | `organization_id`, `rosst_id`, `country`, `continent`, `city` | **1.7M orgs.** Institution registry. |
+| `reporting_data_mart.user_metrics` | `user_id`, `is_editor`, `is_research_topic_editor`, `is_reviewer`, `is_deleted`, `is_activated` | **3.3M rows.** User activity flags. |
+| `reporting_data_mart.taxonomy` | | Frontiers taxonomy structure. |
+| `airak.Author` | `AuthorId`, `FullName`, `NormalizedName`, `IsFrontiersAuthor`, `HasPublishedOpenAccess`, `HasVerifiedEmail`, `RetractedPublicationCount`, `Activeness` | **150M rows.** Bibliometric authors. |
+| `airak.Publication` | `PublicationId`, `Doi`, `Title`, `PublishedYear`, `CitationCount`, `JournalId` | **163M rows.** Bibliometric publications. |
+| `airak.PublicationAuthor` | `PublicationId`, `AuthorId`, `IsCorrespondingAuthor`, `IsFirstAuthor`, `IsLastAuthor` | **576M rows.** Author–publication links. |
+| `airak.PublicationCitation` | `PublicationId`, `CitedPublicationId` | **2.3B rows.** Citation links. Very expensive — always filter. |
+| `airak.PublicationAbstract` | `PublicationId` | Abstracts for all publications. |
+| `airak.PublicationFullText` | `PublicationId` | Full text for publications (where available). |
+| `airak.AuthorSource` | `AuthorId`, `SourceId`, `SourceValue` | Cross-dataset IDs (Loop, ORCiD, etc.). See SourceId lookup. |
+| `airak.AuthorFieldOfStudy` | `AuthorId`, `FieldOfStudyId`, `Score` | Author field-of-study scores. |
+| `airak.AuthorGrants` | `AuthorId` | Author grant data. |
+| `airak.Journal` | `JournalId`, `DisplayName`, `PublisherId` | **285K journals.** All publishers. |
+| `airak.JournalMetadata` | `JournalId`, `IsOpenAccess`, `IsOpenForSubmissions`, `IsOnline`, `IsLowConfidenceJournal` | Journal flags. Filter `IsOpenForSubmissions = TRUE` for active journals. |
+| `airak.JournalFieldOfStudy` | `JournalId`, `FieldOfStudyId`, `Score` | Journal–FoS similarity scores. |
+| `airak.SectionFieldOfStudy` | `SectionId`, `FieldOfStudyId`, `Score` | Section–FoS similarity scores. |
+| `airak.Publisher` | `PublisherId`, `Name` | **16K publishers.** Filter `Name = "Frontiers Publisher"` for Frontiers-only. |
+| `airak.FieldOfStudy` | `FieldOfStudyId`, `Level`, `NormalizedName`, `DisplayName` | FoS hierarchy. `Level = 0` broadest (19 fields), `Level = 1` (~300 fields). |
+| `airak.FieldOfStudyChildren` | `FieldOfStudyId`, `ChildFieldOfStudyId` | FoS parent–child relationships. |
+| `airak.PublicationFieldOfStudy` | `PublicationId`, `FieldOfStudyId`, `Score` | OpenAlex FoS scores — available **only after publication**. |
+| `airak.ResearchTopicPublication` | `ResearchTopicId`, `PublicationId` | Links RTs to publications. |
+| `airak.OrganizationHierarchy` | `OrganizationId`, `HierarchyId` | For rolling up sub-institutions. **`HierarchyId` is not persistent across loads.** |
+| `airak.OrganizationTopParent` | `OrganizationId`, `TopParentOrganizationId` | Roll up to ancestor institutions (e.g. college → university). |
+| `airak.OrganizationRanking` | `OrganizationId` | External ranking data. |
+| `airak.EditorialContribution` | `AuthorId`, `PublicationId` | Editorial contributions. For newer schema see AIRAK v2 editorial. |
+
+### Tier 2 — `ocean-breeze-tier-2` (internal systems)
+
+| Dataset | Use for |
+|---------|---------|
+| `salesforce` | CRM — contacts, accounts, opportunities, campaigns, cases |
+| `peer_review` | Review annotations, comments, review turns |
+| `rosst` | Organisation registry, hierarchy, aliases |
+| `production_forum` | Production article data |
+| `dimensions` | Dimensions.ai bibliometric data |
+
+### Tier 3 — `ocean-breeze-tier-3` (external / reference)
+
+| Dataset | Use for |
+|---------|---------|
+| `openalex` | External academic graph |
+| `crossref` | DOI/citation metadata |
+| `qualtrics` | Survey responses — **prefer this Ocean Breeze dataset** when it meets the need; this repo sometimes uses `qualtrics_v6.*` under **`ocean-tech-adv-analytics-p-usr`** instead — match the project to the table you are querying. |
+| `doaj` | OA journal directory |
+| `retractionwatch` | Retraction data |
+| `orcid` | ORCID profiles |
+| `ringgold` | Institution identifiers |
+
+### Tier 4 — `ocean-breeze-tier-4` (analytics / tracking)
+
+| Dataset | Use for |
+|---------|---------|
+| `snowplow_analytics` | Web analytics — DAU, WAU, MAU, journeys |
+| `marketing_campaigns_snowplow` | Campaign attribution, submission tracking |
+| `google_analytics_*` | GA (date-sharded — filter with `_TABLE_SUFFIX`) |
+| `google_searchconsole_*` | Search Console performance |
+
+### Innovation hub — `gcp-innovation-hub` (not Ocean Breeze; use when needed)
+
+Prefer **`ocean-breeze-tier-*`** for Salesforce, Qualtrics, AIRAK extensions, etc., when those datasets exist there. Use **`gcp-innovation-hub`** when the analysis depends on datasets that are only (or officially) hosted here.
+
+| Dataset | Use for |
+|---------|---------|
+| `impact_data_platform_v1` | Article views, downloads, citations over time (star schema, very large fact tables) |
+| `airak_v2` | Extended AIRAK (many tables) |
+| `researcher_profiles` | Pre-built researcher profiles |
+| `prime` | Author–journal proximity rankings |
+| `frontongpt` | AI agent usage analytics |
+| `salesforce_v2` | Experimental SF mirror — prefer **`ocean-breeze-tier-2`** `salesforce` unless you know otherwise |
+| `workday_data` | Employee data |
+
+---
+
+## Table references and qualification
+
+- Use **Standard SQL** with **backticks**: `` `project.dataset.TableName` ``.
+- **Team default:** fully qualify and backtick every table reference (clear in multi-project queries and docs).
+- **This repo exception:** dataset-only names such as `` `airak.PublicationFieldOfStudy` `` are acceptable when the **client project** matches, e.g. `bigquery.Client(project="ocean-breeze-tier-1")`. When **multiple projects** appear in one query, **fully qualify every table** to avoid ambiguity.
+- Fix typos like missing space before `` ` `` after `JOIN` (seen in older cells).
+
+```sql
+-- Correct (fully qualified)
+SELECT article_id FROM `ocean-breeze-tier-1.reporting_data_mart.article`
+
+-- Wrong — unqualified / missing backticks
+SELECT article_id FROM reporting_data_mart.article
+```
+
+---
+
+## SQL style
+
+- **Keywords in UPPERCASE:** `SELECT`, `FROM`, `WHERE`, `JOIN`, `GROUP BY`, `ORDER BY`, `WITH`, `AS`, `ON`, `AND`, `OR`, `CASE`, …
+- **Identifiers:** prefer **`snake_case`** for new column aliases, CTE names, and computed fields. **Existing tables** keep their actual column names (`AuthorId`, `PublicationId`, … on `airak` objects).
+- One clause per line where practical; indent nested expressions, subqueries, and `CASE` blocks (2–4 spaces).
+- In multi-table queries, **always qualify columns** with `alias.column`.
+- Use short, meaningful table aliases (`a` article, `j` journal, `p` person, …); in bibliometric notebooks, repo patterns such as `pf`, `fs`, `pc`, `pub` are fine if consistent in that file.
+
+```sql
+-- Example (team style + full qualification)
+SELECT
+  a.article_id,
+  a.doi,
+  a.title,
+  j.journal_name,
+  a.stage_date_published
+FROM `ocean-breeze-tier-1.reporting_data_mart.article` AS a
+JOIN `ocean-breeze-tier-1.reporting_data_mart.journal` AS j
+  ON a.journal_id = j.journal_id
+WHERE a.is_published = TRUE
+  AND EXTRACT(YEAR FROM a.stage_date_published) = 2025
+ORDER BY a.stage_date_published DESC
+LIMIT 100;
+```
+
+---
+
+## CTEs over subqueries
+
+- Prefer **`WITH` (CTEs)** over deeply nested subqueries.
+- Keep each CTE small and purpose-specific; name descriptively (`submitted_articles`, `monthly_counts`, …).
+- Avoid a single mega-chain when logical breaks improve readability.
+
+---
+
+## SQL structure — recurring patterns (repo + BQ)
+
+- **`WITH` CTEs** for readable stages (filters, aggregates, scoped subsets).
+- **`QUALIFY`** with **`ROW_NUMBER() OVER (PARTITION BY … ORDER BY …) = 1`** (or similar) for one row per entity — e.g. top field-of-study per publication (`PublicationFieldOfStudy` + `FieldOfStudy`).
+- **Explicit column lists**; avoid `SELECT *` on wide or shared queries (Tier 1 `article` — **never** `SELECT *` in production-style extracts).
+- **Meaningful comments** for business rules, event codes, or non-obvious filters.
+
+---
+
+## Publication / citation style queries (`airak`)
+
+- Join path often resembles: `Publication` ↔ `PublicationCitation` ↔ `PublicationFieldOfStudy` ↔ `FieldOfStudy`, with filters on `PublishedYear`, `FieldOfStudyId`, and `Level` on `FieldOfStudy`.
+- **`ORDER BY`** stable keys when exporting edges or reproducible extracts (e.g. `PublicationId`, `CitedPublicationId`).
+
+---
+
+## Performance and cost
+
+- **Never use `SELECT *`** on Tier 1 wide tables (e.g. `article` — 485 columns). Select only what you need.
+- **Add `LIMIT`** when exploring unfamiliar tables or during development.
+- **Filter early** — push `WHERE` close to the source before large joins.
+- **Partition/cluster awareness** — filter on partition columns (often dates) to reduce scan cost.
+- Large tables to treat with care (examples): `impact_data_platform_v1.t_daily_metrics`, `airak.Publication`, `airak.Author`, `researcher_profiles.publication_airak`, `prime.precomputed_section_ranks` — check job bytes/rows.
+- Use **`SAFE.`** functions when casts or arithmetic might hit bad rows.
+- For **exploration**, use **`dry_run`** / job stats or small date windows (repo pattern).
+
+---
+
+## Nulls and booleans
+
+- Treat **`NULL`** intentionally; use `IS NULL` / `IS NOT NULL`, not `= NULL`.
+- Use **`COALESCE`** with care and document defaults.
+- Frontiers boolean columns (`is_submitted`, `is_published`, …) are **`BOOL`** — compare with **`TRUE`** / **`FALSE`** (e.g. `WHERE a.is_published = TRUE`), not bare `WHERE a.is_published` unless the team explicitly allows it.
+
+---
+
+## Joins
+
+- Be explicit: **`INNER JOIN`**, **`LEFT JOIN`**, **`CROSS JOIN`** as intended.
+- Join conditions in **`ON`**; row filters in **`WHERE`**.
+- Validate cardinality on many-to-many joins; document expected row inflation.
+- Prefer **`EXISTS`** over **`IN`** when NULL semantics matter (semi-joins).
+
+### Article → journal
+
+```sql
+FROM `ocean-breeze-tier-1.reporting_data_mart.article` AS a
+JOIN `ocean-breeze-tier-1.reporting_data_mart.journal` AS j
+  ON a.journal_id = j.journal_id
+-- Or via taxonomy when that is the documented key:
+-- ON a.article_taxonomy_id = j.taxonomy_id
+```
+
+### Loop IDs from author IDs (AIRAK)
+
+```sql
+SELECT a.AuthorId, s.SourceValue AS loop_id
+FROM `ocean-breeze-tier-1.airak.Author` AS a
+JOIN `ocean-breeze-tier-1.airak.AuthorSource` AS s
+  ON a.AuthorId = s.AuthorId
+WHERE s.SourceId = 20
+-- Beware duplicate author rows — deduplicate as needed
+```
+
+### Joining AIRAK tables to each other
+
+```sql
+-- Publication to its authors
+FROM airak.Publication pub
+JOIN airak.PublicationAuthor pub_auth ON pub.PublicationId = pub_auth.PublicationId
+JOIN airak.Author auth ON pub_auth.AuthorId = auth.AuthorId
+
+-- Publication to its journal
+FROM airak.Publication pub
+JOIN airak.Journal jnl ON pub.JournalId = jnl.JournalId
+
+-- Journal to its publisher
+FROM airak.Journal jnl
+JOIN airak.Publisher publ ON jnl.PublisherId = publ.PublisherId
+
+-- Publication citations
+FROM airak.PublicationCitation pc
+-- pc.PublicationId = the citing paper
+-- pc.CitedPublicationId = the cited paper
+
+-- Journal to its field-of-study scores
+FROM airak.Journal jnl
+JOIN airak.JournalFieldOfStudy jfos ON jnl.JournalId = jfos.JournalId
+JOIN airak.FieldOfStudy fos ON jfos.FieldOfStudyId = fos.FieldOfStudyId
+```
+
+### Cross-system joins (AIRAK to RDM)
+
+There is **no direct shared ID** between AIRAK and RDM. Use these bridge approaches:
+
+| Bridge method | How | Caveats |
+|---|---|---|
+| **DOI** | `LOWER(airak.Publication.Doi) = LOWER(reporting_data_mart.article.doi)` | Always use `LOWER()` on both sides — casing is inconsistent |
+| **Loop ID** | `airak.AuthorSource` where `SourceId = 20` gives Loop IDs. Match to `reporting_data_mart.person` via loop-related fields | ~96.7% match rate for active researchers |
+| **person_id ↔ AuthorId** | `person_id` in RDM maps directly to `AuthorId` in AIRAK | Confirmed 100% match in RT host profiling |
+
+### Joining to Dimensions
+
+```sql
+-- AIRAK publication to Dimensions publication (by DOI)
+FROM airak.Publication pub
+JOIN dimensions.publications dim
+  ON LOWER(pub.Doi) = LOWER(dim.doi)
+```
+
+### Impact data platform (star schema)
+
+Join facts to dimensions via ID columns; filter dimensions explicitly.
+
+```sql
+SELECT
+  dm.id_time,
+  SUM(dm.human_amount) AS total_views
+FROM `gcp-innovation-hub.impact_data_platform_v1.t_monthly_metrics` AS dm
+WHERE dm.id_action = 1        -- article_views (see t_dim_action_extended)
+  AND dm.id_entity_type = 1   -- article (see t_dim_entity_type)
+  AND dm.id_data = 12345
+GROUP BY dm.id_time
+ORDER BY dm.id_time
+```
+
+**Dimension value reference (examples):**
+
+- `t_dim_action_extended`: `article_views`, `article_downloads`, `article_citations`, …
+- `t_dim_provider`: `Impact`, `Dimensions`, `Pubmed`, `ResearchGate`
+- `t_dim_entity_type`: `article`, `profile`, `research_topic`, `journal`, `section`
+- `t_dim_space`: `frontiers`, `fship`, `alf`, `ssph`, `loop`, `sebm`
+
+---
+
+## Filtering patterns and gotchas
+
+### Identifying Frontiers-only data in AIRAK
+
+AIRAK contains data for **all publishers**. To filter to Frontiers:
+
+```sql
+-- Method 1: via Publisher name
+FROM airak.Publication pub
+JOIN airak.Journal jnl ON pub.JournalId = jnl.JournalId
+JOIN airak.Publisher publ ON jnl.PublisherId = publ.PublisherId
+WHERE publ.Name = "Frontiers Publisher"
+  AND jnl.DisplayName LIKE "Frontiers in %"
+
+-- Method 2: via Author flag
+FROM airak.Author
+WHERE IsFrontiersAuthor = TRUE
+```
+
+### Active journals only
+
+```sql
+FROM airak.JournalMetadata
+WHERE IsOpenForSubmissions = TRUE
+```
+
+### Unknown journal filter
+
+Some publications have `JournalId = -1` (unknown journal). Filter these out when needed:
+
+```sql
+WHERE JournalId > -1
+```
+
+### RT host identification
+
+```sql
+-- editor_order = 1 identifies the host/lead editor of an RT
+FROM reporting_data_mart.research_topic_editor
+WHERE editor_order = 1
+```
+
+### DOI matching — always case-insensitive
+
+DOIs are stored in mixed case across systems. **Always use `LOWER()` on both sides:**
+
+```sql
+ON LOWER(table_a.doi) = LOWER(table_b.doi)
+```
+
+### Scope assessment thresholds (from Out of Scope methodology)
+
+- An article's FoS categories scoring **over 0.01** are considered relevant
+- An article is **in scope** if it has:
+  - A level 0 FoS in the **top 10%** for the journal/section AND a level 1 in the **top 25%**, OR
+  - A level 0 FoS in the **top 25%** AND a level 1 in the **top 10%**
+- An editor is **out of scope** if fewer than **40%** of their articles match both the journal and section scopes
+- Editor publication history is limited to **last 5 years** to account for career changes
+
+### Author quality / eligibility filters (from RT host profiling)
+
+```sql
+-- Common filters for identifying quality researcher candidates
+WHERE RetractedPublicationCount = 0
+  AND Activeness >= 0.01
+  AND HasPublishedOpenAccess = TRUE
+  AND has_email = TRUE
+  AND email_validity_id IN (1, 2, 4)  -- valid, safeToSend, catch-all
+```
+
+### Dimensions nested fields
+
+Dimensions uses nested/repeated fields. Use `CROSS JOIN UNNEST()`:
+
+```sql
+-- Unnesting Dimensions concepts scores
+SELECT pub.doi, concept_scores.concept, concept_scores.relevance
+FROM dimensions.publications pub
+CROSS JOIN UNNEST(concepts_scores) AS concept_scores
+
+-- Filter to concepts above average relevance for that publication
+QUALIFY concept_scores.relevance > AVG(concept_scores.relevance) 
+  OVER(PARTITION BY pub.doi)
+```
+
+---
+
+## Date and time handling
+
+- Prefer **`DATE`**, **`DATETIME`**, **`TIMESTAMP`** types — not stringly-typed dates in new logic.
+- Use **`EXTRACT(YEAR FROM col)`**, **`FORMAT_DATE`**, **`DATE_TRUNC`** for bucketing.
+- Use **`DATE` literals:** `WHERE create_date >= DATE '2025-01-01'`.
+- Be explicit about time zones when converting, e.g. **`TIMESTAMP(col, 'UTC')`**.
+
+---
+
+## Key article lifecycle columns (`reporting_data_mart.article`)
+
+| Column | Meaning |
+|--------|---------|
+| `is_submitted` | Submitted |
+| `is_accepted` | Accepted |
+| `is_published` | Published |
+| `is_rejected` | Rejected |
+| `is_deleted` | Deleted |
+| `is_decided` | Final decision reached (accepted or rejected) |
+
+Key date columns include `create_date`, `stage_date_submitted`, `stage_date_accepted`, `stage_date_published`, `stage_date_rejected`, `decided_date`. Stage flow spans from preparation through review to production and published (see team documentation for full funnel wording).
+
+---
+
+## Aggregation and window functions
+
+- Name aggregates clearly (`total_submissions`, `avg_review_days`, `acceptance_rate_pct`, …).
+- Use windows with explicit **`PARTITION BY`** and **`ORDER BY`**.
+- Do not mix aggregated and non-aggregated expressions without proper **`GROUP BY`** / framing.
+- Prefer **deterministic** window `ORDER BY` keys when using **`QUALIFY`** (tie-breakers such as id columns).
+
+---
+
+## Common analytical patterns (examples)
+
+Use as templates; adjust filters and projects to match the ticket and **TBD** where tables differ.
+
+**Submission volume by month:**
+
+```sql
+SELECT
+  FORMAT_DATE('%Y-%m', a.stage_date_submitted) AS month,
+  COUNT(*) AS submissions
+FROM `ocean-breeze-tier-1.reporting_data_mart.article` AS a
+WHERE a.is_submitted = TRUE
+  AND a.stage_date_submitted >= DATE '2024-01-01'
+GROUP BY month
+ORDER BY month;
+```
+
+**Review turnaround (example with `APPROX_QUANTILES`):**
+
+```sql
+SELECT
+  a.journal,
+  APPROX_QUANTILES(a.days_in_Review_time, 100)[OFFSET(50)] AS median_review_days,
+  AVG(a.days_in_Review_time) AS avg_review_days
+FROM `ocean-breeze-tier-1.reporting_data_mart.article` AS a
+WHERE a.is_decided = TRUE
+  AND a.days_in_Review_time IS NOT NULL
+  AND EXTRACT(YEAR FROM a.decided_date) = 2025
+GROUP BY a.journal
+ORDER BY median_review_days;
+```
+
+**Reviewer h-index distribution (accepted reviewers):**
+
+```sql
+SELECT
+  rbm.h_index,
+  COUNT(DISTINCT rbm.review_board_member_person_user_id) AS reviewer_count
+FROM `ocean-breeze-tier-1.reporting_data_mart.review_board_member` AS rbm
+WHERE rbm.review_board_status_id = 1  -- Accepted/Assigned
+  AND rbm.role_abbr = 'REV'           -- Reviewer role only
+  AND rbm.invite_date >= '2026-01-01'
+  AND rbm.invite_date < '2026-05-01'
+GROUP BY rbm.h_index
+ORDER BY rbm.h_index;
+```
+
+**Peer review timings (days between independent review reports):**
+
+```sql
+SELECT
+  EXTRACT(YEAR FROM stage_date_submitted) AS year,
+  ROUND(AVG(DATETIME_DIFF(
+    reviewer_last_independent_review_submitted,
+    reviewer_first_independent_review_submitted,
+    DAY
+  )), 2) AS days_between_irr
+FROM `ocean-breeze-tier-1.reporting_data_mart.article`
+WHERE reviewer_first_independent_review_submitted IS NOT NULL
+  AND EXTRACT(YEAR FROM stage_date_submitted) IN (2024, 2025)
+GROUP BY EXTRACT(YEAR FROM stage_date_submitted)
+```
+
+**Competitor author mapping (find authors in similar journals):**
+
+```sql
+FROM airak.PublicationAuthor pub_auth
+JOIN airak.Publication pub ON pub_auth.PublicationId = pub.PublicationId
+JOIN airak.Author auth ON pub_auth.AuthorId = auth.AuthorId
+JOIN airak.Journal jnl ON pub.JournalId = jnl.JournalId
+JOIN airak.JournalMetadata jnl_md ON jnl.JournalId = jnl_md.JournalId
+LEFT JOIN (
+  SELECT AuthorId, SourceValue AS loop_id
+  FROM airak.AuthorSource
+  WHERE SourceId = 20
+) loop_id ON auth.AuthorId = loop_id.AuthorId
+WHERE jnl_md.IsOpenForSubmissions
+GROUP BY auth.AuthorId, auth.FullName, loop_id.loop_id, jnl.DisplayName
+```
+
+**IP / institutional publication tracking:**
+
+```sql
+-- Join articles to organisations for institutional analysis
+FROM `ocean-breeze-tier-1.reporting_data_mart.author` a
+JOIN `ocean-breeze-tier-1.reporting_data_mart.organization` o
+  ON a.author_organization_id = o.organization_id
+```
+
+Use `OrganizationTopParent` or `OrganizationHierarchy` in AIRAK if you need to roll up sub-institutions to their parent (e.g. colleges within a university).
+
+## AIRAK ↔ reporting_data_mart ID mapping
+
+When joining **`ocean-breeze-tier-1.dataset_aira_knowledge`** (cross-dataset AIRAK *Source* tables) to **`ocean-breeze-tier-1.reporting_data_mart`**, use the Source tables documented on the [New starter pack](https://confluence.frontiersin.net/display/DA/New+starter+pack) Confluence page (page ID 151136219). The mappings below are the **supported** cross-dataset joins for that pattern.
+
+**Note:** Bibliometric work in this repo often uses **`ocean-breeze-tier-1.airak.*`** (`Publication`, `PublicationCitation`, …) — that is a **different** dataset from **`dataset_aira_knowledge`**. Use **Source** tables and the keys below when linking AIRAK *knowledge* IDs to reporting marts; use **`airak.*`** when following the publication-graph patterns earlier in this file.
+
+### Entity mappings
+
+#### Authors (AIRAK → reporting_data_mart)
+
+- **Source table:** `dataset_aira_knowledge.AuthorSource`
+- **Filter:** `SourceId = 20`
+- **Join key:** `AuthorSource.SourceValue` = `ocean-breeze-tier-1.reporting_data_mart.author.author_user_id`
+- **AIRAK side:** `AuthorSource.AuthorId` links to `dataset_aira_knowledge.Author.AuthorId`
+
+```sql
+-- Example: get reporting_data_mart author details for an AIRAK author
+-- Author is wide — list columns explicitly; avoid SELECT * in production extracts.
+SELECT a.AuthorId, rdm.author_user_id, rdm.author_email, rdm.author_name
+FROM `ocean-breeze-tier-1.dataset_aira_knowledge.AuthorSource` AS asrc
+JOIN `ocean-breeze-tier-1.dataset_aira_knowledge.Author`       AS a
+  ON a.AuthorId = asrc.AuthorId
+JOIN `ocean-breeze-tier-1.reporting_data_mart.author`           AS rdm
+  ON CAST(asrc.SourceValue AS INT64) = rdm.author_user_id
+WHERE asrc.SourceId = 20
+```
+
+#### Authors — Loop ID
+
+- **Filter:** `SourceId = 20` in `AuthorSource` also yields the **LoopId** (see [Data joins](https://confluence.frontiersin.net/display/DA/Data+joins), page ID 362322414).
+- ⚠️ **Duplicates exist** — some authors have multiple records. Deduplicate before joining.
+
+#### Journals (AIRAK → reporting_data_mart)
+
+- **Source table:** `dataset_aira_knowledge.JournalSource`
+- **Filter:** `SourceId = 19`
+- **Join key:** `JournalSource.SourceValue` = `ocean-breeze-tier-1.reporting_data_mart.journal.journal_id`
+- **AIRAK side:** `JournalSource.JournalId` links to `dataset_aira_knowledge.Journal.JournalId`
+
+```sql
+-- Example: get reporting_data_mart journal details for an AIRAK journal
+-- List journal columns explicitly in real queries; keep this example narrow.
+SELECT j.JournalId, rdm.journal_id, rdm.journal_name
+FROM `ocean-breeze-tier-1.dataset_aira_knowledge.JournalSource` AS jsrc
+JOIN `ocean-breeze-tier-1.dataset_aira_knowledge.Journal`       AS j
+  ON j.JournalId = jsrc.JournalId
+JOIN `ocean-breeze-tier-1.reporting_data_mart.journal`          AS rdm
+  ON CAST(jsrc.SourceValue AS INT64) = rdm.journal_id
+WHERE jsrc.SourceId = 19
+```
+
+#### Publications (AIRAK → manuscript_live)
+
+- **Source table:** `dataset_aira_knowledge.PublicationSource`
+- **Filter:** `SourceId = 19`
+- **Join key:** `PublicationSource.SourceValue` = `ocean-tech-adv-analytics-p-usr.manuscript_live_v1_0.manuscript.articleId`
+- **AIRAK side:** `PublicationSource.PublicationId` links to `dataset_aira_knowledge.Publication.PublicationId`
+
+```sql
+-- Example: get manuscript details for an AIRAK publication
+-- List manuscript columns explicitly in real queries.
+SELECT p.PublicationId, m.articleId
+FROM `ocean-breeze-tier-1.dataset_aira_knowledge.PublicationSource` AS psrc
+JOIN `ocean-breeze-tier-1.dataset_aira_knowledge.Publication`      AS p
+  ON p.PublicationId = psrc.PublicationId
+JOIN `ocean-tech-adv-analytics-p-usr.manuscript_live_v1_0.manuscript` AS m
+  ON CAST(psrc.SourceValue AS INT64) = m.articleId
+WHERE psrc.SourceId = 19
+```
+
+### AIRAK table reference (`dataset_aira_knowledge`)
+
+| Table                 | Description                                                                 |
+|-----------------------|-----------------------------------------------------------------------------|
+| Author                | All published authors (Frontiers and competitors)                           |
+| AuthorOrganization    | Institutions associated with authors (current and historic, used for regional analysis) |
+| AuthorSource          | Cross-dataset IDs for authors (SourceId 20 → reporting_data_mart)           |
+| Country               | Reference table with ISO2, ISO3, and continent details                      |
+| EditorialBoardRole    | Reference table for editorial board role types                              |
+| EditorialContribution | Individual editorial contributions (AuthorId ↔ PublicationId)               |
+| EditorialRole         | Details of editorial board member roles                                     |
+| Journal               | All journals (Frontiers and competitors)                                    |
+| JournalSection        | Frontiers journals → sections (sections can be cross-listed)                |
+| JournalSource         | Cross-dataset IDs for journals (SourceId 19 → reporting_data_mart)          |
+| Publication           | All publications (Frontiers and competitors)                                |
+| PublicationAbstract   | Abstracts for all publications                                              |
+| PublicationAuthor     | Author details per publication                                              |
+| PublicationSource     | Cross-dataset IDs for publications (SourceId 19 → manuscript_live)          |
+
+### Rules (Source-table joins)
+
+1. **Always fully qualify tables** with `project.dataset.table` in BigQuery.
+2. **Always filter by SourceId** before joining Source tables — never join without the filter.
+3. **CAST SourceValue** to the correct type (usually `INT64`) — it is stored as a string.
+4. **Deduplicate AuthorSource** when SourceId = 20; duplicate author records exist.
+5. **Primary keys are consistent** across AIRAK tables (e.g. `AuthorId` in `Author` = `AuthorId` in `PublicationAuthor`).
+6. **JournalSection** sections can be cross-listed to multiple journals — account for this in aggregations.
+
+### Quick-reference SourceId lookup
+
+| SourceId | Source system | Maps to |
+|----------|---------------|---------|
+| 1 | SSPH | |
+| 3 | ALF | |
+| 5 | FSHIP | |
+| 10 | ORCiD | |
+| 11 | Dimensions | |
+| 14 | Society for Experimental Biology and Medicine | |
+| 19 | Frontiers | `reporting_data_mart.journal.journal_id` (JournalSource), `manuscript_live_v1_0.manuscript.articleId` (PublicationSource) |
+| 20 | Loop | `reporting_data_mart.author.author_user_id` (AuthorSource) |
+| 23 | Ugarit (legacy) | OrganizationSource — being replaced by ROSST |
+
+> **Note:** `SourceId = 19` (Frontiers) is also the key filter for Frontiers-only data in the AIRAK v2 editorial tables (`EditorialBoardRole`, `EditorialContributionRole`, `EditorialContributionStatus`).
+
+---
+
+## RDM person identifiers
+
+The reporting data mart uses several "user" identifier columns that overlap but serve different purposes:
+
+| Column name | Meaning | When to use |
+|---|---|---|
+| `personuser_id` | Unique instance of a UserId + Email within a Space. The true primary key of the `person` table. | Primary key for `person` table |
+| `person_user_id` / `editor_person_user_id` / `author_person_user_id` / `editorial_board_member_person_user_id` | Person-level ID derived from `personuser_id`. Appears across most RDM tables as a foreign key. | **Primary join key across RDM tables** — use this to link person → author → editor → editorial_board_member |
+| `person_id` | Derived person entity ID. Many `personuser_id`s can map to one `person_id` (M:1). Represents the "first" `person_id` where there are multiple primary emails or non-null H-index values. **Maps directly to `AuthorId` in AIRAK** (verified 100% match). | For cross-system joins to AIRAK; also used in RT editor workflows |
+| `user_id` / `editor_user_id` / `author_user_id` | Registered user ID. **`user_id = -1` means a non-registered user.** | For joining to `user_metrics` |
+| `author_id` | **Not a person-level ID.** Unique instance of JournalRole + Taxonomy + User/Email + Space. One person can have multiple `author_id`s. | Primary key on `author` table only — do not use to identify a person across tables |
+| `journal_user_id` | Journal-specific user ID | Less commonly used for cross-table joins |
+| `space_id` | Logical data separation (Frontiers vs shared-service tenants). **`space_id = 0` means missing space.** | Filter or group by tenant |
+
+**Common RDM join patterns:**
+
+```sql
+-- Person to their editorial board memberships
+FROM reporting_data_mart.person p
+JOIN reporting_data_mart.editorial_board_member ebm
+  ON p.person_user_id = ebm.editorial_board_member_person_user_id
+
+-- Article to its authors
+FROM reporting_data_mart.article art
+JOIN reporting_data_mart.author a
+  ON art.article_id = a.author_article_id
+
+-- Person to user activity metrics
+FROM reporting_data_mart.person p
+JOIN reporting_data_mart.user_metrics um
+  ON p.person_user_id = um.user_id
+
+-- Research topic to its host editor
+FROM reporting_data_mart.research_topic rt
+JOIN reporting_data_mart.research_topic_editor rte
+  ON rt.research_topic_id = rte.editor_research_topic_id
+WHERE rte.editor_order = 1  -- host editor only
+```
+
+---
+
+## Python execution (`google.cloud.bigquery`)
+
+- `from google.cloud import bigquery` then **`client = bigquery.Client(project="…")`** matching where unqualified `dataset.table` should resolve.
+- **Default client project:** prefer **`ocean-breeze-tier-1`** when querying Ocean Breeze tables; switch to `ocean-breeze-tier-2` … `tier-4`, **`ocean-tech-adv-analytics-p-usr`**, or **`gcp-innovation-hub`** only when your SQL uses tables from that project without full qualification.
+- Typical notebook flow: **`client.query(sql)`** → **`query_job.result()`** → **`to_dataframe()`** (pandas / pyarrow) — preferred over row-by-row `dict` conversion for large results.
+- **Auth:** Application Default Credentials — do not embed secrets in notebooks.
+- Example for queries that **only** touch innovation-hub tables: `bigquery.Client(project="gcp-innovation-hub")`.
+
+---
+
+## Documentation, testing, Tableau
+
+- Document grain (one row per …), keys, and non-obvious column logic in CTE comments or adjacent markdown.
+- Validate against known totals when possible; use **`LIMIT`** in development; remove only when appropriate for the deliverable.
+- For **Tableau** SQL: business-friendly aliases, prefer pre-aggregated CTEs over huge raw scans, validate dashboard numbers against standalone SQL.
+
+---
+
+## Naming and organisation (this repo)
+
+- Reusable SQL in notebooks: **named constants** such as `QUERY_PUBS`, `QUERY_CITES` (see `leiden_test_1.ipynb` / tags like `cwts_queries`).
+- Standalone **`.sql`** files under **`sql/`** may target **other engines** (e.g. bracketed `[schema].[table]` = SQL Server). **Do not** assume every `.sql` file is BigQuery — check identifiers before “fixing” syntax. For T-SQL / DWH joins, use **`sql-server-querying.mdc`**.
+
+---
+
+## Impact / CDP data (views, downloads, citations)
+
+Article views, downloads, and citation data live in the `frontiers-cdp` project, separate from Innovation Hub's `impact_data_platform_v1`.
+
+### Key tables (`frontiers-cdp.facts_all_tenants_live_v2`)
+
+| Table | Contents |
+|---|---|
+| `t_fact_cons_events` | Consolidated daily events (views, downloads). Partitioned by `id_time` (monthly). |
+| `t_agg_cons_events` | Aggregated events by time/space/entity/action |
+| `mv_agg_cons_alltime` | All-time aggregated views/downloads per article |
+| `t_agg_citations` | All-time citations per article. Clustered by `id_article` |
+| `t_daily_dataid_country` | Daily metrics broken down by country |
+
+### Action types
+
+| Action | Meaning |
+|---|---|
+| `art_abstr_view` | Article abstract view |
+| `art_full_txt_view` | Article full text view |
+| `art_pdf_dwnld` | Article PDF download |
+| `art_epub_dwnld` | Article EPUB download |
+| `art_xml_dwnld` | Article XML download |
+| `rt_details_view` | RT home page view |
+| `loop_profile_page_view` | Loop profile view |
+| `journal_home_view` | Journal home view |
+| `section_page_view` | Section home view |
+
+### Performance: cluster field order matters
+
+CDP tables are clustered. **Always filter/query in the documented cluster field order** for optimal performance:
+- `t_fact_cons_events`: `id_time`, `id_space`, `id_entity_type`, `id_action`
+- `mv_agg_cons_alltime`: `id_space`, `id_entity_type`, `id_action`
+- Country tables: `id_country` / `country_iso2`, then `id_data`
+
+---
+
+## Organisation data: priority rules and ROSST
+
+### Organisation/affiliation data priority
+
+When the same researcher has organisation data in both Loop and AIRAK, **Loop takes priority** for both primary email and primary affiliation.
+
+The fallback chain for **country** assignment on a person is:
+1. Loop User Organisation Country
+2. AIRA User Organisation Country
+3. AIRA User Country
+4. AIRA User Primary Email Country
+5. AIRA Email Country
+
+The fallback chain for **organisation** assignment is:
+1. Loop User Organisation
+2. AIRA User Organisation
+3. AIRA Email Organisation
+
+> **Implication:** `reporting_data_mart.person` may show a different primary organisation than `airak.AuthorOrganization` for the same researcher. If you need AIRAK's org assignment specifically, query it directly.
+
+### ROSST migration
+
+[ROSST](https://confluence.frontiersin.net/spaces/FDS/pages/529243581) (Research Organisation Shared Services Tool) is replacing the legacy Ugarit system as the organisation identifier.
+
+- `rosst_id` in `reporting_data_mart.organization` links to the ROSST system
+- In AIRAK, `OrganizationSource.SourceId = 23` indicates data from Ugarit (legacy)
+- **`HierarchyId`** in `airak.OrganizationHierarchy` is **not persistent** — do not use it as a stable key for tracking organisations over time
+- Organisation types come from the Ringgold dataset (155 types). Key types: `326` = academic (universities), `320` = hospital, `319` = academic hospital, `179` = unclassified
+
+---
+
+## AIRAK v2 editorial tables
+
+A richer editorial data model lives in `ocean-tech-admau-alex-e-dev.airak_v2`. Key tables:
+
+- **`EditorialRole`** — author board positions (AE, RE, SCE, TE etc.) with scope (`TypeId`: 1=Journal, 2=Section, 3=ResearchTopic; `TypeValue` = the entity ID). Filter `RoleStatus = 'Current'` for active roles.
+- **`EditorialContribution`** — per-publication contributions (reviewing, editing). Join to `EditorialContributionRole` for codes (`REV`, `AE`, `RE` etc.) and `EditorialContributionStatus` for status (`Active`, `Revoked`, `Withdrawn`).
+- **Frontiers-only filter**: use `SourceId = 19` on the lookup tables (`EditorialBoardRole`, `EditorialContributionRole`, `EditorialContributionStatus`).
+
+---
+
+## Data quality known issues
+
+| Issue | Source | Detail |
+|---|---|---|
+| DOI casing | AIRAK + RDM | DOIs are stored in mixed case. **Always use `LOWER()` on both sides** of DOI joins |
+| Dimensions download/view bot activity | Dimensions | Bot activity affects download counts, particularly through 2024. Treat download metrics with caution; views were going down while downloads spiked |
+| Salesforce Task call/email distinction | Salesforce | The field distinguishing calls from emails is unreliable — calls are manually logged and under-reported |
+| RT contributor–article linking | RTM/Salesforce | ~5% of confirmed contributors who submit are not linked to their profile (possible disambiguation issue) |
+| Organisation hierarchy inconsistency | AIRAK/RDM | Sub-institutions may not roll up consistently (e.g. "University College London" vs "University of London"). Use `OrganizationTopParent` to normalise |
+| EarlyFoS vs OpenAlex FoS | AIRAK vs EarlyFoS | EarlyFoS scores are internally consistent but **not identical** to OpenAlex. They can be used as an alternative at submission time |
+| Author retraction data | AIRAK | `RetractedPublicationCount` may not capture all retractions; cross-reference with `Retraction` table and Retraction Watch |
+| `JournalId = -1` | AIRAK | Some publications have `JournalId = -1` (unknown journal). Filter these out: `WHERE JournalId > -1` |
+| Organisation affiliation mismatch | RDM vs AIRAK | Loop takes priority over AIRAK for primary org/email. `reporting_data_mart.person` may show a different org than `airak.AuthorOrganization` for the same person |
+| `HierarchyId` not persistent | AIRAK | `OrganizationHierarchy.HierarchyId` is regenerated and **not stable across loads** — do not use as a tracking key |
+| RT contributor counts differ across platforms | RTM/SF/Tableau | Known discrepancy — Tableau typically lower, SF may miss non-RTM invitations |
+| `author_id` is not person-level | RDM | `author_id` is a unique instance of Role+Taxonomy+User+Space. One person can have multiple `author_id`s. Use `author_person_user_id` to identify the person |
+| `user_id = -1` | RDM | Indicates a non-registered user |
+| `space_id = 0` | RDM | Indicates a missing space |
+
+---
+
+## Common abbreviations
+
+| Abbreviation | Meaning |
+|---|---|
+| AE | Associate Editor |
+| RE | Review Editor |
+| SCE | Specialty Chief Editor |
+| HE | Handling Editor |
+| EBM | Editorial Board Member |
+| RT | Research Topic |
+| TE | Topic Editor |
+| FoS | Field of Study |
+| OOS | Out of Scope |
+| IRR | Independent Review Report |
+| NPS | Net Promoter Score |
+| CFJ | Closest Frontiers Journal |
+| RDM | Reporting Data Mart |
+| CfP | Call for Papers |
+| IC | Invited Contributor |
+| CC | Confirmed Contributor |
+| SQL (Salesforce) | Sales Qualified Lead |
+| RTLA | Research Topic Launch Assistant |
+| JHC | Journal Health Check |
+
+---
+
+## Quality bar
+
+- Align new queries with **neighbouring cells** or **ticket-specific** datasets already referenced.
+- State **assumptions** (attribution, deduping, time windows) in comments or markdown near the query.
+- Log or check row counts at CTE boundaries for complex pipelines when debugging.

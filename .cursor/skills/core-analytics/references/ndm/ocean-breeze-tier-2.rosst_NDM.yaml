@@ -1,0 +1,458 @@
+# Analytical Data Model — ocean-breeze-tier-2.rosst
+# Narrow Data Model (NDM) — Version 2
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-24
+# Source: dataset-model-ADM/ocean-breeze-tier-2.rosst_ADM_V2.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within the dataset, space_id is not strictly
+#   required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one          : many rows here → same parent row (default for non-nullable FKs)
+# optional_many_to_one : FK column is nullable / zero-or-one participation
+# one_to_one           : at most one row here per referenced parent row
+#
+# relationship label   : domain-specific phrase (child → parent direction).
+#                        "[PROPOSED] references" = not yet reviewed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+  ########################## COMMON ##########################
+
+  - name: countries
+    domain: COMMON
+    source_table: ocean-breeze-tier-2.rosst.countries
+    description: "Lookup table for country codes, names and continent data"
+    grain: CountryIsoCode2,CountryIsoCode3
+    primary_key: CountryIsoCode2,CountryIsoCode3
+    columns:
+      - name: CountryIsoCode2
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.airak
+            entity: country
+            column: IsoCode2
+            cardinality: one_to_one
+            relationship: "it referes to"
+      - name: CountryIsoCode3
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.airak
+            entity: country
+            column: IsoCode3
+            cardinality: one_to_one
+            relationship: "it referes to"
+
+  ########################## ARTICLE ##########################
+
+  - name: rosst_article_awards
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.rosst.rosst_article_awards
+    description: "This table stores information about awards associated with articles."
+    grain: AwardId
+    primary_key: AwardId
+    columns:
+      - name: AwardId
+        type: String
+      - name: SourceAwardId
+        type: String
+      - name: SourceId
+        type: Integer
+      - name: RosstId
+        type: String
+
+  - name: rosst_article_funding
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.rosst.rosst_article_funding
+    description: "This table stores data about article and funder linkes and the associated awards."
+    grain: (undetermined)
+    primary_key: (undetermined)
+    columns:
+      - name: SourceId
+        type: Integer
+      - name: RosstId
+        type: String
+
+  - name: rosst_external_affiliations
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.rosst.rosst_external_affiliations
+    description: >
+      This table captures author affiliation data per article, linking authors to their institutional affiliations and linking those affiliations to ROSST.
+    grain: AuthorId
+    primary_key: AuthorId
+    columns:
+      - name: AuthorId
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.airak
+            entity: author
+            column: AuthorId
+            cardinality: many_to_one
+            transform: "SAFE_CAST to INT64"
+            relationship: "is part of"
+      - name: SourceId
+        type: Integer
+      - name: RosstId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: RosstHierarchyId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_hierarchy
+            column: HierarchyId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  ######################## ORGANIZATION ########################
+
+  - name: consortium_membership
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.consortium_membership
+    description: "This table stores data about organization memberships within a consortium."
+    grain: ObjectOrganizationId
+    primary_key: ObjectOrganizationId
+    columns:
+      - name: ObjectOrganizationId
+        type: String
+      - name: SubjectOrganizationId
+        type: String
+      - name: RelationshipId
+        type: Integer
+
+  - name: organization
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization
+    description: "This table stores information about organizations including name and type and link to the address."
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+      - name: AddressId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_address
+            column: AddressId
+            cardinality: many_to_one
+            relationship: "has an address"
+      - name: OrganizationTypeId
+        type: Integer
+
+  - name: organization_address
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_address
+    description: >
+      This table stores address information associated with organizations. It includes geographic coordinates and administrative region details.
+    grain: AddressId
+    primary_key: AddressId
+    columns:
+      - name: AddressId
+        type: Integer
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_source_lookup
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: organization_alias
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_alias
+    description: >
+      This table stores alias information for organizations. It provides a way to link various terms and names to specific organizations. The table facilitates searching and identifying organizations based on different aliases.
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "has an alias"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_source_lookup
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: organization_external_identifiers
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_external_identifiers
+    description: >
+      This table stores external identifiers associated with organizations. The table records the source of each identifier. This data is useful for cross-referencing organizations with external systems.
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "has external identifiers"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_source_lookup
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: organization_hierarchy
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_hierarchy
+    description: >
+      This table defines the hierarchical relationships between organizations. It captures the structure of how organizations are related to each other.
+    grain: ObjectOrganizationId
+    primary_key: ObjectOrganizationId
+    columns:
+      - name: ObjectOrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "object of the relationship is"
+      - name: SubjectOrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "subject of the relationship is"
+
+  - name: organization_inactive_source
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_inactive_source
+    description: "This table tracks the inactive, deleted, and removed source identifiers of the ROSST organization."
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_source_lookup
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: organization_main_ugarit_id
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_main_ugarit_id
+    description: >
+      This table stores the most relevant Ugarit identifier for each ROSST organization, based on the number of people associated with it.
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "has a main Ugarit ID"
+      - name: UgaritId
+        type: Integer
+
+  - name: organization_metrics
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_metrics
+    description: >
+      This table stores metrics related to research publications associated with different organizations. It tracks publication counts, citation information, and author contributions.
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "has metrics"
+
+  - name: organization_ontology
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_ontology
+    description: "This table stores ontology. It provides a structured vocabulary for a specific domain."
+    grain: TermId
+    primary_key: TermId
+    columns:
+      - name: TermId
+        type: Integer
+
+  - name: organization_root_hierarchy
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_root_hierarchy
+    description: >
+      This table represents the relationship between an organization and the root element of its organizational hierarchy.
+    grain: ObjectOrganizationId
+    primary_key: ObjectOrganizationId
+    columns:
+      - name: ObjectOrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "object of the relationship is"
+      - name: SubjectOrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "subject of the relationship is"
+      - name: HierarchyId
+        type: Integer
+
+  - name: organization_source
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_source
+    description: "This table stores the relationship between an organization and its data sources."
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_source_lookup
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: organization_source_lookup
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_source_lookup
+    description: >
+      This table stores information about organizations data sources. It serves as a lookup for identifying and categorizing different sources of organization data.
+    grain: SourceId
+    primary_key: SourceId
+    columns:
+      - name: SourceId
+        type: Integer
+
+  - name: organization_type
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_type
+    description: "This table keeps track of the internal organization merges in ROSST"
+    grain: OrganizationTypeId
+    primary_key: OrganizationTypeId
+    columns:
+      - name: OrganizationTypeId
+        type: Integer
+
+  - name: organization_url
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.organization_url
+    description: >
+      This table stores information and metadata about URLs associated with organizations. It provides a way to link organizations to their online presence.
+    grain: OrganizationId
+    primary_key: OrganizationId
+    columns:
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "has a URL"
+      - name: SourceId
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization_source_lookup
+            column: SourceId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: publications_funding
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.publications_funding
+    description: >
+      This table stores information about the amount of funding donated by different organizations and the number of publications associated with that funding.
+    grain: GridId
+    primary_key: GridId
+    columns:
+      - name: GridId
+        type: String
+      - name: RinggoldId
+        type: Integer
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: publications_year_funding
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.rosst.publications_year_funding
+    description: >
+      This table stores information about the amount of funding donated by different organizations and the number of publications associated with that funding over the years.
+    grain: GridId
+    primary_key: GridId
+    columns:
+      - name: GridId
+        type: String
+      - name: RinggoldId
+        type: Integer
+      - name: OrganizationId
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is part of"

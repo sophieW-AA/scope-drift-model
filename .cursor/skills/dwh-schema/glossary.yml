@@ -1,0 +1,94 @@
+description: >
+  Business definitions for SQL Server DWH KPIs
+
+terms:
+  - name: Submitted articles
+    description: >
+      Count of articles where IsSubmitted = 1 and IsDeleted = 0.
+      Date for grouping by time: [StageDate.Submitted].
+    referenced_tables:
+      - name: "[ReportingDataMart].[Reporting].[Articles]"
+        columns:
+          - name: "[StageDate.Submitted]"
+            description: Date when article was submitted.
+          - name: IsSubmitted
+            description: Boolean flag indicating submission.
+
+  - name: Accepted articles
+    description: >
+      Count of articles where IsAccepted = 1 and IsDeleted = 0.
+      Date for grouping by time: [StageDate.Accepted].
+    referenced_tables:
+      - name: "[ReportingDataMart].[Reporting].[Articles]"
+        columns:
+          - name: "[StageDate.Accepted]"
+            description: Date when article was accepted.
+          - name: IsAccepted
+            description: Boolean flag indicating acceptance.
+
+  - name: Rejected articles
+    description: >
+      Count of articles where IsRejected = 1 and IsDeleted = 0.
+      Date for grouping by time: [StageDate.Rejected].
+    referenced_tables:
+      - name: "[ReportingDataMart].[Reporting].[Articles]"
+        columns:
+          - name: "[StageDate.Rejected]"
+            description: Date when article was rejected.
+          - name: IsRejected
+            description: Boolean flag indicating rejection.
+
+  - name: Published articles
+    description: >
+      Count of articles where IsPublished = 1 and IsDeleted = 0.
+      Date for grouping by time: [StageDate.Published].
+    referenced_tables:
+      - name: "[ReportingDataMart].[Reporting].[Articles]"
+        columns:
+          - name: "[StageDate.Published]"
+            description: Date when article was published.
+          - name: IsPublished
+            description: Boolean flag indicating publication.
+
+  - name: HE rejections before RE assignment
+    description: >
+      Count of rejected articles where the rejection was recommended or made by an AE (Handling Editor)
+      and no Review Editor was assigned (REAssignment.JoinDate IS NULL).
+    referenced_tables:
+      - name: "[ReportingDataMart].[Reporting].[Articles]"
+        columns:
+          - name: "[RejectionRecommenderRoleAbbr]"
+            description: Role abbreviation of who recommended rejection.
+          - name: "[RejecterRoleAbbr]"
+            description: Role abbreviation of who rejected.
+          - name: "[REAssignment.JoinDate]"
+            description: Date when Review Editor was assigned.
+
+  - name: Review time (days)
+    description: >
+      Number of days in the review process.
+    referenced_tables:
+      - name: "[ReportingDataMart].[Reporting].[Articles]"
+        columns:
+          - name: "[DaysIn.ReviewTime]"
+            description: Days spent in review.
+
+  - name: Editorial assignment time (days)
+    description: >
+      Number of days in editorial assignment stage.
+    referenced_tables:
+      - name: "[ReportingDataMart].[Reporting].[Articles]"
+        columns:
+          - name: "[DaysIn.EditorialAssignment]"
+            description: Days in editorial assignment.
+
+  - name: Review board invitation
+    description: >
+      An invitation sent to a potential reviewer or editor for an article.
+    referenced_tables:
+      - name: "[FrontiersReports].[EOf].[ReviewBoardChartsDS]"
+        columns:
+          - name: "[All Article ID]"
+            description: Article identifier.
+          - name: ReviewBoardInvitationId
+            description: Invitation identifier.

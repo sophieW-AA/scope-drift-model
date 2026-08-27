@@ -1,0 +1,608 @@
+{
+  "Frontiers in Earth Science": {
+    "387172": {
+      "model": "gpt-4o-mini",
+      "title": "Toward an \u201cAncient\u201d Virtual World: Improvement Methods on X-ray CT Data Processing and Virtual Reconstruction of Fossil Skulls",
+      "verdict": "in_scope",
+      "reason": "The title discusses fossil skulls, linking to Earth science.",
+      "community_id": 4
+    },
+    "2861469": {
+      "model": "gpt-4o-mini",
+      "title": "Effects of Solar Proton Events Associated With X-Ray Flares on Near-Earth Electron and Proton Fluxes Based on ZH-1 Satellite Observations",
+      "verdict": "in_scope",
+      "reason": "The title relates to solar events affecting Earth's near-space environment.",
+      "community_id": 4
+    },
+    "6294396": {
+      "model": "gpt-4o-mini",
+      "title": "Seabed classification of multibeam echosounder data into bedrock/non-bedrock using deep learning",
+      "verdict": "in_scope",
+      "reason": "The title focuses on seabed classification, relevant to Earth science.",
+      "community_id": 4
+    },
+    "497676": {
+      "model": "gpt-4o-mini",
+      "title": "Research Trends and Focus on the Deserts of Northern China: A Bibliometric Analysis During 1986\u20132020",
+      "verdict": "out_of_scope",
+      "reason": "The title is a bibliometric analysis without direct Earth science relevance.",
+      "community_id": 4
+    },
+    "672940": {
+      "model": "gpt-4o-mini",
+      "title": "A bibliometric analysis and review of water resources carrying capacity using ren\u00e9 descartes\u2019s discourse theory",
+      "verdict": "out_of_scope",
+      "reason": "The title is a bibliometric analysis lacking direct Earth science content.",
+      "community_id": 4
+    },
+    "2471990": {
+      "model": "gpt-4o-mini",
+      "title": "Assessment of the Applicability of UAV for the Creation of Digital Surface Model of a Small Peatland",
+      "verdict": "in_scope",
+      "reason": "The title discusses UAV applications for peatland modeling, relevant to Earth science.",
+      "community_id": 4
+    },
+    "2675077": {
+      "model": "gpt-4o-mini",
+      "title": "Application of Deep Learning in Land Use Classification for Soil Erosion Using Remote Sensing",
+      "verdict": "in_scope",
+      "reason": "The title addresses soil erosion classification, pertinent to Earth science.",
+      "community_id": 4
+    },
+    "4816288": {
+      "model": "gpt-4o-mini",
+      "title": "Reconstructing long-term global satellite-based soil moisture data using deep learning method",
+      "verdict": "in_scope",
+      "reason": "The title involves soil moisture data reconstruction, relevant to Earth science.",
+      "community_id": 4
+    },
+    "4798": {
+      "model": "gpt-4o-mini",
+      "title": "Multiscale Integration of High-Resolution Spaceborne and Drone-Based Imagery for a High-Accuracy Digital Elevation Model Over Tristan da Cunha",
+      "verdict": "in_scope",
+      "reason": "The title discusses digital elevation models, relevant to Earth science.",
+      "community_id": 4
+    },
+    "144402": {
+      "model": "gpt-4o-mini",
+      "title": "Experimental Study of Cone Penetration in Snow Using X-Ray Tomography",
+      "verdict": "in_scope",
+      "reason": "The title involves experimental study of snow, relevant to Earth science.",
+      "community_id": 4
+    },
+    "353021": {
+      "model": "gpt-4o-mini",
+      "title": "Ablation Patterns of the Debris Covered Tongue of Halong Glacier Revealed by Short Term Unmanned Aerial Vehicle Surveys",
+      "verdict": "in_scope",
+      "reason": "The title discusses glacier ablation, relevant to Earth science.",
+      "community_id": 4
+    },
+    "2859750": {
+      "model": "gpt-4o-mini",
+      "title": "Recent Evolution of Glaciers in the Manaslu Region of Nepal From Satellite Imagery and UAV Data (1970\u20132019)",
+      "verdict": "in_scope",
+      "reason": "The title focuses on glacier evolution, relevant to Earth science.",
+      "community_id": 4
+    },
+    "5593529": {
+      "model": "gpt-4o-mini",
+      "title": "Improved forecasting of extreme hurricane events by integrating spatio-temporal CNN-RF learning of tropical cyclone characteristics",
+      "verdict": "in_scope",
+      "reason": "The title relates to hurricane forecasting, relevant to Earth science.",
+      "community_id": 4
+    },
+    "5665703": {
+      "model": "gpt-4o-mini",
+      "title": "A study of deep learning algorithm usage in predicting building loss ratio due to typhoons: the case of southern part of the Korean Peninsula",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on building loss prediction, lacking direct Earth science relevance.",
+      "community_id": 4
+    },
+    "5697999": {
+      "model": "gpt-4o-mini",
+      "title": "A radiative transfer deep learning model coupled into WRF with a generic fortran torch adaptor",
+      "verdict": "out_of_scope",
+      "reason": "The title discusses a generic model without direct Earth science application.",
+      "community_id": 4
+    },
+    "5802126": {
+      "model": "gpt-4o-mini",
+      "title": "UAV image matching of mountainous terrain using the LoFTR deep learning model",
+      "verdict": "in_scope",
+      "reason": "The title involves UAV image matching in mountainous terrain, relevant to Earth science.",
+      "community_id": 4
+    },
+    "6700248": {
+      "model": "gpt-4o-mini",
+      "title": "Deep learning-based spatial downscaling and its application for tropical cyclone detection in the western North Pacific",
+      "verdict": "in_scope",
+      "reason": "The title discusses tropical cyclone detection, relevant to Earth science.",
+      "community_id": 4
+    },
+    "8601469": {
+      "model": "gpt-4o-mini",
+      "title": "A Transformer-based Method for Correcting Daily SST Numerical Forecasting products",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on numerical forecasting without direct Earth science context.",
+      "community_id": 4
+    },
+    "10644351": {
+      "model": "gpt-4o-mini",
+      "title": "Advances in deep learning applications to severe convective weather forecasting: rainstorms, hail, thunderstorm winds and tornadoes",
+      "verdict": "in_scope",
+      "reason": "The title discusses severe weather forecasting, relevant to Earth science.",
+      "community_id": 4
+    },
+    "868083": {
+      "model": "gpt-4o-mini",
+      "title": "Two-Dimensional Space-Time Image Velocimetry for Surface Flow Field of Mountain Rivers Based on UAV Video",
+      "verdict": "in_scope",
+      "reason": "The title involves surface flow field analysis, relevant to Earth science.",
+      "community_id": 4
+    },
+    "2698229": {
+      "model": "gpt-4o-mini",
+      "title": "Comprehensive Analysis for Long-Term Hydrological Simulation by Deep Learning Techniques and Remote Sensing",
+      "verdict": "in_scope",
+      "reason": "The title addresses hydrological simulation relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "2865713": {
+      "model": "gpt-4o-mini",
+      "title": "Scalable deep learning for watershed model calibration",
+      "verdict": "in_scope",
+      "reason": "The title focuses on watershed model calibration, which is pertinent to environmental monitoring.",
+      "community_id": 4
+    },
+    "10646074": {
+      "model": "gpt-4o-mini",
+      "title": "A hybrid deep learning framework for multisource data fusion and super-resolution mapping in AI-powered earth observation applications",
+      "verdict": "in_scope",
+      "reason": "The title discusses data fusion and mapping in earth observation, aligning with the journal's scope.",
+      "community_id": 4
+    },
+    "3119067": {
+      "model": "gpt-4o-mini",
+      "title": "Design a regional and multistep air quality forecast model based on deep learning and domain knowledge",
+      "verdict": "in_scope",
+      "reason": "The title involves air quality forecasting, which is relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "3870975": {
+      "model": "gpt-4o-mini",
+      "title": "Prior land surface reflectance-based sandstorm detection from space using deep learning",
+      "verdict": "in_scope",
+      "reason": "The title pertains to sandstorm detection from space, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "6545803": {
+      "model": "gpt-4o-mini",
+      "title": "Vertical profiles of temperature, wind, and turbulent fluxes across a deciduous forest over a slope observed with a UAV",
+      "verdict": "in_scope",
+      "reason": "The title discusses atmospheric measurements over a forest, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "3730002": {
+      "model": "gpt-4o-mini",
+      "title": "Variation in Luminescence Characteristics and Paramagnetic Defect Centres in Fine-Grained Quartz From a Loess-Palaeosol Sequence in Tajikistan: Implications for Provenance Studies in Aeolian Environments",
+      "verdict": "in_scope",
+      "reason": "The title relates to provenance studies in aeolian environments, fitting the journal's focus.",
+      "community_id": 4
+    },
+    "5246915": {
+      "model": "gpt-4o-mini",
+      "title": "X-ray tomographic microscopy of Eocene coprolites from Pipestone Springs Main Pocket, southwest Montana",
+      "verdict": "in_scope",
+      "reason": "The title involves X-ray microscopy of geological samples, relevant to earth science.",
+      "community_id": 4
+    },
+    "5500936": {
+      "model": "gpt-4o-mini",
+      "title": "Conodont biostratigraphy of a Carboniferous\u2013Permian boundary section in siliceous successions of pelagic Panthalassa revealed by X-ray computed microtomography",
+      "verdict": "in_scope",
+      "reason": "The title discusses biostratigraphy, which is relevant to geological studies.",
+      "community_id": 4
+    },
+    "6162151": {
+      "model": "gpt-4o-mini",
+      "title": "Precise bulk density measurement of planktonic foraminiferal test by X-ray microcomputed tomography",
+      "verdict": "in_scope",
+      "reason": "The title focuses on density measurement of foraminifera, relevant to earth science.",
+      "community_id": 4
+    }
+  },
+  "Frontiers in Environmental Science": {
+    "1439606": {
+      "model": "gpt-4o-mini",
+      "title": "Sustainable Crafts: Describing Conceptual Evolution Through a Bibliometric Analysis and Systematic Literature Review",
+      "verdict": "in_scope",
+      "reason": "The paper discusses sustainable crafts within the context of environmental monitoring.",
+      "community_id": 4
+    },
+    "7186082": {
+      "model": "gpt-4o-mini",
+      "title": "Ecological niche modelling: a global assessment based on bibliometric analysis",
+      "verdict": "in_scope",
+      "reason": "The title focuses on ecological niche modeling, relevant to environmental assessments.",
+      "community_id": 4
+    },
+    "7768171": {
+      "model": "gpt-4o-mini",
+      "title": "Research on coastline extraction and dynamic change from remote sensing images based on deep learning",
+      "verdict": "in_scope",
+      "reason": "The research involves coastline extraction using remote sensing, pertinent to environmental monitoring.",
+      "community_id": 4
+    },
+    "8017921": {
+      "model": "gpt-4o-mini",
+      "title": "A BIBLIOMETRIC REVIEW OF GLOBAL RESEARCH ON THE HUMAN-WILDLIFE CONFLICTS",
+      "verdict": "in_scope",
+      "reason": "The bibliometric review addresses human-wildlife conflicts, relevant to environmental science.",
+      "community_id": 4
+    },
+    "8596955": {
+      "model": "gpt-4o-mini",
+      "title": "Utilizing Deep Learning for Intelligent Monitoring and Early Warning of Slope Disasters in Public Space Design",
+      "verdict": "in_scope",
+      "reason": "The paper discusses slope disaster monitoring, linking deep learning to environmental safety.",
+      "community_id": 4
+    },
+    "8961425": {
+      "model": "gpt-4o-mini",
+      "title": "Institutional dynamics in climate change adaptation: a bibliometric analysis",
+      "verdict": "in_scope",
+      "reason": "The analysis of institutional dynamics in climate change adaptation is relevant to environmental policy.",
+      "community_id": 4
+    },
+    "193196": {
+      "model": "gpt-4o-mini",
+      "title": "Urban Catchment-Scale Blue-Green-Gray Infrastructure Classification with Unmanned Aerial Vehicle Images and Machine Learning Algorithms",
+      "verdict": "in_scope",
+      "reason": "The study on urban infrastructure classification using UAV images is relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "266336": {
+      "model": "gpt-4o-mini",
+      "title": "New techniques for old fires: Using deep learning to augment fire maps from the early satellite era",
+      "verdict": "in_scope",
+      "reason": "The paper discusses augmenting fire maps, which is relevant to environmental monitoring of wildfires.",
+      "community_id": 4
+    },
+    "1840332": {
+      "model": "gpt-4o-mini",
+      "title": "Aerodynamic Properties and Shelter Effects of a Concrete Plate-Insert Sand Fence Along the Lanzhou-Xinjiang High-Speed Railway in Gobi Regions Under Strong Winds",
+      "verdict": "in_scope",
+      "reason": "The study on aerodynamic properties of sand fences relates to environmental engineering.",
+      "community_id": 4
+    },
+    "2541447": {
+      "model": "gpt-4o-mini",
+      "title": "Reconstruction of tree branching structures from UAV-LiDAR data",
+      "verdict": "in_scope",
+      "reason": "Reconstructing tree structures from UAV data is relevant to environmental monitoring and forestry.",
+      "community_id": 4
+    },
+    "3046917": {
+      "model": "gpt-4o-mini",
+      "title": "Assessing the effects of burn severity on post-fire tree structures using the fused drone and mobile laser scanning point clouds",
+      "verdict": "in_scope",
+      "reason": "The assessment of post-fire tree structures is relevant to environmental recovery studies.",
+      "community_id": 4
+    },
+    "3233647": {
+      "model": "gpt-4o-mini",
+      "title": "Evaluation of Crop Water Status and Vegetation Dynamics For Alternate Partial Root-Zone Drip Irrigation of Alfalfa: Observation With an UAV Thermal Infrared Imagery",
+      "verdict": "in_scope",
+      "reason": "The evaluation of crop water status is relevant to environmental monitoring in agriculture.",
+      "community_id": 4
+    },
+    "3528429": {
+      "model": "gpt-4o-mini",
+      "title": "Fine crop classification in high resolution remote sensing based on deep learning",
+      "verdict": "in_scope",
+      "reason": "Crop classification using remote sensing is relevant to environmental monitoring in agriculture.",
+      "community_id": 4
+    },
+    "3731547": {
+      "model": "gpt-4o-mini",
+      "title": "Synergetic use of unmanned aerial vehicle and satellite images for detecting non-native tree species: An insight into Acacia saligna invasion in the Mediterranean coast",
+      "verdict": "in_scope",
+      "reason": "The study on detecting non-native tree species is relevant to environmental conservation.",
+      "community_id": 4
+    },
+    "6974545": {
+      "model": "gpt-4o-mini",
+      "title": "Comparison of machine and deep learning algorithms using Google Earth Engine and Python for land classifications",
+      "verdict": "out_of_scope",
+      "reason": "The focus on machine learning algorithms for land classifications lacks direct environmental context.",
+      "community_id": 4
+    },
+    "7806829": {
+      "model": "gpt-4o-mini",
+      "title": "A vulnerable soil environment study in karst areas: a bibliometric analysis",
+      "verdict": "in_scope",
+      "reason": "The study on vulnerable soil environments is relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "9572198": {
+      "model": "gpt-4o-mini",
+      "title": "Research on soil spotted degradation prediction in qinling tea-producing area of China based on deep learning",
+      "verdict": "in_scope",
+      "reason": "The prediction of soil degradation is relevant to environmental monitoring and agriculture.",
+      "community_id": 4
+    },
+    "192667": {
+      "model": "gpt-4o-mini",
+      "title": "Improving the heavy rainfall forecasting using a weighted deep learning model",
+      "verdict": "in_scope",
+      "reason": "Improving rainfall forecasting is relevant to environmental monitoring and climate studies.",
+      "community_id": 4
+    },
+    "1177830": {
+      "model": "gpt-4o-mini",
+      "title": "Spatiotemporal model based on transformer for bias correction and temporal downscaling of forecasts",
+      "verdict": "in_scope",
+      "reason": "The spatiotemporal model for bias correction is relevant to environmental forecasting.",
+      "community_id": 4
+    },
+    "1291325": {
+      "model": "gpt-4o-mini",
+      "title": "MaRTiny\u2014A Low-Cost Biometeorological Sensing Device With Embedded Computer Vision for Urban Climate Research",
+      "verdict": "in_scope",
+      "reason": "The development of a biometeorological sensing device is relevant to urban climate research.",
+      "community_id": 4
+    },
+    "1769728": {
+      "model": "gpt-4o-mini",
+      "title": "Merging and Downscaling Soil Moisture Data From CMIP6 Projections Using Deep Learning Method",
+      "verdict": "in_scope",
+      "reason": "The title addresses soil moisture data relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "5273983": {
+      "model": "gpt-4o-mini",
+      "title": "BVLOS UAV missions for vegetation mapping in maritime Antarctic",
+      "verdict": "in_scope",
+      "reason": "The title focuses on UAV missions for vegetation mapping, which is pertinent to environmental monitoring.",
+      "community_id": 4
+    },
+    "7920050": {
+      "model": "gpt-4o-mini",
+      "title": "Investigation of a Transformer-Based Hybrid Artificial Neural Networks for Climate Data Prediction and Analysis",
+      "verdict": "in_scope",
+      "reason": "The title involves climate data prediction, relevant to environmental science.",
+      "community_id": 4
+    },
+    "9035395": {
+      "model": "gpt-4o-mini",
+      "title": "Forecasting Sea Level Rise Using Enhanced Deep Learning Models",
+      "verdict": "in_scope",
+      "reason": "The title discusses forecasting sea level rise, a critical environmental issue.",
+      "community_id": 4
+    },
+    "9295243": {
+      "model": "gpt-4o-mini",
+      "title": "Performance assessment of drone-based photogrammetry coupled with machine-learning for the estimation of hail size distributions on the ground",
+      "verdict": "in_scope",
+      "reason": "The title relates to estimating hail size distributions, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "9793850": {
+      "model": "gpt-4o-mini",
+      "title": "Segmentation of arctic coastal shoreline and bluff edges using optical satellite imagery and deep learning",
+      "verdict": "in_scope",
+      "reason": "The title involves shoreline segmentation using satellite imagery, relevant to environmental science.",
+      "community_id": 4
+    },
+    "10631257": {
+      "model": "gpt-4o-mini",
+      "title": "From policy fragmentation to coordinated action: re-engineering local governance for smart city development and carbon targets",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on governance and smart city development, not directly related to environmental science.",
+      "community_id": 4
+    },
+    "1056911": {
+      "model": "gpt-4o-mini",
+      "title": "Water quality monitoring and assessment based on cruise monitoring, remote sensing, and deep learning: A case study of Qingcaosha Reservoir",
+      "verdict": "in_scope",
+      "reason": "The title addresses water quality monitoring, which is relevant to environmental science.",
+      "community_id": 4
+    },
+    "2773556": {
+      "model": "gpt-4o-mini",
+      "title": "Unmanned Aerial Vehicle (UAV)-Based Thermal Infra-Red (TIR) and Optical Imagery Reveals Multi-Spatial Scale Controls of Cold-Water Areas Over a Groundwater-Dominated Riverscape",
+      "verdict": "in_scope",
+      "reason": "The title discusses UAV-based imagery for groundwater monitoring, relevant to environmental science.",
+      "community_id": 4
+    },
+    "5355401": {
+      "model": "gpt-4o-mini",
+      "title": "Water quality parameters retrieval of coastal mariculture ponds based on UAV multispectral remote sensing",
+      "verdict": "in_scope",
+      "reason": "The title focuses on water quality parameters retrieval, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "6083730": {
+      "model": "gpt-4o-mini",
+      "title": "Dissolved oxygen concentration inversion based on Himawari-8 data and deep learning: a case study of lake Taihu",
+      "verdict": "in_scope",
+      "reason": "The title involves dissolved oxygen concentration monitoring, relevant to environmental science.",
+      "community_id": 4
+    },
+    "7524222": {
+      "model": "gpt-4o-mini",
+      "title": "Data-driven novel deep learning applications for the prediction of rainfall using meteorological data",
+      "verdict": "out_of_scope",
+      "reason": "The title is focused on rainfall prediction without clear environmental implications.",
+      "community_id": 4
+    },
+    "9454057": {
+      "model": "gpt-4o-mini",
+      "title": "Automatic recognition of environmental hazards in river and lake ecosystems using deep learning",
+      "verdict": "in_scope",
+      "reason": "The title addresses environmental hazards in ecosystems, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "10643488": {
+      "model": "gpt-4o-mini",
+      "title": "Impact of climate change on future flood susceptibility using different climatic parameters and deep learning algorithms in eastern Himalayan region",
+      "verdict": "in_scope",
+      "reason": "The title discusses flood susceptibility related to climate change, relevant to environmental science.",
+      "community_id": 4
+    },
+    "604417": {
+      "model": "gpt-4o-mini",
+      "title": "Social Acceptance of Smart City Projects: Focus on the Sidewalk Toronto Case",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on social acceptance of smart city projects, not directly related to environmental science.",
+      "community_id": 4
+    },
+    "1879560": {
+      "model": "gpt-4o-mini",
+      "title": "Deep Learning Detection and Recognition of Spot Elevations on Historical Topographic Maps",
+      "verdict": "out_of_scope",
+      "reason": "The title discusses historical topographic maps without clear environmental relevance.",
+      "community_id": 4
+    },
+    "5395535": {
+      "model": "gpt-4o-mini",
+      "title": "Progress of carbon sequestration in urban green space based on bibliometric analysis",
+      "verdict": "out_of_scope",
+      "reason": "The title focuses on bibliometric analysis, lacking direct environmental implications.",
+      "community_id": 4
+    },
+    "6705077": {
+      "model": "gpt-4o-mini",
+      "title": "Equity in park green spaces: a bibliometric analysis and systematic literature review from 2014-2023",
+      "verdict": "out_of_scope",
+      "reason": "The title is a bibliometric analysis, not directly related to environmental science.",
+      "community_id": 4
+    },
+    "8017024": {
+      "model": "gpt-4o-mini",
+      "title": "Zooming into Berlin: Tracking Street-Scale CO 2 Emissions based on High-resolution Traffic Modeling using Machine Learning",
+      "verdict": "in_scope",
+      "reason": "The title discusses tracking CO2 emissions, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "10656833": {
+      "model": "gpt-4o-mini",
+      "title": "Carbon sequestration capacity of roadside vegetation along a high-traffic expressway in central China",
+      "verdict": "in_scope",
+      "reason": "The title addresses carbon sequestration capacity, relevant to environmental science.",
+      "community_id": 4
+    },
+    "623677": {
+      "model": "gpt-4o-mini",
+      "title": "Temporal Difference-Based Graph Transformer Networks For Air Quality PM2.5 Prediction: A Case Study in China",
+      "verdict": "in_scope",
+      "reason": "Focuses on air quality prediction, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "865560": {
+      "model": "gpt-4o-mini",
+      "title": "Estimating NOX, VOC, and CO variability over India\u2019s 1st smart city: Bhubaneswar",
+      "verdict": "in_scope",
+      "reason": "Estimates air pollutant variability, directly related to environmental monitoring.",
+      "community_id": 4
+    },
+    "1076706": {
+      "model": "gpt-4o-mini",
+      "title": "Impact of the COVID-19 Restrictive Measures on Urban Traffic-Related Air Pollution in Serbia",
+      "verdict": "in_scope",
+      "reason": "Analyzes the impact of COVID-19 on air pollution, relevant to environmental science.",
+      "community_id": 4
+    },
+    "1697150": {
+      "model": "gpt-4o-mini",
+      "title": "Impact of airport operations and road traffic on the particle number concentration in the vicinity of a suburban airport",
+      "verdict": "in_scope",
+      "reason": "Studies particle concentration related to airport and traffic, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "1816266": {
+      "model": "gpt-4o-mini",
+      "title": "Road grade estimation for vehicle emissions modeling using electronic atmospheric pressure sensors",
+      "verdict": "in_scope",
+      "reason": "Focuses on vehicle emissions modeling, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "4051688": {
+      "model": "gpt-4o-mini",
+      "title": "Study of Variations in Mass Absorption Efficiency of Elemental Carbon Influenced by Different Measurement Techniques and Vehicle Emission",
+      "verdict": "in_scope",
+      "reason": "Investigates mass absorption efficiency of carbon, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "4900056": {
+      "model": "gpt-4o-mini",
+      "title": "To extract or not to extract? Influence of chemical extraction treatment of wood samples on element concentrations in tree-rings measured by X-ray fluorescence",
+      "verdict": "in_scope",
+      "reason": "Examines chemical extraction effects on tree-rings, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "6788875": {
+      "model": "gpt-4o-mini",
+      "title": "First study using a fixed-wing drone for systematic measurements of aerosol vertical distribution close to a civil airport",
+      "verdict": "in_scope",
+      "reason": "Utilizes drones for aerosol measurements, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "8411796": {
+      "model": "gpt-4o-mini",
+      "title": "SFDformer: A Frequency-Based Sparse Decomposition Transformer for Air Pollution Time Series Prediction",
+      "verdict": "in_scope",
+      "reason": "Develops a model for air pollution prediction, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "9377697": {
+      "model": "gpt-4o-mini",
+      "title": "A CEEMDAN-GNN-transformer hybrid model for air quality index forecasting: a case study of Chang\u2019an town, Dongguan, China",
+      "verdict": "in_scope",
+      "reason": "Focuses on air quality index forecasting, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "10167813": {
+      "model": "gpt-4o-mini",
+      "title": "A China-centered bibliometric study of cooking fumes research with an international comparative perspective",
+      "verdict": "out_of_scope",
+      "reason": "Bibliometric study lacks direct environmental science focus.",
+      "community_id": 4
+    },
+    "10431069": {
+      "model": "gpt-4o-mini",
+      "title": "Application of CH4 monitoring technology based on UAV platform in Shengli Oilfield",
+      "verdict": "in_scope",
+      "reason": "Applies monitoring technology for methane, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "10648452": {
+      "model": "gpt-4o-mini",
+      "title": "Transformer encoder for one-step-ahead AQI forecasting using multivariate air-quality monitoring data",
+      "verdict": "in_scope",
+      "reason": "Uses data for air quality forecasting, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "483510": {
+      "model": "gpt-4o-mini",
+      "title": "An Automated Method for Mapping Giant Kelp Canopy Dynamics from UAV",
+      "verdict": "in_scope",
+      "reason": "Maps kelp dynamics, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "700328": {
+      "model": "gpt-4o-mini",
+      "title": "Kelp Patch-Specific Characteristics Limit Detection Capability of Rapid Survey Method for Determining Canopy Biomass Using an Unmanned Aerial Vehicle",
+      "verdict": "in_scope",
+      "reason": "Studies detection methods for kelp biomass, relevant to environmental monitoring.",
+      "community_id": 4
+    },
+    "939607": {
+      "model": "gpt-4o-mini",
+      "title": "UAV to Inform Restoration: A Case Study From a California Tidal Marsh",
+      "verdict": "in_scope",
+      "reason": "Uses UAV for restoration study, relevant to environmental monitoring.",
+      "community_id": 4
+    }
+  }
+}

@@ -1,0 +1,313 @@
+# Analytical Data Model - ocean-breeze-tier-3.ringgold
+# Narrow Data Model (NDM) - Version 2
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-10
+# Updated:   2026-04-10  — Added internal FK annotations for the full Ringgold relational
+#                          graph (ringgold_id → organizations, term_id → ontology,
+#                          place_id → places). No external cross-dataset joins confirmed.
+# Source: dataset-model-ADM/ocean-breeze-tier-3.ringgold_ADM_V2.yaml
+#
+# -- Join rules ----------------------------------------------------------------
+# - space_id is an implicit second join condition wherever the grain includes it.
+# - When joining two tables within the dataset, space_id is not strictly
+#   required - the primary key is sufficient.
+# - When crossing into external datasets, use XXX_original + space_id.
+# - If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# -- FK cardinality conventions ------------------------------------------------
+# many_to_one          : many rows here -> same parent row (standard FK)
+# one_to_one           : at most one row here per referenced parent row
+# optional_many_to_one : FK is nullable / zero-or-one participation
+# [PROPOSED]           : inferred - validate before use
+# -----------------------------------------------------------------------------
+
+entities:
+
+  ######################## ORGANIZATION ########################
+
+  - name: organizations
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.organizations
+    description: "Core Ringgold organization records: one row per organization with Ringgold ID, official name, associated place (place_id), post code, consortium flag, and last modified timestamp. Primary entity for institutions; related data (names, URLs, classifications) is in separate tables."
+    grain: ringgold_id, place_id
+    primary_key: ringgold_id, place_id
+    columns:
+      - name: ringgold_id
+        type: Integer
+      - name: place_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: places
+            column: place_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] is located in"
+
+  - name: organizations_deleted
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.organizations_deleted
+    description: "Record of deleted or merged Ringgold organizations: old_ringgold_id, optional new_ringgold_id (for merges/redirects), and details about the deletion or merge. Used for historical tracking and redirecting legacy identifiers to current organizations."
+    grain: internal_id, old_ringgold_id
+    primary_key: internal_id, old_ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: old_ringgold_id
+        type: Integer
+      - name: new_ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: optional_many_to_one
+            relationship: "[PROPOSED] redirects to"
+
+  ######################## UNKNOWN ########################
+
+  - name: ontology
+    domain: COMMON
+    source_table: ocean-breeze-tier-3.ringgold.ontology
+    description: "Ringgold ontology and controlled vocabularies: taxonomy terms used across the Ringgold dataset (e.g. name types, classification types, relationship types, URL types). Provides term identifiers, names, and descriptions for consistent categorization and linking."
+    grain: internal_id, term_id
+    primary_key: internal_id, term_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: term_id
+        type: Integer
+
+  - name: org_alt_names
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_alt_names
+    description: "Alternative and variant names for Ringgold organizations: legal names, acronyms, former names, and other name types (from ontology). Includes name type, optional year, language, and place/post code when the name is location-specific."
+    grain: internal_id, ringgold_id
+    primary_key: internal_id, ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] is alt name for"
+      - name: name_type_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] name type from ontology"
+      - name: place_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: places
+            column: place_id
+            cardinality: optional_many_to_one
+            relationship: "[PROPOSED] location-specific name in"
+
+  - name: org_classifications
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_classifications
+    description: "Internal Ringgold classifications for organizations: each row links an organization (ringgold_id) to a classification type and value, both resolved via term IDs from the Ringgold ontology. Used for institutional type, sector, and other controlled attributes."
+    grain: internal_id, ringgold_id
+    primary_key: internal_id, ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] classifies"
+      - name: classification_type_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] classification type from ontology"
+      - name: classification_value_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] classification value from ontology"
+
+  - name: org_external_classifications
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_external_classifications
+    description: "External or free-text classifications for Ringgold organizations: classification type comes from the ontology (term_id), while the value is a string (e.g. from external systems or legacy data). Complements internal classifications when values are not in the Ringgold ontology."
+    grain: internal_id, ringgold_id
+    primary_key: internal_id, ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] external-classifies"
+      - name: classification_type_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] classification type from ontology"
+
+  - name: org_external_identifiers
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_external_identifiers
+    description: "External identifiers for Ringgold organizations: links to ISNI, GRID, Crossref Funder ID, and other systems. Each row has an identifier type (from ontology) and the value, enabling cross-walking and deduplication across data sources."
+    grain: internal_id, ringgold_id
+    primary_key: internal_id, ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] external identifier for"
+      - name: identifier_type_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] identifier type from ontology"
+
+  - name: org_notes
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_notes
+    description: "Free-text notes and annotations about Ringgold organizations: administrative comments, merge history, data quality notes, or other unstructured information linked to an organization by ringgold_id."
+    grain: internal_id, ringgold_id
+    primary_key: internal_id, ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] note for"
+
+  - name: org_relationships
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_relationships
+    description: "Relationships between Ringgold organizations: subject (subject_ringgold_id) and object (object_ringgold_id) with a relationship type from the ontology (e.g. parent, branch, consortium member). Models institutional hierarchy and affiliations."
+    grain: internal_id, subject_ringgold_id
+    primary_key: internal_id, subject_ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: subject_ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] subject of relationship"
+      - name: object_ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] object of relationship"
+      - name: relationship_type_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] relationship type from ontology"
+
+  - name: org_sizes
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_sizes
+    description: "Size and scale metrics for Ringgold organizations: FTE, student count, and other quantitative measures. Each row has a size type (from ontology) and value, allowing multiple metrics per organization."
+    grain: internal_id, ringgold_id
+    primary_key: internal_id, ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] size metric for"
+      - name: size_type_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] size type from ontology"
+
+  - name: org_urls
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.org_urls
+    description: "Web URLs associated with Ringgold organizations: homepage, catalog, OPAC, and other URL types defined in the ontology. Each row links a URL and its type to an organization (ringgold_id)."
+    grain: internal_id, ringgold_id
+    primary_key: internal_id, ringgold_id
+    columns:
+      - name: internal_id
+        type: Integer
+      - name: ringgold_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organizations
+            column: ringgold_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] URL for"
+      - name: url_type_term_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: ontology
+            column: term_id
+            cardinality: many_to_one
+            relationship: "[PROPOSED] URL type from ontology"
+
+  - name: places
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.ringgold.places
+    description: "Geographic locations referenced by Ringgold organizations: place_id, country code, language, full and short names, administrative hierarchy (levels 1–5), coordinates (lat/long), and formatted display names. Used to resolve organization addresses and locations."
+    grain: place_id
+    primary_key: place_id
+    columns:
+      - name: place_id
+        type: Integer

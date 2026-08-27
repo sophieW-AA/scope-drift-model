@@ -60,3 +60,21 @@ Results are written to `output/`:
 - `scope_global_dashboard.html` — Interactive dashboard
 - `scope_global_network.json` — Network data for visualization
 - `config_comparison.txt` — Edge weight config comparison
+
+
+
+#### 
+
+How to run efficiently
+
+Full run is run_pipeline in the notebook - data gather, cwts cluster, taxonomy naming, pdf/html output
+
+PARTIAL RUN 
+cwts_export - runs data gathering, cwts export and upload all output to bigquery, 
+run_pipeline - manually change dattime to the same as above for taxonomy naming, pdf/html output 
+
+Individual runs are:
+1. cwts_export run classification = FALSE - this just gets the data and ciation weights
+1. subprocess_leiden - you need to make sure your resolution and timestamp is right
+2. taxonomy_naming.py - names the files
+3. files come from run_pipeline

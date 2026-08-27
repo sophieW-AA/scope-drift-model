@@ -1,0 +1,136 @@
+# Analytical Data Model — ocean-breeze-tier-2.peer_review
+# Narrow Data Model (NDM) — Version 1
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-03
+# Source: ocean-breeze-tier-2.peer_review_ADM_V1.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within the dataset, space_id is not strictly
+# required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table
+# that does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one         : many rows here → same parent row (standard FK)
+# one_to_one          : at most one row here per referenced parent row
+# optional_many_to_one: FK is nullable / zero-or-one participation
+# [PROPOSED]          : inferred — validate before use
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+  ######################## UNKNOWN ########################
+
+  - name: annotation
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.peer_review.annotation
+    description: >
+      Public subset of Annotations (no free text; includes space_id). Singular table name; snake_case columns.
+    grain: annotation_id, space_id
+    primary_key: annotation_id, space_id
+    columns:
+      - name: annotation_id
+        type: String
+      - name: article_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "has annotations on"
+      - name: user_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "written by"
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: annotation_comment
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.peer_review.annotation_comment
+    description: >
+      Public subset of Comments / annotation comments (includes space_id; sequence_number computed). Snake_case columns.
+    grain: annotation_comment_id, space_id
+    primary_key: annotation_comment_id, space_id
+    columns:
+      - name: annotation_comment_id
+        type: String
+      - name: annotation_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: annotation
+            column: annotation_id
+            cardinality: many_to_one
+            relationship: "it references"
+      - name: user_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "it references"
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: review_turn
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.peer_review.review_turn
+    description: "Public subset of ReviewTurns (includes space_id). Singular table name; snake_case columns."
+    grain: review_turn_id, space_id
+    primary_key: review_turn_id, space_id
+    columns:
+      - name: review_turn_id
+        type: String
+      - name: article_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: article_id_original
+            cardinality: many_to_one
+            relationship: "it references"
+      - name: reviewer_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "is a reviewer of"
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"

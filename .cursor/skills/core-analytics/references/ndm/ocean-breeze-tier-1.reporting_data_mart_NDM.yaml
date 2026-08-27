@@ -1,0 +1,1069 @@
+# Analytical Data Model — ocean-breeze-tier-1.reporting_data_mart
+# Narrow Data Model (NDM) — keys, IDs, and foreign keys only
+# Version: V1
+#
+# Scope: entities sourced exclusively from ocean-breeze-tier-1.reporting_data_mart
+# Derived from: 001-RDM-analytical_data_model.yaml
+# New entities marked [NEW]; proposed definitions marked [PROPOSED].
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within reporting_data_mart, space_id is not strictly
+#   required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table that
+#   does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one          : many rows here → same parent row (standard FK)
+# one_to_one           : at most one row here per referenced parent row
+# optional_many_to_one : FK is nullable / zero-or-one participation
+# ─────────────────────────────────────────────────────────────────────────────
+entities:
+
+
+####################################################### COMMON #######################################################
+
+  - name: space
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.reporting_data_mart.spaces
+    description: >
+      One row per publishing Space (tenant). A Space represents an independent
+            publishing environment (e.g. "Frontiers" or "Frontiers Publishing
+            Partnerships"). All other entities within this dataset are scoped to a
+            Space via space_id.
+    grain: space_id
+    primary_key: space_id
+    columns:
+      - name: space_id
+        type: Integer
+
+  - name: country
+    domain: COMMON
+    source_table: ocean-breeze-tier-1.reporting_data_mart.country_metrics
+    description: >
+      One row per country. Holds country reference data and Frontiers-defined regional
+            groupings (bins) used for geographic analysis.
+    grain: country_id
+    primary_key: country_id
+    columns:
+      - name: country_id
+        type: String
+      - name: continent_id
+        type: String
+
+
+####################################################### JOURNAL #######################################################
+
+  - name: taxonomy  # [NEW]
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.reporting_data_mart.taxonomy
+    description: >
+      One row per taxonomy node per space. The taxonomy defines the four-
+            level publishing hierarchy (Program › Domain › Field › Specialty) used to
+            classify journals, sections, research topics, and articles. Each row
+            corresponds to one leaf node (typically a Specialty/Section), and also
+            represents intermediate levels via denormalised parent columns.
+    grain: taxonomy_id, space_id
+    primary_key: taxonomy_id, space_id
+    columns:
+      - name: taxonomy_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: domain_id
+        type: Integer
+      - name: field_id
+        type: Integer
+      - name: specialty_id
+        type: Integer
+      - name: parent_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "is child of"
+      - name: journal_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            relationship: "classified under"
+      - name: journal_taxonomy_id
+        type: Integer
+      - name: program_id
+        type: Integer
+
+  - name: taxonomy_metrics  # [NEW]
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.reporting_data_mart.taxonomy_metrics
+    description: >
+      One row per taxonomy node. Extends the taxonomy entity with
+            reporting-oriented attributes: journal metadata (ISSN, launch date, IF)
+            and denormalised hierarchy labels. Useful as a compact, self-contained
+            lookup for journal/section-level reporting without joining back to the
+            taxonomy table.
+    grain: taxonomy_id
+    primary_key: taxonomy_id
+    columns:
+      - name: taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: program_id
+        type: Integer
+      - name: domain_id
+        type: Integer
+      - name: field_id
+        type: Integer
+      - name: specialty_id
+        type: Integer
+      - name: journal_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            relationship: "belongs to"
+      - name: section_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: section
+            column: section_id
+            cardinality: many_to_one
+            relationship: "belongs to"
+      - name: journal_taxonomy_id
+        type: Integer
+
+  - name: journal
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.reporting_data_mart.journal
+    description: >
+      Business Product (a collection of editorial artefacts). One row per journal per
+            space. Hosts journal profile attributes and derived metrics needed for
+            reporting and analytics. Source rows are filtered to taxonomy nodes whose
+            level corresponds to a Journal.
+    grain: journal_id, space_id
+    primary_key: journal_id, space_id
+    filter: "WHERE journal_level = 'Journal'"
+    columns:
+      - name: journal_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "classified under"
+      - name: journal_id_original
+        type: Integer
+      - name: program_id
+        type: Integer
+      - name: domain_id
+        type: Integer
+      - name: field_id
+        type: Integer
+      - name: specialty_id
+        type: Integer
+      - name: journal_taxonomy_id
+        type: Integer
+      - name: section_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: section
+            column: section_id
+            cardinality: many_to_one
+            relationship: "contains"
+      - name: segment_id
+        type: String
+
+  - name: section
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.reporting_data_mart.journal
+    description: >
+      One row per specialty section per space. Sections are independent editorial
+            units within a journal, each with their own editorial board. Sourced from
+            the same table as journal, filtered to Section-level taxonomy nodes.
+    grain: section_id, space_id
+    primary_key: section_id, space_id
+    filter: "WHERE journal_level = 'Section'"
+    columns:
+      - name: section_id
+        type: Integer
+      - name: journal_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            relationship: "belongs to journal"
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "classified under"
+
+  - name: journal_role
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.reporting_data_mart.journal_role
+    description: >
+      Reference table for journal roles (e.g. Field Chief Editor, Associate Editor,
+            Review Editor). One row per role. Shared across journal editorial board
+            members and review board members.
+    grain: journal_role_id
+    primary_key: journal_role_id
+    columns:
+      - name: journal_role_id
+        type: String
+      - name: role_id
+        type: Integer
+
+  - name: journal_user_metrics  # [NEW]
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-1.reporting_data_mart.journal_user_metrics
+    description: >
+       One row per user per journal role assignment per space. Combines user
+            identity, role assignment, and journal/taxonomy context. Acts as a bridge
+            between the user and journal domains, capturing the highest role a user
+            holds within a given journal hierarchy together with engagement metrics.
+    grain: user_id, space_id, taxonomy_id, role_id
+    primary_key: user_id, space_id, taxonomy_id, role_id
+    columns:
+      - name: user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "associated with"
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "scoped to"
+      - name: role_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal_role
+            column: role_id
+            cardinality: many_to_one
+            relationship: "holds role"
+
+  # ─── EDITORIAL_BOARD ───────────────────────────────────────────────────────
+
+  - name: editorial_board_invitation
+    domain: JOURNAL
+    subdomain: EDITORIAL_BOARD
+    source_table: ocean-breeze-tier-1.reporting_data_mart.editorial_board_invitations
+    description: >
+      One row per editorial board invitation per space. Tracks invitations sent to
+            prospective editorial board members, including inviter/invitee identities,
+            invitation status, and any declination reasons.
+    grain: editorial_board_invitation_id, space_id
+    primary_key: editorial_board_invitation_id, space_id
+    columns:
+      - name: editorial_board_invitation_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "for taxonomy"
+      - name: invitation_type_id
+        type: Integer
+      - name: invitation_status_id
+        type: Integer
+      - name: inviter_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "sent by"
+      - name: invitee_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "sent to"
+      - name: invitee_role_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: journal_role
+            column: journal_role_id
+            cardinality: many_to_one
+            relationship: "for role"
+
+  - name: editorial_board_member
+    domain: JOURNAL
+    subdomain: EDITORIAL_BOARD
+    source_table: ocean-breeze-tier-1.reporting_data_mart.editorial_board_member
+    description: >
+      Persons who are specialists in specified taxonomies and may also review
+            articles. One row per editorial board member role assignment per space.
+            Members are always associated with a registered user_id.
+    grain: editorial_board_member_id, space_id
+    primary_key: editorial_board_member_id, space_id
+    columns:
+      - name: editorial_board_member_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: editorial_board_member_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "is"
+      - name: editorial_board_member_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "serves on board for"
+      - name: role_id
+        type: Integer
+      - name: editorial_board_invitation_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: editorial_board_invitation
+            column: editorial_board_invitation_id
+            cardinality: many_to_one
+            relationship: "results from"
+
+
+####################################################### ARTICLE #######################################################
+
+  - name: article
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.reporting_data_mart.article
+    description: >
+      Business Product (an editorial artefact). One row per article per space. This is
+            the central entity of the editorial workflow. It hosts article profile
+            attributes together with a wide range of derived and aggregated metrics
+            required for end-user reporting and analytics, including stage dates,
+            review timing KPIs, impact metrics, author and organisation context, and
+            submission details.
+    grain: article_id_original, space_id
+    primary_key: article_id_original, space_id
+    columns:
+      - name: article_id_original
+        type: Integer
+      - name: article_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: article_research_topic_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: research_topic_id
+            cardinality: many_to_one
+            relationship: "belongs to"
+      - name: DOI
+        type: String
+      - name: article_type_id
+        type: Integer
+      - name: journal_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: many_to_one
+            relationship: "submitted to"
+      - name: section_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: section
+            column: section_id
+            cardinality: many_to_one
+            relationship: "submitted to"
+      - name: taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "classified under"
+      - name: stage_id
+        type: Integer
+      - name: submission_article_id
+        type: Integer   #  Submission entity not yet defined in NDM
+      - name: first_submission_id
+        type: Integer  #  Submission entity not yet defined in NDM
+      - name: first_submission_id_original
+        type: Integer
+      - name: latest_submission_id
+        type: Integer  #  Submission entity not yet defined in NDM
+      - name: main_corresponding_author_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "main corresponding author"
+
+  - name: article_author
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.reporting_data_mart.author
+    description: >
+      Persons who write and submit articles. One row per article-author combination
+            per space. Authors can be registered users (with a user_id) or non-
+            registered persons identified by email. The table includes role, order,
+            affiliation, and extensive derived metrics about each author's history and
+            profile.
+    grain: author_id_original, space_id, author_order
+    primary_key: author_id_original, space_id, author_order
+    columns:
+      - name: author_id_original
+        type: Integer
+      - name: author_id
+        type: Integer
+      - name: author_article_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: article
+            column: article_id
+            cardinality: many_to_one
+            relationship: "authored"
+      - name: author_space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: author_order
+        type: Integer
+      - name: author_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: optional_many_to_one
+            relationship: "is registered as"
+      - name: author_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "associated taxonomy"
+      - name: role_id
+        type: Integer
+      - name: journal_role_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: journal_role
+            column: journal_role_id
+            cardinality: many_to_one
+            relationship: "holds role"
+      - name: author_organization_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: organization_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: author_organization
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-1.reporting_data_mart.author_organizations
+    description: >
+      Author–organisation link per space. One row per author-organisation affiliation.
+            An author may be affiliated with multiple organisations for a given
+            article; organisation_order indicates the primary one.
+    grain: author_organizations_id, space_id
+    primary_key: author_organizations_id, space_id
+    columns:
+      - name: author_organizations_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: organization_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: organization_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: rosst_id
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-2.rosst
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is the ROSST organisation"
+
+  # ─── REVIEW_BOARD ─────────────────────────────────────────────────────────
+
+  - name: review_board_member
+    domain: ARTICLE
+    subdomain: REVIEW_BOARD
+    source_table: ocean-breeze-tier-1.reporting_data_mart.review_board_member
+    description: >
+      Persons who review articles. One row per reviewer–article assignment per space.
+            Review board members are always associated with a registered user_id.
+            Includes role, status, join date, and extensive reviewer engagement
+            metrics.
+    grain: review_board_member_id, space_id
+    primary_key: review_board_member_id, space_id
+    columns:
+      - name: review_board_member_id
+        type: Integer
+      - name: review_board_member_space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: review_board_member_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "is"
+      - name: review_board_member_article_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: article
+            column: article_id
+            cardinality: many_to_one
+            relationship: "reviews"
+      - name: review_board_member_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "in context of"
+      - name: role_id
+        type: Integer
+      - name: review_board_status_id
+        type: Integer
+
+
+####################################################### RESEARCH_TOPIC #######################################################
+
+  - name: research_topic
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.reporting_data_mart.research_topic
+    description: >
+      Business Product (an editorial artefact undergoing research). One row per
+            research topic per space. Hosts research topic profile attributes and a
+            wide range of derived metrics for reporting, including stage, timeline,
+            contributor and article counts, and editor/coordinator context.
+    grain: research_topic_id_original, space_id
+    primary_key: research_topic_id_original, space_id
+    columns:
+      - name: research_topic_id_original
+        type: Integer
+      - name: research_topic_id
+        type: Integer
+      - name: space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: research_topic_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "classified under"
+      - name: stage_id
+        type: Integer
+
+  - name: research_topic_abstract
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.reporting_data_mart.research_topic_abstract
+    description: >
+      Business Product (editorial artefact that is a proposal for research). One row
+            per research topic abstract per space. An abstract is a proposal submitted
+            by a potential contributor to join a research topic as an editor.
+    grain: research_topic_abstract_id_original, space_id
+    primary_key: research_topic_abstract_id_original, space_id
+    columns:
+      - name: research_topic_abstract_id
+        type: Integer
+      - name: research_topic_abstract_id_original
+        type: Integer
+      - name: abstract_research_topic_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: research_topic_id
+            cardinality: many_to_one
+            relationship: "proposal for"
+      - name: abstract_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "classified under"
+      - name: abstract_country_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: country
+            column: country_id
+            cardinality: many_to_one
+            relationship: "abstract country context"
+      - name: organization_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: organization_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+  - name: research_topic_coordinator
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.reporting_data_mart.research_topic_coordinator
+    description: >
+      Coordinator assignment to a research topic. One row per coordinator per research
+            topic per space. Coordinators are Frontiers staff responsible for managing
+            the research topic workflow.
+    grain: coordinator_id, space_id
+    primary_key: coordinator_id, space_id
+    columns:
+      - name: coordinator_id
+        type: Integer
+      - name: coordinator_space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: coordinator_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "is"
+      - name: coordinator_research_topic_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: research_topic_id
+            cardinality: many_to_one
+            relationship: "coordinates"
+      - name: coordinator_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "in context of"
+
+  - name: research_topic_editor
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.reporting_data_mart.research_topic_editor
+    description: >
+      Persons who organise and edit research topics. One row per editor per research
+            topic per space. Research topic editors are always associated with a
+            registered user_id. Includes engagement metrics such as number of topics
+            hosted and time since last topic.
+    grain: editor_id, space_id
+    primary_key: editor_id, space_id
+    columns:
+      - name: editor_id
+        type: Integer
+      - name: editor_space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: editor_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "is"
+      - name: editor_research_topic_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: research_topic_id
+            cardinality: many_to_one
+            relationship: "edits"
+      - name: editor_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "in context of"
+
+  - name: contributor  # [NEW]
+    domain: RESEARCH_TOPIC
+    source_table: ocean-breeze-tier-1.reporting_data_mart.contributor
+    description: >
+      Persons who contribute to a Research Topic. One row per contributor
+            per research topic per space. Contributors can be registered users (with a
+            user_id) or non-registered persons identified by email. Includes
+            contribution source, expected article counts, and extensive engagement and
+            profile metrics inherited from the author and user domains.
+    grain: contributor_id_original, space_id
+    primary_key: contributor_id_original, space_id
+    columns:
+      - name: contributor_id
+        type: Integer
+      - name: contributor_id_original
+        type: Integer
+      - name: contributor_space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: contributor_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: optional_many_to_one
+            relationship: "is registered as"
+      - name: contributor_research_topic_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: research_topic
+            column: research_topic_id
+            cardinality: many_to_one
+            relationship: "contributes to"
+      - name: contributor_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "in context of"
+
+
+####################################################### USER #######################################################
+
+  - name: user_metrics
+    domain: USER
+    source_table: ocean-breeze-tier-1.reporting_data_mart.user_metrics
+    description: >
+      Various attributes (derived and sourced) at user level. One row per registered
+            user. A user_id represents a person who has registered on the Frontiers
+            platform. Includes profile data, role flags, engagement percentiles (AIRA
+            scores: activity, connectivity, influence, productivity, trendiness), and
+            organisation/country context.
+    grain: user_id
+    primary_key: user_id
+    columns:
+      - name: user_id
+        type: Integer
+      - name: country_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: country
+            column: country_id
+            cardinality: many_to_one
+            relationship: "located in"
+
+  - name: user_email
+    domain: USER
+    source_table: ocean-breeze-tier-1.reporting_data_mart.email_metrics
+    description: >
+      Various attributes (derived and sourced) at email level. One row per email
+            address per user. Identifies unique instances of both registered and non-
+            registered persons by email. Includes country, organisation, AIRA profile
+            scores, and watchlist flags.
+    grain: email, user_id
+    primary_key: email, user_id
+    columns:
+      - name: email
+        type: String
+      - name: user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "belongs to"
+      - name: country_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: country
+            column: country_id
+            cardinality: many_to_one
+            relationship: "located in"
+      - name: user_primary_organization_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: organization_id
+            cardinality: many_to_one
+            relationship: "is part of"
+
+
+####################################################### RESEARCHER #######################################################
+
+  - name: person  # [NEW]
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-1.reporting_data_mart.person
+    description: >
+      A consolidated table of all metrics related to a Person (registered
+            and non-registered users). One row per unique person instance per space.
+            Identifies a person across all touchpoints using personuser_id as a
+            synthetic key that unifies registered users, non-registered persons, and
+            their multiple email aliases. Includes organisation affiliation,
+            geographic data, AIRA profile scores, and engagement metrics.
+    grain: personuser_id, person_space_id
+    primary_key: personuser_id, person_space_id
+    columns:
+      - name: personuser_id
+        type: Integer
+      - name: person_id
+        type: Integer
+      - name: person_space_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: space
+            column: space_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: person_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: optional_many_to_one
+            relationship: "is registered as"
+      - name: primary_organization_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: organization
+            column: organization_id
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: primary_organization_country_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: country
+            column: country_id
+            cardinality: many_to_one
+            relationship: "located in"
+
+
+####################################################### CUSTOMER_ACQUISITION #######################################################
+
+  - name: campaign_member
+    domain: CUSTOMER_ACQUISITION
+    subdomain: CAMPAIGN
+    source_table: ocean-breeze-tier-1.reporting_data_mart.campaign_member
+    description: >
+      Persons who are invited to contribute to an editorial artefact through a
+            Campaign. If the invitation is accepted, the campaign member becomes an
+            Opportunity. One row per campaign membership. Includes campaign metadata,
+            member identity, role flags, and a broad set of engagement and profile
+            metrics.
+    grain: campaign_member_id
+    primary_key: campaign_member_id
+    columns:
+      - name: campaign_member_id
+        type: String
+      - name: campaign_crm_id
+        type: String
+      - name: campaign_member_user_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: user_metrics
+            column: user_id
+            cardinality: many_to_one
+            relationship: "campaign user"
+      - name: campaign_member_taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: many_to_one
+            relationship: "targeted at taxonomy"
+
+
+####################################################### ORGANIZATION #######################################################
+
+  - name: organization
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-1.reporting_data_mart.organization
+    description: >
+          One row per organisation. This is the reporting_data_mart copy of
+            organisation data, denormalised for reporting use. It includes address,
+            country, type, and classification attributes. Note: the canonical
+            organisation master is sourced from ocean-breeze-
+            tier-2.rosst.organization; this table is the reporting-layer projection
+            used for joins within this dataset.
+    grain: organization_id
+    primary_key: organization_id
+    columns:
+      - name: organization_id
+        type: Integer
+      - name: rosst_id
+        type: String
+        foreign_keys:
+          - scope:  external
+            dataset: ocean-breeze-tier-2.rosst
+            entity: organization
+            column: OrganizationId
+            cardinality: many_to_one
+            relationship: "is part of"
+      - name: country_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: country
+            column: country_id
+            cardinality: many_to_one
+            relationship: "located in"
+      - name: continent_id
+        type: String

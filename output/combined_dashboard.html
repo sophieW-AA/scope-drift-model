@@ -55,7 +55,7 @@ body {
 }
 .tab-btn:hover { color: var(--text); background: var(--bg); }
 .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--blue-light); }
-.tab-content { flex: 1; display: none; overflow: hidden; }
+.tab-content { flex: 1; display: none; overflow: hidden; min-height: 0; }
 .tab-content.active { display: block; }
 .tab-content iframe { width: 100%; height: 100%; border: none; }
 </style>
@@ -63,12 +63,14 @@ body {
 <body>
 <div class="header">
   <h1>Scope Drift Analysis</h1>
-  <div class="meta">Run: 20260714_151745 · Generated: 2026-07-15 14:52 UTC · 3 dashboards</div>
+  <div class="meta">Generated: 2026-08-26 11:09 UTC · 5 dashboards</div>
 </div>
 <nav class="tab-nav">
   <button class="tab-btn active" data-tab="scope_dashboard">Scope Analysis</button>
   <button class="tab-btn " data-tab="drift_dashboard">Drift Analysis</button>
   <button class="tab-btn " data-tab="clusters">Cluster Map</button>
+  <button class="tab-btn " data-tab="network_maps">Network Maps</button>
+  <button class="tab-btn " data-tab="paper_examples">Paper Examples</button>
 </nav>
 
 <div id="tab-scope_dashboard" class="tab-content active">
@@ -82,29 +84,63 @@ body {
 <div id="tab-clusters" class="tab-content ">
   <iframe data-src="clusters.html" title="Cluster Map"></iframe>
 </div>
+
+<div id="tab-network_maps" class="tab-content ">
+  <iframe data-src="network_maps.html" title="Network Maps"></iframe>
+</div>
+
+<div id="tab-paper_examples" class="tab-content ">
+  <iframe data-src="paper_examples.html" title="Paper Examples"></iframe>
+</div>
 <script>
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const tabId = btn.dataset.tab;
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.getElementById('tab-' + tabId).classList.add('active');
-  });
-});
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tabId = btn.dataset.tab;
-    const iframe = document.querySelector('#tab-' + tabId + ' iframe');
-    if (iframe && !iframe.src && iframe.dataset.src) {
-      iframe.src = iframe.dataset.src;
+function notifyIframeResize(iframe) {
+  if (!iframe || !iframe.contentWindow) return;
+  try {
+    const w = iframe.contentWindow;
+    if (typeof w.resizeNetworkMaps === 'function') w.resizeNetworkMaps();
+    if (w.Plotly && w.Plotly.Plots && typeof w.Plotly.Plots.resize === 'function') {
+      w.document.querySelectorAll('.js-plotly-plot').forEach(el => {
+        try { w.Plotly.Plots.resize(el); } catch (e) {}
+      });
     }
-  });
-});
-const firstIframe = document.querySelector('.tab-content.active iframe');
-if (firstIframe && firstIframe.dataset.src) {
-  firstIframe.src = firstIframe.dataset.src;
+    w.dispatchEvent(new Event('resize'));
+  } catch (e) {}
 }
+
+function activateTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tabId);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => {
+    c.classList.toggle('active', c.id === 'tab-' + tabId);
+  });
+  const iframe = document.querySelector('#tab-' + tabId + ' iframe');
+  if (iframe && !iframe.src && iframe.dataset.src) {
+    iframe.src = iframe.dataset.src;
+    iframe.addEventListener('load', () => {
+      notifyIframeResize(iframe);
+      setTimeout(() => notifyIframeResize(iframe), 200);
+    }, { once: true });
+  } else {
+    notifyIframeResize(iframe);
+    setTimeout(() => notifyIframeResize(iframe), 50);
+    setTimeout(() => notifyIframeResize(iframe), 250);
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+});
+
+const firstActive = document.querySelector('.tab-btn.active') || document.querySelector('.tab-btn');
+if (firstActive) activateTab(firstActive.dataset.tab);
+
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.tab-content.active iframe').forEach(notifyIframeResize);
+});
+document.addEventListener('fullscreenchange', () => {
+  document.querySelectorAll('.tab-content.active iframe').forEach(notifyIframeResize);
+});
 </script>
 </body>
 </html>

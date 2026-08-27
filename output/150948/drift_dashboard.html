@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frontiers Scope Drift Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root{--red:#dc2626;--amber:#d97706;--green:#059669;--blue:#3b82f6;--purple:#8b5cf6;--slate:#64748b;--bg:#f8fafc;--card:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:#0f172a;padding:16px 20px;max-width:1440px;margin:0 auto}
+.hdr{text-align:center;margin-bottom:20px}
+.hdr h1{font-size:22px;font-weight:700}.hdr p{font-size:13px;color:var(--slate);margin-top:2px}
+.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600;margin:4px 2px;background:#f1f5f9;color:#475569}
+
+.kpis{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.kpi{background:var(--card);border-radius:10px;padding:10px 14px;box-shadow:0 1px 2px rgba(0,0,0,.06);flex:1;min-width:130px}
+.kpi .l{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+.kpi .v{font-size:22px;font-weight:700;margin-top:1px}
+.kpi .d{font-size:11px;color:var(--slate)}
+
+.grid{display:grid;gap:14px;margin-bottom:14px}
+.g1{grid-template-columns:1fr}.g2{grid-template-columns:1fr 1fr}
+@media(max-width:900px){.g2{grid-template-columns:1fr}}
+
+.card{background:var(--card);border-radius:10px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.card h3{font-size:14px;font-weight:600}.card .sub{font-size:11px;color:#94a3b8;margin-bottom:10px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:7px 8px;border-bottom:2px solid #e5e7eb;font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+td{padding:7px 8px;border-bottom:1px solid #f3f4f6}
+tr:hover{background:#f9fafb}
+.drift-h{color:var(--red);font-weight:700}
+.drift-m{color:var(--amber);font-weight:600}
+.drift-l{color:var(--green);font-weight:500}
+.bar-bg{height:6px;background:#f3f4f6;border-radius:3px;position:relative}
+.bar-f{height:6px;border-radius:3px;position:absolute;top:0;left:0}
+
+
+.foot{text-align:center;margin-top:24px;font-size:11px;color:#94a3b8}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+<h1>Frontiers Scope Drift Detection</h1>
+<p>CWTS Leiden clustering — macro level communities</p>
+<span class="badge" id="meta-badge"></span>
+</div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="grid g1">
+<div class="card">
+<h3>Scope Drift Rankings — <span id="latest-yr"></span> vs Baseline (<span id="bl-yrs"></span>)</h3>
+<div class="sub">Jensen-Shannon Divergence measures how much each journal's cluster distribution has shifted</div>
+<table id="tbl"><thead><tr>
+<th>Journal</th><th>JSD</th><th style="width:100px">JSD</th><th>Entropy Δ</th><th>Articles</th>
+</tr></thead><tbody id="tbl-body"></tbody></table>
+</div>
+</div>
+
+<div class="grid g2">
+<div class="card"><h3>Drift Trajectory Over Time</h3><div class="sub">JSD trend per journal — rising = increasing scope drift</div><div id="jsd-trend" style="height:420px"></div></div>
+<div class="card"><h3>Entropy Change</h3><div class="sub">Positive = spreading across more communities; Negative = concentrating</div><div id="entropy" style="height:420px"></div></div>
+</div>
+
+<div class="foot">
+  <div>Data: CWTS clustering · Leiden algorithm · macro level</div>
+</div>
+
+<script>
+const D={"run_metadata": {"run_timestamp": "20260723_150948", "generated_utc": "2026-07-23 18:25 UTC", "bq_source_project": "ocean-tech-adv-analytics-p-usr", "bq_source_dataset": "ocean-breeze-tier-1.airak", "network_mode": "full", "start_year": 2020, "end_year": 2026, "top_n_journals": 5, "journal_ids": [1675037245440, 1589137899520, 2336462209024, 2774548873217, 120259084288, 764504178688, 1005022347264, 558345748481], "edge_weighting_enabled": true, "temporal_decay_tau": 5.0, "self_cite_journal_weight": 0.5, "bc_edges_enabled": false, "bc_min_shared_refs": 3, "total_nodes": 10660077, "total_edges": 108310741}, "jsd_trends": {"Frontiers in Neurorobotics": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.1754, 0.1635, 0.2561, 0.2802, 0.3053, 0.3274], "new_comm": [0.0, 2.7, 0.68, 2.43, 2.21, 0.0, 0.0], "entropy_delta": [0.0, -0.4072, -0.3894, -0.7594, -0.5377, -0.9659, -0.7534], "articles": [115, 185, 292, 206, 136, 73, 30]}, "Frontiers in Earth Science": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.1212, 0.1717, 0.2121, 0.2526, 0.2868, 0.2737], "new_comm": [0.0, 0.22, 0.61, 0.63, 0.63, 0.51, 0.78], "entropy_delta": [0.0, -0.2397, -0.1855, -0.1374, -0.3383, -0.2293, -0.1317], "articles": [611, 1371, 2132, 1918, 798, 781, 256]}, "Frontiers in Surgery": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.1685, 0.169, 0.1844, 0.2042, 0.2494, 0.2108], "new_comm": [0.0, 0.88, 0.48, 0.61, 0.77, 0.37, 0.29], "entropy_delta": [0.0, -0.4702, -0.5166, -0.4895, -0.4919, -0.6685, -0.529], "articles": [141, 678, 1867, 1156, 522, 806, 695]}, "Frontiers in Aging Neuroscience": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.089, 0.0806, 0.1016, 0.1054, 0.1099, 0.1001], "new_comm": [0.0, 0.31, 0.19, 0.47, 0.51, 0.0, 0.29], "entropy_delta": [0.0, -0.0364, -0.0056, -0.183, -0.1331, -0.2811, -0.2156], "articles": [492, 955, 1571, 844, 584, 630, 344]}, "Frontiers in Environmental Science": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.186, 0.3295, 0.3084, 0.295, 0.3686, 0.3053], "new_comm": [0.0, 0.15, 0.54, 0.22, 0.22, 0.12, 0.24], "entropy_delta": [0.0, -0.0327, 0.1077, 0.0789, -0.0006, -0.0937, 0.1124], "articles": [280, 658, 2582, 1390, 926, 846, 411]}, "Frontiers in Chemistry": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.1151, 0.0952, 0.125, 0.1979, 0.2246, 0.1956], "new_comm": [0.0, 0.25, 0.24, 0.93, 1.15, 0.28, 0.63], "entropy_delta": [0.0, 0.3625, 0.2209, 0.3721, 0.497, 0.5874, 0.6003], "articles": [1246, 1211, 1675, 750, 609, 353, 158]}, "Frontiers in Materials": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.1049, 0.1315, 0.1799, 0.1739, 0.2238, 0.3199], "new_comm": [0.0, 1.66, 1.59, 1.9, 0.84, 1.87, 0.81], "entropy_delta": [0.0, 0.3128, 0.3995, 0.4758, 0.2874, 0.2161, -0.0452], "articles": [427, 603, 820, 525, 356, 268, 123]}, "Frontiers in Robotics and AI": {"years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "jsd": [0.0, 0.1545, 0.1645, 0.1559, 0.1465, 0.1604, 0.1778], "new_comm": [0.0, 1.02, 1.86, 1.32, 0.0, 1.59, 1.01], "entropy_delta": [0.0, 0.1691, 0.0948, 0.032, -0.0691, -0.1513, -0.2561], "articles": [205, 394, 377, 227, 235, 251, 99]}}, "summary": [{"Journal": "Frontiers in Neurorobotics", "Year": 2026, "JSD": 0.3274, "NewCommunityFrac": 0.0, "Top5Jaccard": 0.4286, "Entropy": 1.8689, "EntropyDelta": -0.7534, "ArticleCount": 30}, {"Journal": "Frontiers in Materials", "Year": 2026, "JSD": 0.3199, "NewCommunityFrac": 0.0081, "Top5Jaccard": 0.6667, "Entropy": 2.1598, "EntropyDelta": -0.0452, "ArticleCount": 123}, {"Journal": "Frontiers in Environmental Science", "Year": 2026, "JSD": 0.3053, "NewCommunityFrac": 0.0024, "Top5Jaccard": 0.6667, "Entropy": 2.3023, "EntropyDelta": 0.1124, "ArticleCount": 411}, {"Journal": "Frontiers in Earth Science", "Year": 2026, "JSD": 0.2737, "NewCommunityFrac": 0.0078, "Top5Jaccard": 0.6667, "Entropy": 1.6094, "EntropyDelta": -0.1317, "ArticleCount": 256}, {"Journal": "Frontiers in Surgery", "Year": 2026, "JSD": 0.2108, "NewCommunityFrac": 0.0029, "Top5Jaccard": 1.0, "Entropy": 2.6617, "EntropyDelta": -0.529, "ArticleCount": 695}, {"Journal": "Frontiers in Chemistry", "Year": 2026, "JSD": 0.1956, "NewCommunityFrac": 0.0063, "Top5Jaccard": 0.6667, "Entropy": 2.6278, "EntropyDelta": 0.6003, "ArticleCount": 158}, {"Journal": "Frontiers in Robotics and AI", "Year": 2026, "JSD": 0.1778, "NewCommunityFrac": 0.0101, "Top5Jaccard": 0.6667, "Entropy": 2.6033, "EntropyDelta": -0.2561, "ArticleCount": 99}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2026, "JSD": 0.1001, "NewCommunityFrac": 0.0029, "Top5Jaccard": 1.0, "Entropy": 1.7818, "EntropyDelta": -0.2156, "ArticleCount": 344}], "heatmap": [{"Journal": "Frontiers in Neurorobotics", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Neurorobotics", "Year": 2021, "JSD": 0.1754}, {"Journal": "Frontiers in Neurorobotics", "Year": 2022, "JSD": 0.1635}, {"Journal": "Frontiers in Neurorobotics", "Year": 2023, "JSD": 0.2561}, {"Journal": "Frontiers in Neurorobotics", "Year": 2024, "JSD": 0.2802}, {"Journal": "Frontiers in Neurorobotics", "Year": 2025, "JSD": 0.3053}, {"Journal": "Frontiers in Neurorobotics", "Year": 2026, "JSD": 0.3274}, {"Journal": "Frontiers in Earth Science", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Earth Science", "Year": 2021, "JSD": 0.1212}, {"Journal": "Frontiers in Earth Science", "Year": 2022, "JSD": 0.1717}, {"Journal": "Frontiers in Earth Science", "Year": 2023, "JSD": 0.2121}, {"Journal": "Frontiers in Earth Science", "Year": 2024, "JSD": 0.2526}, {"Journal": "Frontiers in Earth Science", "Year": 2025, "JSD": 0.2868}, {"Journal": "Frontiers in Earth Science", "Year": 2026, "JSD": 0.2737}, {"Journal": "Frontiers in Surgery", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Surgery", "Year": 2021, "JSD": 0.1685}, {"Journal": "Frontiers in Surgery", "Year": 2022, "JSD": 0.169}, {"Journal": "Frontiers in Surgery", "Year": 2023, "JSD": 0.1844}, {"Journal": "Frontiers in Surgery", "Year": 2024, "JSD": 0.2042}, {"Journal": "Frontiers in Surgery", "Year": 2025, "JSD": 0.2494}, {"Journal": "Frontiers in Surgery", "Year": 2026, "JSD": 0.2108}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2021, "JSD": 0.089}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2022, "JSD": 0.0806}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2023, "JSD": 0.1016}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2024, "JSD": 0.1054}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2025, "JSD": 0.1099}, {"Journal": "Frontiers in Aging Neuroscience", "Year": 2026, "JSD": 0.1001}, {"Journal": "Frontiers in Environmental Science", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Environmental Science", "Year": 2021, "JSD": 0.186}, {"Journal": "Frontiers in Environmental Science", "Year": 2022, "JSD": 0.3295}, {"Journal": "Frontiers in Environmental Science", "Year": 2023, "JSD": 0.3084}, {"Journal": "Frontiers in Environmental Science", "Year": 2024, "JSD": 0.295}, {"Journal": "Frontiers in Environmental Science", "Year": 2025, "JSD": 0.3686}, {"Journal": "Frontiers in Environmental Science", "Year": 2026, "JSD": 0.3053}, {"Journal": "Frontiers in Chemistry", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Chemistry", "Year": 2021, "JSD": 0.1151}, {"Journal": "Frontiers in Chemistry", "Year": 2022, "JSD": 0.0952}, {"Journal": "Frontiers in Chemistry", "Year": 2023, "JSD": 0.125}, {"Journal": "Frontiers in Chemistry", "Year": 2024, "JSD": 0.1979}, {"Journal": "Frontiers in Chemistry", "Year": 2025, "JSD": 0.2246}, {"Journal": "Frontiers in Chemistry", "Year": 2026, "JSD": 0.1956}, {"Journal": "Frontiers in Materials", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Materials", "Year": 2021, "JSD": 0.1049}, {"Journal": "Frontiers in Materials", "Year": 2022, "JSD": 0.1315}, {"Journal": "Frontiers in Materials", "Year": 2023, "JSD": 0.1799}, {"Journal": "Frontiers in Materials", "Year": 2024, "JSD": 0.1739}, {"Journal": "Frontiers in Materials", "Year": 2025, "JSD": 0.2238}, {"Journal": "Frontiers in Materials", "Year": 2026, "JSD": 0.3199}, {"Journal": "Frontiers in Robotics and AI", "Year": 2020, "JSD": 0.0}, {"Journal": "Frontiers in Robotics and AI", "Year": 2021, "JSD": 0.1545}, {"Journal": "Frontiers in Robotics and AI", "Year": 2022, "JSD": 0.1645}, {"Journal": "Frontiers in Robotics and AI", "Year": 2023, "JSD": 0.1559}, {"Journal": "Frontiers in Robotics and AI", "Year": 2024, "JSD": 0.1465}, {"Journal": "Frontiers in Robotics and AI", "Year": 2025, "JSD": 0.1604}, {"Journal": "Frontiers in Robotics and AI", "Year": 2026, "JSD": 0.1778}], "heatmap_journals": ["Frontiers in Aging Neuroscience", "Frontiers in Chemistry", "Frontiers in Earth Science", "Frontiers in Environmental Science", "Frontiers in Materials", "Frontiers in Neurorobotics", "Frontiers in Robotics and AI", "Frontiers in Surgery"], "heatmap_years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "communities": [{"id": 1, "label": "Cancer Research", "size": 6616, "journals": {"Frontiers in Aging Neuroscience": 46.2, "Frontiers in Surgery": 30.0, "Frontiers in Chemistry": 18.7, "Frontiers in Materials": 3.4, "Frontiers in Environmental Science": 0.7}, "dominant": "Frontiers in Aging Neuroscience"}, {"id": 6, "label": "Geotechnical Engineering", "size": 5751, "journals": {"Frontiers in Earth Science": 79.2, "Frontiers in Materials": 14.9, "Frontiers in Environmental Science": 3.5, "Frontiers in Chemistry": 1.8, "Frontiers in Robotics and AI": 0.4}, "dominant": "Frontiers in Earth Science"}, {"id": 4, "label": "Environmental Science", "size": 5446, "journals": {"Frontiers in Environmental Science": 51.4, "Frontiers in Earth Science": 46.4, "Frontiers in Chemistry": 0.7, "Frontiers in Robotics and AI": 0.6, "Frontiers in Materials": 0.3}, "dominant": "Frontiers in Environmental Science"}, {"id": 0, "label": "Nanomaterials Applications", "size": 5442, "journals": {"Frontiers in Chemistry": 54.3, "Frontiers in Materials": 18.7, "Frontiers in Environmental Science": 15.9, "Frontiers in Robotics and AI": 5.3, "Frontiers in Earth Science": 3.6}, "dominant": "Frontiers in Chemistry"}, {"id": 5, "label": "Sustainable Energy Solutions", "size": 2449, "journals": {"Frontiers in Environmental Science": 83.5, "Frontiers in Earth Science": 6.3, "Frontiers in Chemistry": 2.5, "Frontiers in Materials": 2.4, "Frontiers in Robotics and AI": 2.2}, "dominant": "Frontiers in Environmental Science"}, {"id": 7, "label": "Neuroscience And Cognitive Health", "size": 2401, "journals": {"Frontiers in Aging Neuroscience": 62.0, "Frontiers in Neurorobotics": 14.1, "Frontiers in Robotics and AI": 11.1, "Frontiers in Surgery": 9.4, "Frontiers in Chemistry": 2.1}, "dominant": "Frontiers in Aging Neuroscience"}, {"id": 11, "label": "Surgical Outcomes", "size": 1871, "journals": {"Frontiers in Surgery": 88.9, "Frontiers in Aging Neuroscience": 8.3, "Frontiers in Robotics and AI": 1.2, "Frontiers in Materials": 0.6, "Frontiers in Chemistry": 0.4}, "dominant": "Frontiers in Surgery"}, {"id": 2, "label": "Agricultural Biotechnology", "size": 1837, "journals": {"Frontiers in Environmental Science": 45.8, "Frontiers in Chemistry": 29.9, "Frontiers in Earth Science": 9.7, "Frontiers in Aging Neuroscience": 5.3, "Frontiers in Robotics and AI": 3.1}, "dominant": "Frontiers in Environmental Science"}, {"id": 3, "label": "Machine Learning Applications", "size": 1376, "journals": {"Frontiers in Robotics and AI": 42.4, "Frontiers in Neurorobotics": 34.8, "Frontiers in Environmental Science": 7.8, "Frontiers in Earth Science": 5.9, "Frontiers in Materials": 3.6}, "dominant": "Frontiers in Robotics and AI"}, {"id": 9, "label": "Materials Science", "size": 832, "journals": {"Frontiers in Materials": 75.8, "Frontiers in Chemistry": 10.8, "Frontiers in Earth Science": 6.6, "Frontiers in Robotics and AI": 3.4, "Frontiers in Environmental Science": 1.3}, "dominant": "Frontiers in Materials"}, {"id": 15, "label": "Surgical Techniques", "size": 793, "journals": {"Frontiers in Surgery": 92.4, "Frontiers in Robotics and AI": 4.8, "Frontiers in Neurorobotics": 1.3, "Frontiers in Chemistry": 0.6, "Frontiers in Aging Neuroscience": 0.6}, "dominant": "Frontiers in Surgery"}, {"id": 13, "label": "Organic Synthesis", "size": 612, "journals": {"Frontiers in Chemistry": 93.3, "Frontiers in Aging Neuroscience": 2.6, "Frontiers in Materials": 2.0, "Frontiers in Surgery": 1.1, "Frontiers in Environmental Science": 0.7}, "dominant": "Frontiers in Chemistry"}, {"id": 16, "label": "Vascular Surgery", "size": 555, "journals": {"Frontiers in Surgery": 71.0, "Frontiers in Aging Neuroscience": 25.9, "Frontiers in Chemistry": 1.1, "Frontiers in Robotics and AI": 0.9, "Frontiers in Neurorobotics": 0.5}, "dominant": "Frontiers in Surgery"}, {"id": 8, "label": "COVID-19 Research", "size": 523, "journals": {"Frontiers in Surgery": 48.0, "Frontiers in Chemistry": 22.8, "Frontiers in Aging Neuroscience": 14.7, "Frontiers in Environmental Science": 8.6, "Frontiers in Robotics and AI": 2.3}, "dominant": "Frontiers in Surgery"}, {"id": 14, "label": "Artificial Intelligence Applications", "size": 460, "journals": {"Frontiers in Robotics and AI": 67.4, "Frontiers in Neurorobotics": 10.4, "Frontiers in Environmental Science": 6.7, "Frontiers in Surgery": 4.6, "Frontiers in Earth Science": 3.7}, "dominant": "Frontiers in Robotics and AI"}, {"id": 10, "label": "Health And Social Determinants", "size": 439, "journals": {"Frontiers in Aging Neuroscience": 48.7, "Frontiers in Surgery": 21.9, "Frontiers in Chemistry": 10.9, "Frontiers in Environmental Science": 10.0, "Frontiers in Neurorobotics": 3.0}, "dominant": "Frontiers in Aging Neuroscience"}, {"id": 12, "label": "Quantum And Plasmonic Materials", "size": 267, "journals": {"Frontiers in Chemistry": 41.2, "Frontiers in Materials": 38.2, "Frontiers in Earth Science": 10.1, "Frontiers in Robotics and AI": 3.4, "Frontiers in Aging Neuroscience": 2.2}, "dominant": "Frontiers in Chemistry"}, {"id": 20, "label": "Endocrine Surgery", "size": 197, "journals": {"Frontiers in Surgery": 95.4, "Frontiers in Aging Neuroscience": 3.0, "Frontiers in Chemistry": 1.0, "Frontiers in Robotics and AI": 0.5}, "dominant": "Frontiers in Surgery"}, {"id": 19, "label": "Dental Health", "size": 119, "journals": {"Frontiers in Materials": 37.0, "Frontiers in Surgery": 28.6, "Frontiers in Aging Neuroscience": 21.8, "Frontiers in Robotics and AI": 6.7, "Frontiers in Chemistry": 4.2}, "dominant": "Frontiers in Materials"}, {"id": 17, "label": "Maternal And Neonatal Health", "size": 116, "journals": {"Frontiers in Surgery": 81.0, "Frontiers in Aging Neuroscience": 11.2, "Frontiers in Robotics and AI": 4.3, "Frontiers in Chemistry": 1.7, "Frontiers in Materials": 0.9}, "dominant": "Frontiers in Surgery"}, {"id": 18, "label": "Fluid Dynamics Energy", "size": 92, "journals": {"Frontiers in Earth Science": 30.4, "Frontiers in Environmental Science": 29.3, "Frontiers in Materials": 18.5, "Frontiers in Chemistry": 12.0, "Frontiers in Robotics and AI": 6.5}, "dominant": "Frontiers in Earth Science"}], "baseline_years": [2020], "latest_year": 2026, "stats": {"n_journals": 8, "n_nodes": 38194, "n_edges": 0, "year_range": "2020\u20132026"}};
+const COLORS=['#4338ca','#dc2626','#d97706','#059669','#0891b2','#7c3aed','#db2777','#ea580c',
+              '#16a34a','#2563eb','#9333ea','#c026d3','#0d9488','#ca8a04','#64748b'];
+
+document.getElementById('meta-badge').textContent=
+  `Leiden · macro · ${D.stats.n_nodes.toLocaleString()} papers · ${D.stats.year_range}`;
+document.getElementById('latest-yr').textContent=D.latest_year;
+document.getElementById('bl-yrs').textContent=D.baseline_years.join('–');
+
+const highD=D.summary.filter(d=>d.JSD>0.30).length;
+const medD=D.summary.filter(d=>d.JSD>0.20&&d.JSD<=0.30).length;
+const avgJSD=D.summary.length?(D.summary.reduce((s,d)=>s+d.JSD,0)/D.summary.length).toFixed(3):'—';
+const maxD=D.summary[0]||{};
+document.getElementById('kpis').innerHTML=`
+<div class="kpi"><div class="l">Journals</div><div class="v">${D.stats.n_journals}</div><div class="d">Frontiers journals</div></div>
+<div class="kpi"><div class="l">High Drift (JSD>0.30)</div><div class="v" style="color:var(--red)">${highD}</div><div class="d">above threshold</div></div>
+<div class="kpi"><div class="l">Medium Drift (0.20–0.30)</div><div class="v" style="color:var(--amber)">${medD}</div><div class="d">caution zone</div></div>
+<div class="kpi"><div class="l">Average JSD (${D.latest_year})</div><div class="v">${avgJSD}</div><div class="d">across all journals</div></div>
+<div class="kpi"><div class="l">Highest Drift</div><div class="v" style="color:var(--red)">${maxD.JSD||'—'}</div><div class="d">${maxD.Journal||''}</div></div>`;
+
+const tb=document.getElementById('tbl-body');
+let th='';
+D.summary.forEach(d=>{
+  const cls=d.JSD>0.30?'drift-h':d.JSD>0.20?'drift-m':'drift-l';
+  const pct=Math.min(d.JSD/0.40*100,100);
+  const bc=d.JSD>0.30?'var(--red)':d.JSD>0.20?'var(--amber)':'var(--green)';
+  const ed=d.EntropyDelta;
+  th+=`<tr><td><strong>${d.Journal}</strong></td>
+    <td class="${cls}">${d.JSD.toFixed(3)}</td>
+    <td><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${bc}"></div></div></td>
+    <td style="color:${ed>0?'var(--red)':'var(--green)'}">${ed>0?'+':''}${ed.toFixed(3)}</td>
+    <td>${d.ArticleCount.toLocaleString()}</td></tr>`;
+});
+tb.innerHTML=th;
+
+const tTraces=[];let ci=0;
+for(const[j,d]of Object.entries(D.jsd_trends)){
+  tTraces.push({x:d.years,y:d.jsd,name:j,type:'scatter',mode:'lines+markers',
+    line:{color:COLORS[ci%COLORS.length],width:2},marker:{size:5}});ci++;
+}
+Plotly.newPlot('jsd-trend',tTraces,{
+  template:'plotly_white',autosize:true,margin:{l:50,r:20,t:20,b:80},
+  xaxis:{title:'Year',dtick:1},yaxis:{title:'Jensen-Shannon Divergence',rangemode:'tozero'},
+  legend:{font:{size:10},orientation:'h',x:0.5,y:-0.25,xanchor:'center'},hovermode:'x unified'
+},{responsive:true});
+
+ci=0;
+const eT=[];ci=0;
+for(const[j,d]of Object.entries(D.jsd_trends)){
+  eT.push({x:d.years,y:d.entropy_delta,name:j,type:'scatter',mode:'lines+markers',
+    line:{color:COLORS[ci%COLORS.length],width:2},marker:{size:5}});ci++;
+}
+Plotly.newPlot('entropy',eT,{
+  template:'plotly_white',autosize:true,margin:{l:50,r:20,t:20,b:80},
+  xaxis:{title:'Year',dtick:1},yaxis:{title:'Entropy Δ vs Baseline'},
+  legend:{font:{size:10},orientation:'h',x:0.5,y:-0.25,xanchor:'center'},hovermode:'x unified',
+  shapes:[{type:'line',y0:0,y1:0,xref:'paper',x0:0,x1:1,
+           line:{color:'#d1d5db',width:1,dash:'dot'}}]
+},{responsive:true});
+</script>
+</body>
+</html>

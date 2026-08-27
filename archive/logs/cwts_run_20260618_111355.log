@@ -1,0 +1,84 @@
+CWTS Publication Classification Run
+==================================================
+Timestamp : 20260618_111355
+
+Input Files
+------------------------------
+  pubs                : cwts_output/pubs.txt
+  cit_links           : cwts_output/cit_links.txt
+  output              : cwts_output/classification.txt
+  jar                 : publicationclassification.jar
+
+Parameters
+------------------------------
+  largest_component_only    : true
+  iterations                : 100
+  micro_resolution          : 5e-3
+  micro_min_cluster_size    : 500
+  meso_resolution           : 1e-4
+  meso_min_cluster_size     : 1000
+  macro_resolution          : 8e-5
+  macro_min_cluster_size    : 5000
+
+Return Code: 0
+
+STDOUT
+------------------------------
+PublicationClassificationCreator version 1.1.0
+By Nees Jan van Eck
+Centre for Science and Technology Studies (CWTS), Leiden University
+
+Reading citation network from file... Finished!
+Reading citation network from file took 0h 0m 0s.
+Citation network:
+	Number of publications: 116490
+	Number of citation links: 1400901
+	Total publication weight: 116490
+	Total citation link weight: 251799
+
+Identifying largest connected component in citation network... Finished!
+Identifying largest connected component in citation network took 0h 0m 0s.
+Largest connected component:
+	Number of publications: 116331
+	Number of citation links: 1400814
+	Total publication weight: 116331
+	Total citation link weight: 251750
+
+Creating publication classification...
+	Clustering algorithm: Leiden algorithm
+	Number of iterations: 100
+	Random seed: 0
+
+Adding micro-level classification...
+Creating clustering... Finished! 15612 clusters created.
+Reassigning small clusters... Finished! 121 clusters remaining.
+Adding micro-level classification took 0h 0m 38s.
+Micro-level classification:
+	Resolution: 0.005
+	Threshold: 500
+	Number of clusters: 121
+
+Adding meso-level classification...
+Creating clustering... Finished! 86 clusters created.
+Reassigning small clusters... Finished! 53 clusters remaining.
+Adding meso-level classification took 0h 0m 0s.
+Meso-level classification:
+	Resolution: 1.0E-4
+	Threshold: 1000
+	Number of clusters: 53
+
+Adding macro-level classification...
+Creating clustering... Finished! 50 clusters created.
+Reassigning small clusters... Finished! 13 clusters remaining.
+Adding macro-level classification took 0h 0m 0s.
+Macro-level classification:
+	Resolution: 8.0E-5
+	Threshold: 5000
+	Number of clusters: 13
+
+Writing publication classification to file... Finished!
+Writing publication classification to file took 0h 0m 0s.
+
+STDERR
+------------------------------
+(empty)

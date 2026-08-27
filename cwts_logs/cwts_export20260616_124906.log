@@ -1,0 +1,52 @@
+2026-06-16 12:49:06,667 [INFO] ============================================================
+2026-06-16 12:49:06,668 [INFO] Configuration
+2026-06-16 12:49:06,668 [INFO] ============================================================
+2026-06-16 12:49:06,668 [INFO]   BQ_PROJECT              : ocean-tech-adv-analytics-p-usr
+2026-06-16 12:49:06,668 [INFO]   AIRAK_DATASET           : ocean-breeze-tier-1.airak
+2026-06-16 12:49:06,668 [INFO]   NETWORK_MODE            : ego
+2026-06-16 12:49:06,668 [INFO]   START_YEAR              : 2026
+2026-06-16 12:49:06,668 [INFO]   END_YEAR                : 2026
+2026-06-16 12:49:06,669 [INFO]   TOP_N_JOURNALS          : 5
+2026-06-16 12:49:06,669 [INFO]   JOURNAL_IDS_OVERRIDE    : (none)
+2026-06-16 12:49:06,671 [INFO]   ENABLE_EDGE_WEIGHTS     : True
+2026-06-16 12:49:06,671 [INFO]   TEMPORAL_DECAY_TAU      : 5.0
+2026-06-16 12:49:06,671 [INFO]   SELF_CITE_JOURNAL_WEIGHT: 0.5
+2026-06-16 12:49:06,671 [INFO]   ENABLE_BC_EDGES         : True
+2026-06-16 12:49:06,671 [INFO]   BC_MIN_SHARED_REFS      : 3
+2026-06-16 12:49:06,671 [INFO]   MAX_EXTERNAL_PAPERS     : 50000
+2026-06-16 12:49:06,671 [INFO]   OUTPUT_DIR              : cwts_output
+2026-06-16 12:49:06,671 [INFO] ============================================================
+2026-06-16 12:49:06,672 [INFO] ============================================================
+2026-06-16 12:49:06,672 [INFO] CWTS Export — Edge Weight Builder
+2026-06-16 12:49:06,672 [INFO]   Mode: EGO  |  Years: 2026-2026
+2026-06-16 12:49:06,672 [INFO]   Edge weights: ON
+2026-06-16 12:49:06,672 [INFO] ============================================================
+2026-06-16 12:49:06,673 [INFO] Fetching top 5 Frontiers journals by publication count...
+2026-06-16 12:49:13,660 [INFO]   Journal IDs: [3315714752512, 2826088480769, 2379411881984, 2405181685761, 2972117368834]
+2026-06-16 12:49:13,661 [INFO] Fetching Frontiers publication IDs...
+2026-06-16 12:49:17,974 [INFO]   16,999 Frontiers publications
+2026-06-16 12:49:17,974 [INFO] Building ego network (top 50,000 external papers)...
+2026-06-16 12:49:17,977 [INFO]   Ego batch 1/1...
+2026-06-16 12:49:40,308 [INFO]   Raw edges: 368,100
+2026-06-16 12:49:40,926 [INFO]   Filtered: 98,769 edges, 57,141 nodes
+2026-06-16 12:49:40,950 [INFO] Fetching metadata for 57,141 nodes...
+2026-06-16 12:49:40,956 [INFO]   Metadata batch 1/3...
+2026-06-16 12:49:49,169 [INFO]   Metadata batch 2/3...
+2026-06-16 12:49:57,705 [INFO]   Metadata batch 3/3...
+2026-06-16 12:50:05,150 [INFO]   57,141 nodes (9,776 Frontiers core)
+2026-06-16 12:50:05,158 [INFO] Applying edge weights (temporal decay + self-citation discount)...
+2026-06-16 12:50:05,761 [INFO]   Decay mean=0.303  |  Self-citations: 3,614
+2026-06-16 12:50:05,761 [INFO]   Combined weight mean=0.295
+2026-06-16 12:50:05,765 [INFO] Computing bibliographic coupling (min shared refs=3)...
+2026-06-16 12:50:05,769 [INFO]   BC batch 1/1...
+2026-06-16 12:50:16,955 [INFO]     10,614 BC edges
+2026-06-16 12:50:16,957 [INFO]   Total BC edges: 10,614
+2026-06-16 12:50:16,957 [INFO] Merging direct citation and BC edges...
+2026-06-16 12:50:17,047 [INFO]   Merged: 104,055 edges (mean weight=0.286)
+2026-06-16 12:50:17,067 [INFO] Uploading CWTS tables to ocean-tech-adv-analytics-c-tfs.scope_drift_raw  (57,141 nodes)...
+2026-06-16 12:50:26,332 [INFO] 57141 out of 57141 rows loaded.
+2026-06-16 12:50:26,333 [INFO]   pubs_raw        : 57,141 rows  (9,776 core)
+2026-06-16 12:50:37,604 [INFO] 57141 out of 57141 rows loaded.
+2026-06-16 12:50:37,604 [INFO]   pub_metadata_raw: 57,141 rows
+2026-06-16 12:50:45,911 [INFO] 208110 out of 208110 rows loaded.
+2026-06-16 12:50:45,911 [INFO]   cit_links_raw   : 208,110 rows  (104,055 unique pairs × 2 directions)

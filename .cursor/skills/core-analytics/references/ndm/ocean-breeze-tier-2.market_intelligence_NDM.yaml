@@ -1,0 +1,188 @@
+# Analytical Data Model — ocean-breeze-tier-2.market_intelligence
+# Narrow Data Model (NDM) — Version 1
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-24
+# Source: dataset-model-ADM/ocean-breeze-tier-2.market_intelligence_ADM_V1.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within the dataset, space_id is not strictly
+#   required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one          : many rows here → same parent row (default for non-nullable FKs)
+# optional_many_to_one : FK column is nullable / zero-or-one participation
+# one_to_one           : at most one row here per referenced parent row
+#
+# relationship label   : domain-specific phrase (child → parent direction).
+#                        "[PROPOSED] references" = not yet reviewed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+  ########################## ARTICLE ##########################
+
+  - name: article_impact
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.market_intelligence.article_impact
+    description: "Citation metrics for individual articles, refreshed each month."
+    grain: publication_id
+    primary_key: publication_id
+    columns:
+      - name: publication_id
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.airak
+            entity: publication_source
+            column: SourceValue
+            cardinality: optional_one_to_one
+            relationship: "it references to"
+      - name: journal_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: optional_many_to_one
+            relationship: "it references to"
+
+  ########################### JOURNAL ###########################
+
+  - name: journal
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-2.market_intelligence.journal
+    description: "Information about journals, primarily based on Dimensions and joined to other sources."
+    grain: journal_id
+    primary_key: journal_id
+    columns:
+      - name: journal_id
+        type: String
+      - name: openalex_id
+        type: String
+      - name: jcr_id
+        type: String
+      - name: scopus_id
+        type: Integer
+      - name: taxonomy_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: taxonomy
+            column: taxonomy_id
+            cardinality: optional_many_to_one
+            relationship: "it references to"
+      - name: frontiers_space_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: space
+            column: space_id
+            cardinality: optional_many_to_one
+            relationship: "it references to"
+      - name: frontiers_journal_id
+        type: Integer
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: journal
+            column: journal_id_original
+            cardinality: optional_many_to_one
+            filter: "journal_level = 'Journal'"
+            relationship: "it references to"
+
+  - name: journal_impact
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-2.market_intelligence.journal_impact
+    description: "Citation metrics for journals, refreshed each month."
+    grain: journal_id
+    primary_key: journal_id
+    columns:
+      - name: journal_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: optional_one_to_one
+            relationship: "it references to"
+      - name: openalex_id
+        type: String
+
+  ########################### UNKNOWN ###########################
+
+  - name: market
+    domain: COMMON
+    source_table: ocean-breeze-tier-2.market_intelligence.market
+    description: >
+      Provides details about journal markets, primarily the market name. Journal ids are provided for markets that are formed around a specific journal.
+      Join to market_type to filter on particular types of market, and market_journal for the journals contained in each market.
+      All markets are formed based on Dimensions journal data, but selected subject categories are from other third parties such as ASJC (Scopus / Elsevier) and JCR categories (JCR / Clarivate).
+    grain: market_id
+    primary_key: market_id
+    columns:
+      - name: market_type_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: market_type
+            column: market_type_id
+            cardinality: optional_many_to_one
+            relationship: "is of type"
+      - name: market_id
+        type: Integer
+      - name: market_journal_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: optional_many_to_one
+            relationship: "it includes"
+      - name: market_openalex_id
+        type: String
+
+  - name: market_journal
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-2.market_intelligence.market_journal
+    description: >
+      Provides the set of journals included in each market, with Dimensions and OpenAlex ids. For selected market types, weight values in the range (0, 1] provide the weight of assignment to the market.
+      Join to market and market_type for details about the selected market.
+    grain: market_id, journal_id
+    primary_key: market_id, journal_id
+    columns:
+      - name: market_id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: market
+            column: market_id
+            cardinality: optional_one_to_one
+            relationship: "it references to"
+      - name: journal_id
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: journal
+            column: journal_id
+            cardinality: optional_one_to_one
+            relationship: "it references to"
+      - name: openalex_id
+        type: String
+
+  - name: market_type
+    domain: COMMON
+    source_table: ocean-breeze-tier-2.market_intelligence.market_type
+    description: >
+      Provides names and definitions of each type of journal market and details of how they are formed.
+      All markets are formed based on Dimensions journal data, but selected subject categories are from other third parties such as ASJC (Scopus / Elsevier) and JCR categories (JCR / Clarivate).
+    grain: market_type_id
+    primary_key: market_type_id
+    columns:
+      - name: market_type_id
+        type: Integer

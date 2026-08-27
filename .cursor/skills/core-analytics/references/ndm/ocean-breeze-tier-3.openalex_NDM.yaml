@@ -1,0 +1,211 @@
+# Analytical Data Model - ocean-breeze-tier-3.openalex
+# Narrow Data Model (NDM) - Version 2
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-10
+# Source: dataset-model-ADM/ocean-breeze-tier-3.openalex_ADM_V2.yaml
+#
+# -- Join rules ----------------------------------------------------------------
+# - space_id is an implicit second join condition wherever the grain includes it.
+# - When joining two tables within the dataset, space_id is not strictly
+#   required - the primary key is sufficient.
+# - When crossing into external datasets, use XXX_original + space_id.
+# - If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# -- FK cardinality conventions ------------------------------------------------
+# many_to_one          : many rows here -> same parent row (standard FK)
+# one_to_one           : at most one row here per referenced parent row
+# optional_many_to_one : FK is nullable / zero-or-one participation
+# [PROPOSED]           : inferred - validate before use
+# -----------------------------------------------------------------------------
+
+entities:
+
+  ######################## COMMON ########################
+
+  - name: publishers
+    domain: COMMON
+    source_table: ocean-breeze-tier-3.openalex.publishers
+    description: "[PROPOSED] One row per publishers."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+      - name: ror_id
+        type: String
+      - name: wikidata_id
+        type: String
+      - name: merge_into_id
+        type: String
+
+  ######################## ARTICLE ########################
+
+  - name: authors
+    domain: RESEARCHER
+    source_table: ocean-breeze-tier-3.openalex.authors
+    description: "[PROPOSED] One row per authors."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+
+  ######################## ORGANIZATION ########################
+
+  - name: funders
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.openalex.funders
+    description: "[PROPOSED] One row per funders."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+
+  - name: institutions
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-3.openalex.institutions
+    description: "[PROPOSED] One row per institutions."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+      - name: type_id
+        type: String
+      - name: geo.geonames_city_id
+        type: String
+      - name: wikidata_id
+        type: String
+
+  ######################## UNKNOWN ########################
+
+  - name: awards
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-3.openalex.awards
+    description: "Funding awards linked to research outputs in the OpenAlex scholarly graph."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+      - name: funder_award_id
+        type: String
+
+  - name: concepts
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-3.openalex.concepts
+    description: "[PROPOSED] One row per concepts."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+
+  - name: domains
+    domain: JOURNAL
+    source_table: ocean-breeze-tier-3.openalex.domains
+    description: "[PROPOSED] One row per domains."
+    grain: id
+    primary_key: id
+    columns:
+      - name: original_id
+        type: Integer
+      - name: id
+        type: String
+
+  - name: fields
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-3.openalex.fields
+    description: "[PROPOSED] One row per fields."
+    grain: id
+    primary_key: id
+    columns:
+      - name: original_id
+        type: Integer
+      - name: id
+        type: String
+
+  - name: keywords
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-3.openalex.keywords
+    description: "[PROPOSED] One row per keywords."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+
+  - name: sources
+    domain: COMMON
+    source_table: ocean-breeze-tier-3.openalex.sources
+    description: "[PROPOSED] One row per sources."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+
+  - name: subfields
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-3.openalex.subfields
+    description: "[PROPOSED] One row per subfields."
+    grain: id
+    primary_key: id
+    columns:
+      - name: original_id
+        type: Integer
+      - name: id
+        type: String
+
+  - name: topics
+    domain: UNKNOWN
+    source_table: ocean-breeze-tier-3.openalex.topics
+    description: "[PROPOSED] One row per topics."
+    grain: id
+    primary_key: id
+    columns:
+      - name: original_id
+        type: Integer
+      - name: id
+        type: String
+
+  - name: works
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.openalex.works
+    description: "[PROPOSED] One row per works."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+      - name: primary_location.native_id
+        type: String
+      - name: primary_location.license_id
+        type: String
+      - name: primary_location.pdf_s3_id
+        type: String
+      - name: primary_location.grobid_s3_id
+        type: String
+      - name: locations.list.element.native_id
+        type: String
+      - name: locations.list.element.license_id
+        type: String
+      - name: locations.list.element.pdf_s3_id
+        type: String
+      - name: locations.list.element.grobid_s3_id
+        type: String
+      - name: best_oa_location.native_id
+        type: String
+      - name: best_oa_location.license_id
+        type: String
+      - name: best_oa_location.pdf_s3_id
+        type: String
+      - name: best_oa_location.grobid_s3_id
+        type: String
+      - name: awards.list.element.funder_award_id
+        type: String
+      - name: awards.list.element.funder_id
+        type: String
+

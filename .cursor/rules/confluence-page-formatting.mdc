@@ -1,0 +1,85 @@
+---
+description: Confluence DA page defaults and formatting standards
+alwaysApply: true
+---
+
+# Confluence page rules (Space DA)
+
+When the user asks to create Confluence pages, use these defaults unless the user overrides them.
+
+For **Markdown layout and tone** aligned with `docs/confluence-create-docs.md` (runbooks, tables, ticket-ready structure), follow [.cursor/rules/confluence-docs-style.mdc](confluence-docs-style.mdc).
+
+## Template-first rule (two meanings)
+- **Content outline:** Prefer the same section headings and flow as the Project Template (`TemplatePageId=489659366`): Context, Objective / scope, Deliverables, Timeline, Owners, Dependencies / risks, etc.
+- **API behaviour (`confluence-create.ps1`):** If you pass **only** `-Title` (and optional `-InsertHtmlTop` / `-JiraIssueKey`), the script **loads `docs/confluence-project-layout-template.storage.html`** from the repo as the default body and **prepends** your insert (plus disclaimer). Use **`-UseConfluenceTemplatePage`** to restore the old behaviour (**GET** Confluence Project Template `489659366` and prepend). If the layout file is missing, the script falls back to the Confluence template GET. For a **different** body, use **`-BodyFile`** / **`-Body`**.
+- When creating a page from a Jira issue, set the Confluence page title to the Jira issue **summary/heading** (not just the issue key/number).
+
+### Choosing how to create the page
+| Situation | Use |
+|-----------|-----|
+| Full narrative body only (no cloned template HTML) | `-BodyFile .\docs\....storage.html` (path relative to repo root or absolute) |
+| Default layout (`ac:layout` project sections) + note at top | Default (no `-BodyFile`) + optional `-InsertHtmlTop` |
+| Clone **Confluence** Project Template page + note at top | `-UseConfluenceTemplatePage` + optional `-InsertHtmlTop` |
+| Section outline (Context, Objective, …) **without** cloning the whole template page | `-WithProjectSectionSkeleton` + optional `-InsertHtmlTop` / `-JiraIssueKey` |
+| No template fetch; **minimal** body (no section skeleton) | `-SkipTemplateMerge` + `-InsertHtmlTop` and/or `-JiraIssueKey` |
+| Copy from an **existing page id** (GET body); optional **replace** whole storage with one paragraph | `-CopyFromPageId <id>` and optionally `-ReplaceBodyStorageText "<text>"` |
+| Append **FrontonGPT-style** script reference (Markdown → storage: tables, fences, lists) to an existing page | `-UpdatePageId <id>` + `-AppendConfluenceCreateDocumentation` (uses `docs/confluence-create-docs.md`) or `-AppendMarkdownDocumentationFile .\path\to\doc.md` |
+
+## Defaults
+- **Base URL**: `CONFLUENCE_BASE_URL` from `.env`
+- **Space**: `DA`
+- **Parent page ID**: `678009704` (Lead analyst 2026 - Sophie Wilson)
+- **Template page ID**: `489659366` (Project Template)
+- Add AI disclaimer at the bottom: `Disclaimer: This page was created with AI assistance.`
+
+## Required output structure
+When drafting content for a new page, include:
+- **Title**: concise, action-oriented
+- **Context**: why this page exists
+- **Objective / scope**
+- **Deliverables / outcomes**
+- **Timeline or next steps**
+- **Owner(s)**
+- **Dependencies / risks**
+
+## Formatting standards
+- Prefer **using the Project Template sections** rather than inventing new structures/headings.
+- Use clear section headings (`h2`/`h3` equivalent) only when adding content outside the template structure.
+- Use bullets for lists; keep items short and scannable.
+- Keep one idea per paragraph.
+- If assumptions are made, explicitly mark a section **Assumptions**.
+- Do not invent links/data; mark unknowns as **TBD**.
+- For Jira references, use the **Confluence built-in Jira macro** (smart Jira link), not plain HTML anchor tags.
+
+## Script guidance
+**Narrative / technical docs (recommended default for agents):** put full Confluence Storage Format in a repo file (see e.g. `docs/confluence-scope-drift-airak.storage.html`), then:
+
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\confluence-create.ps1 -Title "<...>" -BodyFile ".\docs\<name>.storage.html"`
+
+Optional: `-JiraIssueKey <AA-123>` prepends the Jira macro into that body.
+
+**Default layout + prepend:** omit `-BodyFile`; optionally `-InsertHtmlTop "<storage html>"`. **Confluence template GET + prepend:** add `-UseConfluenceTemplatePage`.
+
+**Default layout autofill:** when using the repo layout file, **Lead team and owner** is filled with **Sophie Wilson** and **Current status** with **In progress** (HTML-encoded). Override with `-DefaultLayoutLeadOwner` / `-DefaultLayoutCurrentStatus`; pass an empty string for either to leave that slot unchanged.
+
+**Jira-driven layout fill:** `-FillLayoutFromJiraIssueKey AA-123` (default layout only) GETs the issue and fills **Lead analyst** (assignee display name), **Main stakeholder** (reporter), **Initiative** (key + summary), **D&A t-shirt** from **Story Points** (1–2 small, 3 medium, 4–5 large, else x-large; missing points → medium), **Business value** (from “Problem / goal” section or summary), **Scope** (bullets under “Scope” in description), **Description** (short extractive summary built from the whole ticket summary + description — not a verbatim copy; no Jira URL in that section), **Project plan by phase** (short canned phases). Sets `-JiraIssueKey` to the same key if omitted (Jira macro above the layout). Requires `JIRA_BASE_URL` and `JIRA_PAT_KEY_CURSOR` in `.env`.
+
+**Section skeleton (recommended for short tests / stubs):** `-WithProjectSectionSkeleton` — loads `docs/confluence-project-sections-skeleton.storage.html` (override with `-SectionSkeletonFile`). Optional `-InsertHtmlTop` prepends above those headings.
+
+**Minimal insert-only (no sections):** `-SkipTemplateMerge` with `-InsertHtmlTop` and/or `-JiraIssueKey` — mutually exclusive with `-Body` / `-BodyFile`.
+
+**Copy from page:** `-CopyFromPageId 123456` — clones `body.storage` from that page; with `-ReplaceBodyStorageText "..."` the new body is only that HTML-encoded paragraph (still GETs the source to verify access). Mutually exclusive with `-Body`, `-BodyFile`, `-WithProjectSectionSkeleton`, `-SkipTemplateMerge`.
+
+**Append to existing page:** `-UpdatePageId <id>` with `-AppendStorageHtml` and/or `-AppendStorageHtmlFile` (repo-relative paths OK). Omits `-Title`. Inserts the fragment before the script’s AI disclaimer when that footer is present. Optional `-UpdateVersionMessage`.
+
+**Append Markdown as Confluence storage:** `-AppendConfluenceCreateDocumentation` converts `docs/confluence-create-docs.md` (canonical long-form reference). `-AppendMarkdownDocumentationFile <path>` uses another `.md` file; when both are set, the explicit file path wins. Requires at least one append source together with any raw HTML options above.
+
+Other overrides:
+- `-DefaultLayoutLeadOwner` / `-DefaultLayoutCurrentStatus` (default layout path only)
+- `-FillLayoutFromJiraIssueKey` (default layout only; see Jira-driven layout fill above)
+- `-SpaceKey <...>`
+- `-ParentPageId <...>`
+- `-TemplatePageId <...>`
+- `-SectionSkeletonFile` (with `-WithProjectSectionSkeleton`; default `docs/confluence-project-sections-skeleton.storage.html`)
+- `-Body` (inline storage HTML; same effect as `-BodyFile` for bypassing template clone)
+- `-Labels <comma-separated list>`

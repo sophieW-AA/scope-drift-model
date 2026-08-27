@@ -1,0 +1,70 @@
+# Analytical Data Model — ocean-breeze-tier-2.dimensions
+# Narrow Data Model (NDM) — Version 1
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-03
+# Source: ocean-breeze-tier-2.dimensions_ADM_V1.yaml
+#
+# ── Join rules ────────────────────────────────────────────────────────────────
+# • space_id is an implicit second join condition wherever the grain includes it.
+# • When joining two tables within the dataset, space_id is not strictly
+# required — the primary key is sufficient.
+# • When crossing into external datasets, use XXX_original + space_id.
+# • If space_id is absent in a table, filter by space_id = 1 in the table
+# that does carry space_id as a safety measure.
+#
+# ── FK cardinality conventions ────────────────────────────────────────────────
+# many_to_one         : many rows here → same parent row (standard FK)
+# one_to_one          : at most one row here per referenced parent row
+# optional_many_to_one: FK is nullable / zero-or-one participation
+# [PROPOSED]          : inferred — validate before use
+# ─────────────────────────────────────────────────────────────────────────────
+
+entities:
+
+  ######################## UNKNOWN ########################
+
+  - name: grants
+    domain: ORGANIZATION
+    source_table: ocean-breeze-tier-2.dimensions.grants
+    description: "A table containing the research grants that have been awarded and linking them to the publications."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: String
+      - name: original_source_id
+        type: String
+
+  - name: metrics
+    domain: COMMON
+    source_table: ocean-breeze-tier-2.dimensions.metrics
+    description: "A table containing some metrics on the citations."
+    grain: id
+    primary_key: id
+    columns:
+      - name: id
+        type: Integer
+        foreign_keys:
+          - scope: internal
+            entity: publications
+            column: id
+            cardinality: many_to_one
+            transform: "SAFE_CAST to STRING"
+            relationship: "has metrics on"
+      - name: doi
+        type: String
+
+
+  - name: publications
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-2.dimensions.publications
+    description: "A table containing millions of research publications linked with citations and grants."
+    grain: id, doi
+    primary_key: id, doi
+    columns:
+      - name: arxiv_id
+        type: String
+      - name: id
+        type: String
+      - name: doi
+        type: String

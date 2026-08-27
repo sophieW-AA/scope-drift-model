@@ -1,0 +1,34 @@
+CWTS Publication Classification Run
+==================================================
+Timestamp : 20260618_105042
+
+Input Files
+------------------------------
+  pubs                : cwts_output/pubs.txt
+  cit_links           : cwts_output/cit_links.txt
+  output              : cwts_output/classification.txt
+  jar                 : publicationclassification.jar
+
+Parameters
+------------------------------
+  largest_component_only    : true
+  iterations                : 100
+  micro_resolution          : 5e-3
+  micro_min_cluster_size    : 500
+  meso_resolution           : 1e-4
+  meso_min_cluster_size     : 1000
+  macro_resolution          : 5e-6
+  macro_min_cluster_size    : 10000
+
+Return Code: 4294967295
+
+STDOUT
+------------------------------
+PublicationClassificationCreator version 1.1.0
+By Nees Jan van Eck
+Centre for Science and Technology Studies (CWTS), Leiden University
+
+Reading citation network from file... 
+STDERR
+------------------------------
+Error while reading citation links from file: File not found.

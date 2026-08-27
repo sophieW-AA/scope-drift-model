@@ -1,0 +1,39 @@
+# Analytical Data Model - ocean-breeze-tier-3.retractionwatch
+# Narrow Data Model (NDM) - Version 2
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-10
+# Source: dataset-model-ADM/ocean-breeze-tier-3.retractionwatch_ADM_V2.yaml
+#
+# -- Join rules ----------------------------------------------------------------
+# - space_id is an implicit second join condition wherever the grain includes it.
+# - When joining two tables within the dataset, space_id is not strictly
+#   required - the primary key is sufficient.
+# - When crossing into external datasets, use XXX_original + space_id.
+# - If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# -- FK cardinality conventions ------------------------------------------------
+# many_to_one          : many rows here -> same parent row (standard FK)
+# one_to_one           : at most one row here per referenced parent row
+# optional_many_to_one : FK is nullable / zero-or-one participation
+# [PROPOSED]           : inferred - validate before use
+# -----------------------------------------------------------------------------
+
+entities:
+
+  ######################## ARTICLE ########################
+
+  - name: retractions
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.retractionwatch.retractions
+    description: "Retraction notices from the RetractionWatch database: metadata about retracted scholarly articles including retraction dates, reasons, DOIs, and related publication details."
+    grain: record_id, retraction_pub_med_id
+    primary_key: record_id, retraction_pub_med_id
+    columns:
+      - name: record_id
+        type: String
+      - name: retraction_pub_med_id
+        type: String
+      - name: original_paper_pub_med_id
+        type: String
+

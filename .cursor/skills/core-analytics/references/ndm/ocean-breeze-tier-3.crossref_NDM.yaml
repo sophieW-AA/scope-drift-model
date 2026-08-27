@@ -1,0 +1,59 @@
+# Analytical Data Model - ocean-breeze-tier-3.crossref
+# Narrow Data Model (NDM) - Version 2
+# NDM scope: keys (_id columns), primary keys, and foreign keys only.
+# Generated: 2026-04-10
+# Updated:   2026-04-10  — FK scope migration: foreign_key → foreign_keys list with scope.
+# Source: dataset-model-ADM/ocean-breeze-tier-3.crossref_ADM_V2.yaml
+#
+# -- Join rules ----------------------------------------------------------------
+# - space_id is an implicit second join condition wherever the grain includes it.
+# - When joining two tables within the dataset, space_id is not strictly
+#   required - the primary key is sufficient.
+# - When crossing into external datasets, use XXX_original + space_id.
+# - If space_id is absent in a table, filter by space_id = 1 in the table
+#   that does carry space_id as a safety measure.
+#
+# -- FK cardinality conventions ------------------------------------------------
+# many_to_one          : many rows here -> same parent row (standard FK)
+# one_to_one           : at most one row here per referenced parent row
+# optional_many_to_one : FK is nullable / zero-or-one participation
+# [PROPOSED]           : inferred - validate before use
+# -----------------------------------------------------------------------------
+
+entities:
+
+  ######################## UNKNOWN ########################
+
+  - name: works
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.crossref.works
+    description: "[PROPOSED] One row per works."
+    grain: DOI
+    primary_key: DOI
+    columns:
+      - name: DOI
+        type: String
+        foreign_keys:
+          - scope: external
+            dataset: ocean-breeze-tier-1.reporting_data_mart
+            entity: article
+            column: DOI
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+
+  - name: works_history
+    domain: ARTICLE
+    source_table: ocean-breeze-tier-3.crossref.works_history
+    description: "[PROPOSED] One row per works_history."
+    grain: DOI
+    primary_key: DOI
+    columns:
+      - name: DOI
+        type: String
+        foreign_keys:
+          - scope: internal
+            entity: works
+            column: DOI
+            cardinality: many_to_one
+            relationship: "[PROPOSED] references"
+

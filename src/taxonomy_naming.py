@@ -15,15 +15,21 @@ Pipeline:
 8. Output: cluster → taxonomy mapping
 
 Usage:
-    python taxonomy_naming.py <run_timestamp>
+    python taxonomy_naming.py <timestamp>
     
-    Or import and call:
+    Or import and call (same timestamp as classification_raw_{timestamp}):
         import taxonomy_naming
-        taxonomy_naming.CLUSTER_LEVEL = "macro"  # optional, defaults to "macro"
-        taxonomy_naming.main("20260618_130306")
+        taxonomy_naming.main(timestamp)  # labels micro, meso, and macro
+
+    CLI also reads env RUN_TIMESTAMP (same as cwts_export / dashboards).
 
 Output:
     cwts_output/cluster_taxonomy_labels.csv
+    cwts_output/{macro|meso|micro}_labels.csv
+    cwts_output/cluster_taxonomy_labels_{macro|meso|micro}.csv
+    BigQuery ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_labels_{level}_{timestamp}
+        one row per cluster; cluster_id = classification_raw_{timestamp}.{level}
+    BigQuery ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_taxonomy_labels_{level}_{timestamp}
 """
 
 import json
@@ -38,6 +44,7 @@ from textwrap import dedent
 import pandas as pd
 from google.cloud import bigquery
 from openai import OpenAI
+import pandas_gbq
 
 # Load .env file if present
 from dotenv import load_dotenv
@@ -58,7 +65,7 @@ log = logging.getLogger(__name__)
 PROJECT_BILL = "ocean-tech-adv-analytics-c-esf"
 PROJECT_DATA = "ocean-tech-adv-analytics-c-esf"
 BQ_SRC_PROJECT = "ocean-tech-adv-analytics-c-tfs"
-BQ_SRC_DATASET = "scope_drift_raw"
+BQ_SRC_DATASET = "raw_citation_network_data"
 
 # Source tables
 TBL_SCORES = f"{PROJECT_DATA}.aa_taxonomy.article_taxonomy_scores_current"
@@ -66,12 +73,21 @@ TBL_PUB = "ocean-breeze-tier-1.airak.Publication"
 TBL_L2_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l2_cluster_assignments"
 TBL_L1_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l1_cluster_assignments"
 
-# CWTS tables (constructed from run_timestamp parameter)
+# CWTS tables (constructed from timestamp / RUN_TIMESTAMP)
 TBL_CLASSIF = None  # Set in main()
 TBL_PUB_META = None  # Set in main()
+RUN_TIMESTAMP = os.environ.get("RUN_TIMESTAMP", "")
 
-# Which cluster level to label: "micro", "meso", or "macro"
-CLUSTER_LEVEL = "macro"
+# Taxonomy labels land in a dedicated dataset; cluster_id joins
+# classification_raw_{ts}.{macro|meso|micro} from the scope-drift run.
+BQ_DEST_PROJECT = "ocean-tech-adv-analytics-c-tfs"
+BQ_LABEL_DATASET = "taxonomy_labelling"
+BQ_LOCATION = "EU"
+pandas_gbq.context.location = BQ_LOCATION
+
+# Cluster levels to label in one run (classification_raw has micro, meso, macro)
+CLUSTER_LEVELS = ("micro", "meso", "macro")
+CLUSTER_LEVEL = "macro"  # current level while a run is in progress
 
 # Sample size per cluster (None = use all papers, set to 300 for memory efficiency)
 SAMPLE_SIZE_PER_CLUSTER = 300
@@ -143,28 +159,37 @@ def init_clients():
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. LOAD CWTS COMMUNITIES
 # ══════════════════════════════════════════════════════════════════════════════
-def load_communities() -> dict:
-    """Load CWTS clusters and group by the configured CLUSTER_LEVEL."""
-    global community_names, community_pubs
-    import random
-    
+def fetch_classification_papers() -> pd.DataFrame:
+    """Load classification + metadata once (all three cluster columns)."""
     log.info("Loading CWTS data from BigQuery...")
     df = bq_src.query(f"""
-        SELECT 
+        SELECT
             c.int_id, c.micro, c.meso, c.macro,
             m.pub_id, m.is_frontiers, m.journal, m.date, m.title
         FROM `{TBL_CLASSIF}` c
         JOIN `{TBL_PUB_META}` m ON c.int_id = m.int_id
     """).to_dataframe()
-    
     log.info("Loaded %d papers from BigQuery", len(df))
-    
-    # Group by cluster level
-    communities_full = df.groupby(CLUSTER_LEVEL)["pub_id"].apply(list).to_dict()
-    
-    # Sample if configured
+    return df
+
+
+def group_communities(df: pd.DataFrame, level: str) -> dict:
+    """Group papers by CWTS cluster id at this level. cluster_id == classification.{level}."""
+    global community_names, community_pubs, CLUSTER_LEVEL
+    import random
+
+    CLUSTER_LEVEL = level
+    if level not in df.columns:
+        raise ValueError(f"No column {level!r} in classification papers")
+
+    g = df.dropna(subset=[level]).groupby(level)["pub_id"].apply(list)
+    communities_full = {int(k): list(v) for k, v in g.items()}
     if SAMPLE_SIZE_PER_CLUSTER:
-        log.info("Sampling up to %d papers per cluster...", SAMPLE_SIZE_PER_CLUSTER)
+        log.info(
+            "Sampling up to %d papers per %s cluster...",
+            SAMPLE_SIZE_PER_CLUSTER,
+            level,
+        )
         random.seed(42)
         communities = {}
         for k, pubs in communities_full.items():
@@ -174,24 +199,29 @@ def load_communities() -> dict:
                 communities[k] = pubs
     else:
         communities = communities_full
-    
-    communities = {f"Cluster {k}": v for k, v in communities.items()}
-    
-    # Build mappings
-    community_ids = list(range(len(communities)))
-    community_names = {i: name for i, name in enumerate(communities.keys())}
-    community_pubs = {i: pubs for i, (_, pubs) in enumerate(communities.items())}
-    
+
+    community_ids = sorted(communities)
+    community_names = {cid: f"Cluster {cid}" for cid in community_ids}
+    community_pubs = {cid: communities[cid] for cid in community_ids}
     all_pub_ids = [int(pid) for pubs in community_pubs.values() for pid in pubs]
     pub_to_comm = {pid: cid for cid, pubs in community_pubs.items() for pid in pubs}
-    
-    log.info("Communities: %d | Total publications (sampled): %d", len(communities), len(all_pub_ids))
-    
+
+    log.info(
+        "%s communities: %d | publications (sampled): %d",
+        level,
+        len(community_ids),
+        len(all_pub_ids),
+    )
     return {
         "community_ids": community_ids,
         "all_pub_ids": all_pub_ids,
         "pub_to_comm": pub_to_comm,
     }
+
+
+def load_communities() -> dict:
+    """Back-compat: load papers and group by the current CLUSTER_LEVEL."""
+    return group_communities(fetch_classification_papers(), CLUSTER_LEVEL)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -900,6 +930,7 @@ def flatten_results(llm_results: dict, community_ids: list) -> pd.DataFrame:
         for tier in ["core", "bleed"]:
             for rank, sel in enumerate(res.get(tier, []), start=1):
                 output_rows.append({
+                    "cluster_id": int(jid),
                     "community_id": jid,
                     "community_name": jname,
                     "cluster_level": CLUSTER_LEVEL,
@@ -921,72 +952,253 @@ def flatten_results(llm_results: dict, community_ids: list) -> pd.DataFrame:
     return df_out
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 10. MAIN
-# ══════════════════════════════════════════════════════════════════════════════
-def main(run_timestamp: str):
-    """Run the full taxonomy naming pipeline.
-    
-    Args:
-        run_timestamp: The timestamp suffix for BigQuery tables (e.g., "20260618_130306")
+def export_dashboard_labels(df_out: pd.DataFrame, cluster_level: str) -> tuple[Path, pd.DataFrame]:
+    """Write {level}_labels.csv so build_unified_dashboard can load taxonomy names.
+
+    Uses the top-ranked core taxonomy name per community as short_label.
     """
-    global TBL_CLASSIF, TBL_PUB_META
-    
-    # Set table names from timestamp
-    TBL_CLASSIF = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.classification_raw_{run_timestamp}"
-    TBL_PUB_META = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.pub_metadata_raw_{run_timestamp}"
-    
+    if df_out.empty:
+        raise ValueError("No taxonomy label rows to export")
+
+    core = df_out[df_out["tier"] == "core"].copy()
+    if core.empty:
+        core = df_out.copy()
+    core = core.sort_values(["community_id", "cluster_rank"])
+    top = core.groupby("community_id", as_index=False).first()
+
+    rows = []
+    for _, r in top.iterrows():
+        name = str(r.get("cluster_name") or "").strip()
+        if not name:
+            name = f"Cluster {int(r['community_id'])}"
+        # Title Case for dashboard consistency with former GPT labels
+        short = " ".join(
+            w if w.isupper() else w.capitalize()
+            for w in name.replace("_", " ").split()
+        )
+        bleed = df_out[
+            (df_out["community_id"] == r["community_id"]) & (df_out["tier"] == "bleed")
+        ].sort_values("cluster_rank")
+        keywords = [str(x) for x in bleed["cluster_name"].dropna().tolist()[:10]]
+        rows.append(
+            {
+                "short_label": short,
+                "long_label": short,
+                "keywords": repr(keywords),
+                "summary": str(r.get("llm_reasoning") or ""),
+                "wikipedia_page": "",
+                "coverage_pct": "",
+                "level": cluster_level,
+                "cluster_id": int(r["community_id"]),
+                "n_papers": int(r.get("n_community_papers") or 0),
+                "taxonomy_key": str(r.get("cluster_key") or ""),
+                "taxonomy_level": str(r.get("taxonomy_level") or ""),
+                "match_mode": str(r.get("match_mode") or ""),
+                "source": "taxonomy",
+            }
+        )
+
+    out = pd.DataFrame(rows).sort_values("cluster_id")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    path = OUTPUT_DIR / f"{cluster_level}_labels.csv"
+    out.to_csv(path, index=False)
+    log.info("Dashboard labels saved to %s (%d clusters)", path, len(out))
+    return path, out
+
+
+def ensure_label_dataset() -> None:
+    """Create taxonomy_labelling in EU if it does not exist."""
+    from google.cloud.exceptions import NotFound
+
+    client = bigquery.Client(project=BQ_DEST_PROJECT, location=BQ_LOCATION)
+    ds_id = f"{BQ_DEST_PROJECT}.{BQ_LABEL_DATASET}"
+    try:
+        client.get_dataset(ds_id)
+        log.info("BigQuery dataset exists: %s", ds_id)
+    except NotFound:
+        ds = bigquery.Dataset(ds_id)
+        ds.location = BQ_LOCATION
+        client.create_dataset(ds, exists_ok=True)
+        log.info("Created BigQuery dataset %s (%s)", ds_id, BQ_LOCATION)
+
+
+def upload_labels_to_bigquery(
+    df_out: pd.DataFrame, dashboard: pd.DataFrame, run_timestamp: str
+) -> None:
+    """Write labels to taxonomy_labelling; cluster_id joins classification_raw_{ts}.{level}."""
+    pandas_gbq.context.location = BQ_LOCATION
+    ensure_label_dataset()
+
+    join_col = CLUSTER_LEVEL  # classification_raw has micro / meso / macro
+    dash = dashboard.copy()
+    dash["cluster_id"] = dash["cluster_id"].astype("int64")
+    dash["run_timestamp"] = run_timestamp
+    dash["classification_join_column"] = join_col
+    front = ["cluster_id", "run_timestamp", "classification_join_column"]
+    dash = dash[front + [c for c in dash.columns if c not in front]]
+
+    long = df_out.copy()
+    if "cluster_id" not in long.columns:
+        long["cluster_id"] = long["community_id"]
+    long["cluster_id"] = long["cluster_id"].astype("int64")
+    long["run_timestamp"] = run_timestamp
+    long["classification_join_column"] = join_col
+    long_front = ["cluster_id", "run_timestamp", "classification_join_column"]
+    long = long[long_front + [c for c in long.columns if c not in long_front]]
+
+    dest_labels = f"{BQ_LABEL_DATASET}.cluster_labels_{join_col}_{run_timestamp}"
+    dest_long = f"{BQ_LABEL_DATASET}.cluster_taxonomy_labels_{join_col}_{run_timestamp}"
+    pandas_gbq.to_gbq(
+        dash,
+        dest_labels,
+        project_id=BQ_DEST_PROJECT,
+        if_exists="replace",
+        location=BQ_LOCATION,
+    )
+    log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_labels)
+    pandas_gbq.to_gbq(
+        long,
+        dest_long,
+        project_id=BQ_DEST_PROJECT,
+        if_exists="replace",
+        location=BQ_LOCATION,
+    )
+    log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_long)
+    log.info(
+        "Join to scope-drift classification: "
+        "classification_raw_%s.%s = cluster_labels_%s_%s.cluster_id",
+        run_timestamp,
+        join_col,
+        join_col,
+        run_timestamp,
+    )
+
+
+def resolve_timestamp(timestamp: str | None = None) -> str:
+    """Same id as classification_raw_{timestamp}: arg, then module, then env."""
+    ts = (timestamp or RUN_TIMESTAMP or os.environ.get("RUN_TIMESTAMP") or "").strip()
+    if not ts:
+        raise ValueError(
+            "Set timestamp: taxonomy_naming.main(timestamp), "
+            "taxonomy_naming.RUN_TIMESTAMP = timestamp, "
+            "or env RUN_TIMESTAMP (same value as the scope-drift run)."
+        )
+    return ts
+
+
+def run_one_level(df_papers: pd.DataFrame, level: str, timestamp: str) -> pd.DataFrame:
+    """Label all clusters at one CWTS level (micro / meso / macro)."""
+    global CLUSTER_LEVEL, profiles, briefs, df_scope, df_l1_sig, df_clusters_agg, df_l0_agg
+
+    CLUSTER_LEVEL = level
+    profiles = {}
+    briefs = {}
+    df_scope = None
+    df_l1_sig = None
+    df_clusters_agg = None
+    df_l0_agg = None
+
     log.info("=" * 60)
-    log.info("Taxonomy Naming Pipeline")
-    log.info("Run timestamp: %s", run_timestamp)
-    log.info("Cluster level: %s", CLUSTER_LEVEL)
+    log.info("Level: %s", level)
     log.info("=" * 60)
-    
-    # Initialize
-    init_clients()
-    
-    # Load data
-    comm_data = load_communities()
+
+    comm_data = group_communities(df_papers, level)
     community_ids = comm_data["community_ids"]
     all_pub_ids = comm_data["all_pub_ids"]
     pub_to_comm = comm_data["pub_to_comm"]
-    
-    load_taxonomy()
-    
-    # Pull scores and build profiles
+    if not community_ids:
+        log.warning("No %s clusters — skipping", level)
+        return pd.DataFrame()
+
     df_l2_counts = pull_taxonomy_scores(all_pub_ids, pub_to_comm)
     build_profiles(community_ids, all_pub_ids, pub_to_comm)
-    
-    # Aggregate
     aggregate_to_higher_levels(df_l2_counts)
-    
-    # Build candidates
     build_all_briefs(community_ids)
-    
-    # Run LLM
     llm_results = run_llm_for_all(community_ids)
-    
-    # Flatten and save
     df_out = flatten_results(llm_results, community_ids)
-    
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = OUTPUT_DIR / "cluster_taxonomy_labels.csv"
-    df_out.to_csv(output_path, index=False)
-    log.info("Saved to %s", output_path)
-    
-    # Summary
+    level_path = OUTPUT_DIR / f"cluster_taxonomy_labels_{level}.csv"
+    df_out.to_csv(level_path, index=False)
+    log.info("Saved to %s", level_path)
+    _, dashboard = export_dashboard_labels(df_out, level)
+
+    try:
+        upload_labels_to_bigquery(df_out, dashboard, timestamp)
+    except Exception:
+        log.exception(
+            "BigQuery upload for %s failed; CSV outputs were still written",
+            level,
+        )
+    return df_out
+
+
+def main(timestamp: str | None = None):
+    """Run taxonomy naming for micro, meso, and macro on one timestamp.
+
+    Args:
+        timestamp: Scope-drift run id (e.g. "20260818_090851"). Reads
+            classification_raw_{timestamp} and writes
+            cluster_labels_{level}_{timestamp}. If omitted, uses
+            taxonomy_naming.RUN_TIMESTAMP or env RUN_TIMESTAMP.
+    """
+    global TBL_CLASSIF, TBL_PUB_META, RUN_TIMESTAMP
+
+    timestamp = resolve_timestamp(timestamp)
+    RUN_TIMESTAMP = timestamp
+    os.environ["RUN_TIMESTAMP"] = timestamp
+
+    TBL_CLASSIF = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.classification_raw_{timestamp}"
+    TBL_PUB_META = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.pub_metadata_raw_{timestamp}"
+
+    log.info("=" * 60)
+    log.info("Taxonomy Naming Pipeline")
+    log.info("Run timestamp: %s", timestamp)
+    log.info("Cluster levels: %s", ", ".join(CLUSTER_LEVELS))
+    log.info("=" * 60)
+
+    init_clients()
+    df_papers = fetch_classification_papers()
+    load_taxonomy()
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    parts = []
+    for level in CLUSTER_LEVELS:
+        df_level = run_one_level(df_papers, level, timestamp)
+        if df_level is not None and not df_level.empty:
+            parts.append(df_level)
+            core = df_level[df_level["tier"] == "core"]
+            log.info(
+                "%s: %d clusters labelled",
+                level,
+                core["community_id"].nunique() if len(core) else 0,
+            )
+
+    df_out = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+    combined = OUTPUT_DIR / "cluster_taxonomy_labels.csv"
+    df_out.to_csv(combined, index=False)
+    log.info("Combined labels saved to %s", combined)
+
     log.info("=" * 60)
     log.info("Summary")
     log.info("=" * 60)
-    print(df_out[df_out["tier"] == "core"].groupby("community_name")["cluster_name"].first().to_string())
-    
+    if not df_out.empty and "tier" in df_out.columns:
+        print(
+            df_out[df_out["tier"] == "core"]
+            .groupby(["cluster_level", "community_name"])["cluster_name"]
+            .first()
+            .to_string()
+        )
     return df_out
 
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) < 2:
-        print("Usage: python taxonomy_naming.py <run_timestamp>")
-        print("Example: python taxonomy_naming.py 20260618_130306")
+
+    ts = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("RUN_TIMESTAMP", "")
+    if not ts:
+        print("Usage: python taxonomy_naming.py <timestamp>")
+        print("   or: RUN_TIMESTAMP=... python taxonomy_naming.py")
+        print("Example: python taxonomy_naming.py 20260818_090851")
         sys.exit(1)
-    main(sys.argv[1])
+    main(ts)

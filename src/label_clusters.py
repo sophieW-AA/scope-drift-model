@@ -48,7 +48,7 @@ LEVELS = ["macro"]
 # BigQuery Config
 # ---------------------------------------------------------------------------
 BQ_PROJECT = "ocean-tech-adv-analytics-c-tfs"
-BQ_DATASET = "scope_drift_raw"
+BQ_DATASET = "raw_citation_network_data"
 
 
 def get_table_names(run_timestamp: str) -> dict:
@@ -212,8 +212,6 @@ def call_openai(user_prompt: str) -> str:
     raise RuntimeError(f"OpenAI call failed after {RETRY_ATTEMPTS} attempts")
 
 
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -255,7 +253,7 @@ def main(run_timestamp: str):
         print(f"\n{'='*60}")
         print(f"Processing {level} level...")
         print(f"{'='*60}")
-        
+
         # Efficient query: only fetch sampled titles per cluster
         # Uses window function to randomly sample TOP_N_TITLES per cluster
         query = f"""
@@ -285,13 +283,13 @@ def main(run_timestamp: str):
         WHERE r.rn <= {TOP_N_TITLES}
         ORDER BY r.cluster_id, r.rn
         """
-        
+
         print(f"  Fetching up to {TOP_N_TITLES} titles per cluster...")
         df = pandas_gbq.read_gbq(query, project_id=BQ_PROJECT)
-        
-        n_clusters = df['cluster_id'].nunique()
+
+        n_clusters = df["cluster_id"].nunique()
         print(f"  Loaded {len(df):,} titles across {n_clusters} clusters")
-        
+
         # Label this level
         df_labels = label_level_efficient(df, level)
         out_path = OUTPUT_DIR / f"{level}_labels.csv"
@@ -303,10 +301,10 @@ def main(run_timestamp: str):
 
 def label_level_efficient(df: pd.DataFrame, level: str) -> pd.DataFrame:
     """Label clusters from pre-sampled data with two-pass duplicate handling."""
-    groups = df.groupby('cluster_id')
+    groups = df.groupby("cluster_id")
     total = len(groups)
     results = []
-    
+
     # Store group data for potential retry
     group_data = {cluster_id: group for cluster_id, group in groups}
 
@@ -315,7 +313,7 @@ def label_level_efficient(df: pd.DataFrame, level: str) -> pd.DataFrame:
     for i, (cluster_id, group) in enumerate(group_data.items(), 1):
         titles = group["title"].tolist()
         n_papers = group["n_papers"].iloc[0]
-        
+
         titles_str = "\n".join(f"- {t}" for t in titles)
 
         user_prompt = (
@@ -344,7 +342,7 @@ def label_level_efficient(df: pd.DataFrame, level: str) -> pd.DataFrame:
 
     # Pass 2: Resolve duplicates
     results = resolve_duplicate_labels(results, group_data, level)
-    
+
     return pd.DataFrame(results)
 
 
@@ -354,61 +352,70 @@ def resolve_duplicate_labels(results: list, group_data: dict, level: str) -> lis
     Keeps the cluster with the most papers for each duplicate label.
     """
     from collections import defaultdict
-    
+
     # Group results by short_label
     label_to_clusters = defaultdict(list)
     for r in results:
         label = r.get("short_label", "").strip().lower()
         if label and label != "error":
             label_to_clusters[label].append(r)
-    
+
     # Find duplicates
-    duplicates = {label: clusters for label, clusters in label_to_clusters.items() 
-                  if len(clusters) > 1}
-    
+    duplicates = {
+        label: clusters
+        for label, clusters in label_to_clusters.items()
+        if len(clusters) > 1
+    }
+
     if not duplicates:
         print("\n  No duplicate labels found.")
         return results
-    
+
     print(f"\n--- Pass 2: Resolving {len(duplicates)} duplicate labels ---")
-    
+
     # For each duplicate, keep the one with most papers, retry the rest
     retry_cluster_ids = set()
     taken_labels = set()
-    
+
     for label, clusters in duplicates.items():
         # Sort by n_papers descending, keep the largest
-        clusters_sorted = sorted(clusters, key=lambda x: x.get("n_papers", 0), reverse=True)
+        clusters_sorted = sorted(
+            clusters, key=lambda x: x.get("n_papers", 0), reverse=True
+        )
         keeper = clusters_sorted[0]
         taken_labels.add(keeper.get("short_label", "").strip())
-        
-        print(f"  Duplicate '{label}': keeping Cluster {keeper['cluster_id']} ({keeper['n_papers']:,} papers), will retry {len(clusters_sorted)-1} others")
-        
+
+        print(
+            f"  Duplicate '{label}': keeping Cluster {keeper['cluster_id']} ({keeper['n_papers']:,} papers), will retry {len(clusters_sorted)-1} others"
+        )
+
         for c in clusters_sorted[1:]:
             retry_cluster_ids.add(c["cluster_id"])
-    
+
     # Also add all non-duplicate labels to taken_labels
     for r in results:
         if r["cluster_id"] not in retry_cluster_ids:
             label = r.get("short_label", "").strip()
             if label:
                 taken_labels.add(label)
-    
+
     if not retry_cluster_ids:
         return results
-    
+
     # Retry clusters with taken_labels context
-    print(f"\n  Retrying {len(retry_cluster_ids)} clusters with {len(taken_labels)} labels already taken...")
-    
+    print(
+        f"\n  Retrying {len(retry_cluster_ids)} clusters with {len(taken_labels)} labels already taken..."
+    )
+
     results_map = {r["cluster_id"]: r for r in results}
-    
+
     for i, cluster_id in enumerate(sorted(retry_cluster_ids), 1):
         group = group_data[cluster_id]
         titles = group["title"].tolist()
         n_papers = group["n_papers"].iloc[0]
-        
+
         titles_str = "\n".join(f"- {t}" for t in titles)
-        
+
         # Add warning about taken labels
         taken_str = ", ".join(sorted(taken_labels))
         user_prompt = (
@@ -422,25 +429,39 @@ def resolve_duplicate_labels(results: list, group_data: dict, level: str) -> lis
             raw = call_openai(user_prompt)
             out = json.loads(raw)
         except json.JSONDecodeError:
-            print(f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id} — bad JSON")
-            out = {"short_label": f"Cluster {cluster_id}", "long_label": "", "keywords": []}
+            print(
+                f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id} — bad JSON"
+            )
+            out = {
+                "short_label": f"Cluster {cluster_id}",
+                "long_label": "",
+                "keywords": [],
+            }
         except Exception as e:
-            print(f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id} — failed: {e}")
-            out = {"short_label": f"Cluster {cluster_id}", "long_label": str(e), "keywords": []}
+            print(
+                f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id} — failed: {e}"
+            )
+            out = {
+                "short_label": f"Cluster {cluster_id}",
+                "long_label": str(e),
+                "keywords": [],
+            }
 
         out["level"] = level
         out["cluster_id"] = cluster_id
         out["n_papers"] = n_papers
-        
+
         old_label = results_map[cluster_id].get("short_label", "")
         new_label = out.get("short_label", "")
-        
+
         # Update taken_labels with new label
         taken_labels.add(new_label.strip())
-        
+
         results_map[cluster_id] = out
-        print(f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id}: '{old_label}' → '{new_label}'")
-    
+        print(
+            f"  [retry {i}/{len(retry_cluster_ids)}] cluster {cluster_id}: '{old_label}' → '{new_label}'"
+        )
+
     return list(results_map.values())
 
 
