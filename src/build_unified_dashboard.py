@@ -1650,6 +1650,7 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                     "t": str(row["title"] or "")[:50],
                     "i": int(row["int_id"]),
                     "s": s,
+                    "yr": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
                 })
 
         # Prefer 2026 titles when available; fall back to more recent years.
@@ -2952,6 +2953,70 @@ header p { color: var(--muted); font-size: 0.85rem; }
 .filter-btn[data-scope="borderline"].active { background: var(--amber); }
 .filter-btn[data-scope="oos"].active { background: var(--red); }
 .filter-btn:not(.active) { opacity: 0.55; }
+.year-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.year-toolbar .year-label {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5rem;
+}
+.year-toolbar input[type="range"] {
+  flex: 1;
+  min-width: 160px;
+  max-width: 420px;
+  accent-color: #1a1f36;
+}
+.play-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text);
+  font-weight: 600;
+}
+.play-btn.playing { background: #1a1f36; color: #fff; border-color: #1a1f36; }
+.play-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.year-ticks {
+  display: flex;
+  justify-content: space-between;
+  max-width: 420px;
+  width: 100%;
+  flex: 1;
+  min-width: 160px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-top: -4px;
+}
+.card .year-stats { color: #8893a6; font-weight: 400; font-size: 13px; }
+.journal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.journal-toolbar .filter-btn.active {
+  background: #1a1f36;
+  color: #fff;
+  border-color: #1a1f36;
+  opacity: 1;
+}
+.journal-toolbar .hint {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-left: 4px;
+}
 .main {
   padding: 16px 24px 24px;
   flex: 1;
@@ -2964,6 +3029,20 @@ header p { color: var(--muted); font-size: 0.85rem; }
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
   align-items: stretch;
 }
+.grid.focus-one {
+  grid-template-columns: 1fr;
+}
+.grid.focus-one .plot-wrap {
+  height: clamp(480px, 70vh, 820px);
+  min-height: 480px;
+}
+.grid.focus-few {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr));
+}
+.grid.focus-few .plot-wrap {
+  height: clamp(420px, 55vh, 720px);
+  min-height: 420px;
+}
 .card {
   background: var(--card);
   border-radius: 10px;
@@ -2974,6 +3053,7 @@ header p { color: var(--muted); font-size: 0.85rem; }
   min-width: 0;
   min-height: 0;
 }
+.card.hidden { display: none; }
 .card h2 {
   font-size: 0.95rem;
   font-weight: 600;
@@ -2982,8 +3062,8 @@ header p { color: var(--muted); font-size: 0.85rem; }
 }
 .plot-wrap {
   flex: 1;
-  min-height: 360px;
-  height: clamp(360px, 42vh, 620px);
+  min-height: 420px;
+  height: clamp(420px, 48vh, 680px);
   width: 100%;
   position: relative;
   overflow: hidden;
@@ -3006,16 +3086,30 @@ header p { color: var(--muted); font-size: 0.85rem; }
 <header>
   <h1>Network Maps</h1>
   <p>
-    Each bubble = community centroid.
+    Each bubble = community centroid from the citation network layout
+    (closer ≈ more citation links; map rotated so spread reads left–right).
     <span style="color: var(--green);">Green = primary in-scope</span>,
-    <span style="color: var(--amber);">Amber = borderline (LLM scope judgment)</span>,
-    <span style="color: var(--red);">Red = out-of-scope</span>. Size = paper count.
+    <span style="color: var(--amber);">Amber = borderline</span>,
+    <span style="color: var(--red);">Red = out-of-scope</span>.
+    Size = paper count in the selected year.
   </p>
   <div class="toolbar" id="scopeFilters" aria-label="Scope visibility filters">
     <span class="label">Show:</span>
     <button type="button" class="filter-btn active" data-scope="primary">Primary in-scope</button>
     <button type="button" class="filter-btn active" data-scope="borderline">Borderline</button>
     <button type="button" class="filter-btn active" data-scope="oos">Out of scope</button>
+  </div>
+  <div class="year-toolbar" id="yearControls" aria-label="Year animation controls">
+    <span class="label">Year:</span>
+    <span class="year-label" id="yearLabel">All</span>
+    <button type="button" class="play-btn" id="playBtn" title="Play years">Play</button>
+    <button type="button" class="filter-btn active" id="allYearsBtn">All years</button>
+    <input type="range" id="yearSlider" min="0" max="0" value="0" step="1" aria-label="Publication year" />
+  </div>
+  <div class="journal-toolbar" id="journalFilters" aria-label="Journal visibility filters">
+    <span class="label">Journals:</span>
+    <button type="button" class="filter-btn active" id="allJournalsBtn">All</button>
+    <span class="hint">click to toggle · double-click for only</span>
   </div>
 </header>
 <div class="main">
@@ -3036,6 +3130,48 @@ C.forEach(c => { commLabels[c.id] = c.label || ("Community " + c.id); });
 const visibility = { primary: true, borderline: true, oos: true };
 const plotIds = [];
 const journalBundles = [];
+const SCOPE_META = {
+  primary: { color:"#1f8a4c", name:"Primary in-scope" },
+  borderline: { color:"#d4a300", name:"Borderline" },
+  oos: { color:"#c93030", name:"Out of scope" },
+};
+const SCOPE_ORDER = ["primary", "borderline", "oos"];
+
+function collectYears() {
+  const fromMeta = (DATA.meta && DATA.meta.years) || [];
+  if (fromMeta.length) return fromMeta.map(Number).sort((a,b)=>a-b);
+  const set = new Set();
+  J.forEach(j => (j.scatter || []).forEach(p => {
+    if (p.yr != null) set.add(Number(p.yr));
+  }));
+  return Array.from(set).sort((a,b)=>a-b);
+}
+
+const YEARS = collectYears();
+let selectedYear = null; // null = all years
+let playTimer = null;
+const PLAY_MS = 900;
+
+const yearSlider = document.getElementById("yearSlider");
+const yearLabel = document.getElementById("yearLabel");
+const playBtn = document.getElementById("playBtn");
+const allYearsBtn = document.getElementById("allYearsBtn");
+
+if (YEARS.length) {
+  yearSlider.min = 0;
+  yearSlider.max = YEARS.length - 1;
+  yearSlider.value = 0;
+  yearSlider.disabled = false;
+  playBtn.disabled = false;
+} else {
+  yearSlider.disabled = true;
+  playBtn.disabled = true;
+}
+
+function sizePx(n, maxN) {
+  if (n <= 0) return 0;
+  return Math.max(18, Math.sqrt(n / Math.max(maxN, 1)) * 110);
+}
 
 function buildBundle(j) {
   const scatter = j.scatter || [];
@@ -3043,55 +3179,99 @@ function buildBundle(j) {
   const primaryIds = new Set((j.top_communities || []).filter(c => c.is_primary).map(c => c.comm_id));
   const borderlineIds = new Set(j.borderline_cluster_ids || j.distance_rescued_cluster_ids || []);
   const inScopeIds = new Set(j.in_scope_cluster_ids || [...primaryIds, ...borderlineIds]);
+
   const byCom = {};
   scatter.forEach(p => { (byCom[p.c] = byCom[p.c] || []).push(p); });
-  const buckets = {
-    primary: { x:[], y:[], sizes:[], labels:[], counts:[] },
-    borderline: { x:[], y:[], sizes:[], labels:[], counts:[] },
-    oos: { x:[], y:[], sizes:[], labels:[], counts:[] },
-  };
-  const allN = [];
+
+  const communities = [];
   Object.keys(byCom).forEach(cid => {
-    const pts = byCom[cid], n = pts.length;
+    const pts = byCom[cid];
+    const n = pts.length;
     const cx = pts.reduce((s,p)=>s+p.x,0)/n;
     const cy = pts.reduce((s,p)=>s+p.y,0)/n;
     const id = parseInt(cid, 10);
-    const lbl = commLabels[cid] || ("Community " + cid);
-    allN.push(n);
     let key = "oos";
     if (primaryIds.has(id)) key = "primary";
     else if (borderlineIds.has(id) || inScopeIds.has(id)) key = "borderline";
-    const b = buckets[key];
-    b.x.push(cx); b.y.push(cy); b.sizes.push(n); b.labels.push(lbl); b.counts.push(n);
-  });
-  const maxN = Math.max(...allN, 1);
-  const sizePx = n => Math.max(18, Math.sqrt(n / maxN) * 110);
-  const meta = {
-    primary: { color:"#1f8a4c", name:"Primary in-scope" },
-    borderline: { color:"#d4a300", name:"Borderline" },
-    oos: { color:"#c93030", name:"Out of scope" },
-  };
-  const order = ["primary", "borderline", "oos"];
-  const traces = [];
-  const traceKeys = [];
-  order.forEach(key => {
-    const b = buckets[key];
-    if (!b.x.length) return;
-    const m = meta[key];
-    traces.push({
-      type:"scatter", mode:"markers", name:m.name,
-      x:b.x, y:b.y, text:b.labels, customdata:b.counts,
-      visible: visibility[key],
-      marker:{
-        size: b.sizes.map(sizePx), sizemode:"diameter",
-        color:m.color, opacity:0.55,
-        line:{ color:"rgba(255,255,255,0.7)", width:1.5 }
-      },
-      hovertemplate:"<b>%{text}</b><br>Articles: %{customdata:,}<br>"+m.name+"<extra></extra>"
+    const countsByYear = {};
+    pts.forEach(p => {
+      if (p.yr == null) return;
+      const y = Number(p.yr);
+      countsByYear[y] = (countsByYear[y] || 0) + 1;
     });
-    traceKeys.push(key);
+    communities.push({
+      id, key,
+      label: commLabels[cid] || ("Community " + cid),
+      cx, cy,
+      total: n,
+      countsByYear,
+    });
   });
-  return { j, scatter, traces, traceKeys };
+
+  const maxAll = Math.max(...communities.map(c => c.total), 1);
+
+  function framesForYear(year) {
+    const buckets = {
+      primary: { x:[], y:[], sizes:[], labels:[], counts:[] },
+      borderline: { x:[], y:[], sizes:[], labels:[], counts:[] },
+      oos: { x:[], y:[], sizes:[], labels:[], counts:[] },
+    };
+    let paperN = 0;
+    let oosN = 0;
+    let yearMax = 1;
+    communities.forEach(c => {
+      const n = year == null ? c.total : (c.countsByYear[year] || 0);
+      if (n > yearMax) yearMax = n;
+    });
+    // Always plot every community at its citation-layout centroid.
+    // Rotate 90° (swap axes) so the tall citation spread runs left–right
+    // and fills the wide card better.
+    communities.forEach(c => {
+      const n = year == null ? c.total : (c.countsByYear[year] || 0);
+      paperN += n;
+      if (c.key === "oos") oosN += n;
+      const b = buckets[c.key];
+      b.x.push(c.cy);
+      b.y.push(-c.cx);
+      b.sizes.push(n);
+      b.labels.push(c.label);
+      b.counts.push(n);
+    });
+    const traces = [];
+    const traceKeys = [];
+    SCOPE_ORDER.forEach(key => {
+      const b = buckets[key];
+      if (!b.x.length) return;
+      const m = SCOPE_META[key];
+      traces.push({
+        type:"scatter", mode:"markers", name:m.name,
+        x:b.x, y:b.y, text:b.labels, customdata:b.counts,
+        visible: visibility[key],
+        marker:{
+          size: b.sizes.map(n => sizePx(n, year == null ? maxAll : yearMax)),
+          sizemode:"diameter",
+          color:m.color,
+          opacity: b.sizes.map(n => n > 0 ? 0.55 : 0),
+          line:{ color:"rgba(255,255,255,0.7)", width:1.5 }
+        },
+        hovertemplate:"<b>%{text}</b><br>Articles: %{customdata:,}<br>"+m.name+"<extra></extra>"
+      });
+      traceKeys.push(key);
+    });
+    const oosPct = paperN ? (oosN / paperN * 100) : 0;
+    return { traces, traceKeys, paperN, oosPct, yearMax };
+  }
+
+  const initial = framesForYear(null);
+  return {
+    j, scatter, communities, maxAll,
+    traces: initial.traces,
+    traceKeys: initial.traceKeys,
+    framesForYear,
+    statsEl: null,
+    card: null,
+    gd: null,
+  };
 }
 
 function layoutOpts() {
@@ -3113,38 +3293,194 @@ function resizeAllPlots() {
       try { Plotly.Plots.resize(el); } catch (e) {}
     }
   });
+  clearTimeout(resizeAllPlots._t);
+  resizeAllPlots._t = setTimeout(() => {
+    journalBundles.forEach(bundle => {
+      if (bundle && bundle.gd) restyleBundle(bundle, selectedYear);
+    });
+  }, 120);
+}
+
+function formatStats(bundle, year) {
+  const frame = bundle.framesForYear(year);
+  const rescuedN = bundle.j.n_borderline_clusters || bundle.j.n_distance_rescued_clusters || 0;
+  const yearBit = year == null ? "all years" : String(year);
+  return yearBit + " · "
+    + frame.paperN.toLocaleString() + " papers · "
+    + frame.oosPct.toFixed(1) + "% out of scope"
+    + (rescuedN ? (" · " + rescuedN + " borderline communities") : "");
+}
+
+function restyleBundle(bundle, year) {
+  if (!bundle || !bundle.gd) return;
+  const frame = bundle.framesForYear(year);
+  bundle.traceKeys = frame.traceKeys;
+  Plotly.react(bundle.gd, frame.traces, layoutOpts(), CFG);
+  if (bundle.statsEl) bundle.statsEl.textContent = "— " + formatStats(bundle, year);
+}
+
+function applyYear(year) {
+  selectedYear = year;
+  if (year == null) {
+    yearLabel.textContent = "All";
+    allYearsBtn.classList.add("active");
+  } else {
+    yearLabel.textContent = String(year);
+    allYearsBtn.classList.remove("active");
+    const idx = YEARS.indexOf(year);
+    if (idx >= 0) yearSlider.value = String(idx);
+  }
+  journalBundles.forEach(bundle => restyleBundle(bundle, year));
 }
 
 function applyVisibility() {
-  journalBundles.forEach(bundle => {
-    if (!bundle || !bundle.gd) return;
-    const vis = bundle.traceKeys.map(k => visibility[k]);
-    Plotly.restyle(bundle.gd, { visible: vis });
-  });
-  resizeAllPlots();
+  journalBundles.forEach(bundle => restyleBundle(bundle, selectedYear));
 }
+
+function stopPlay() {
+  if (playTimer) {
+    clearInterval(playTimer);
+    playTimer = null;
+  }
+  playBtn.classList.remove("playing");
+  playBtn.textContent = "Play";
+}
+
+function startPlay() {
+  if (!YEARS.length) return;
+  stopPlay();
+  // Start from beginning if on All or at last year
+  let idx = selectedYear == null ? 0 : YEARS.indexOf(selectedYear);
+  if (idx < 0 || idx >= YEARS.length - 1) idx = 0;
+  applyYear(YEARS[idx]);
+  playBtn.classList.add("playing");
+  playBtn.textContent = "Pause";
+  playTimer = setInterval(() => {
+    idx += 1;
+    if (idx >= YEARS.length) {
+      stopPlay();
+      return;
+    }
+    applyYear(YEARS[idx]);
+  }, PLAY_MS);
+}
+
+function shortJournalName(name) {
+  return String(name || "").replace(/^Frontiers in\s+/i, "");
+}
+
+const journalFiltersEl = document.getElementById("journalFilters");
+const allJournalsBtn = document.getElementById("allJournalsBtn");
+const journalShown = {};
 
 J.forEach((j, jIdx) => {
   const bundle = buildBundle(j);
   if (!bundle) return;
-  const rescuedN = j.n_borderline_clusters || j.n_distance_rescued_clusters || 0;
+  journalShown[jIdx] = true;
   const plotId = "scatter" + jIdx;
   const card = document.createElement("div");
   card.className = "card";
+  card.dataset.journalIdx = String(jIdx);
   card.innerHTML = '<h2>' + j.name
-    + ' <span style="color:#8893a6;font-weight:400;font-size:13px;">— '
-    + bundle.scatter.length.toLocaleString() + ' papers · '
-    + j.out_of_scope_pct.toFixed(1) + '% out of scope'
-    + (rescuedN ? (' · ' + rescuedN + ' borderline') : '')
-    + '</span></h2>'
+    + ' <span class="year-stats" id="stats' + jIdx + '"></span></h2>'
     + '<div class="plot-wrap"><div id="' + plotId + '" class="plot scatter"></div></div>';
   grid.appendChild(card);
+  bundle.card = card;
+  bundle.jIdx = jIdx;
+  bundle.statsEl = document.getElementById("stats" + jIdx);
+  bundle.statsEl.textContent = "— " + formatStats(bundle, null);
   plotIds.push(plotId);
+  journalBundles.push(bundle);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "filter-btn active";
+  btn.dataset.journalIdx = String(jIdx);
+  btn.textContent = shortJournalName(j.name);
+  btn.title = j.name + " (double-click for only this journal)";
+  // Insert before the hint span
+  const hint = journalFiltersEl.querySelector(".hint");
+  journalFiltersEl.insertBefore(btn, hint);
+
   Plotly.newPlot(plotId, bundle.traces, layoutOpts(), CFG).then(gd => {
     bundle.gd = gd;
-    journalBundles.push(bundle);
-    Plotly.Plots.resize(gd);
+    restyleBundle(bundle, selectedYear);
   });
+});
+
+function visibleJournalCount() {
+  return Object.keys(journalShown).filter(k => journalShown[k]).length;
+}
+
+function syncJournalButtons() {
+  journalFiltersEl.querySelectorAll("button[data-journal-idx]").forEach(btn => {
+    const idx = btn.dataset.journalIdx;
+    btn.classList.toggle("active", !!journalShown[idx]);
+  });
+  const n = visibleJournalCount();
+  const total = journalBundles.length;
+  allJournalsBtn.classList.toggle("active", n === total && total > 0);
+  grid.classList.toggle("focus-one", n === 1);
+  grid.classList.toggle("focus-few", n === 2 || n === 3);
+}
+
+function applyJournalVisibility() {
+  if (visibleJournalCount() === 0 && journalBundles.length) {
+    const first = journalBundles[0].jIdx;
+    journalShown[first] = true;
+  }
+  journalBundles.forEach(bundle => {
+    const on = !!journalShown[bundle.jIdx];
+    if (bundle.card) bundle.card.classList.toggle("hidden", !on);
+  });
+  syncJournalButtons();
+  setTimeout(resizeAllPlots, 30);
+  setTimeout(resizeAllPlots, 200);
+}
+
+allJournalsBtn.addEventListener("click", () => {
+  journalBundles.forEach(b => { journalShown[b.jIdx] = true; });
+  applyJournalVisibility();
+});
+
+let journalClickTimer = null;
+journalFiltersEl.addEventListener("click", (e) => {
+  const t = e.target;
+  if (!(t instanceof HTMLElement) || t.dataset.journalIdx == null) return;
+  const idx = parseInt(t.dataset.journalIdx, 10);
+  clearTimeout(journalClickTimer);
+  journalClickTimer = setTimeout(() => {
+    journalShown[idx] = !journalShown[idx];
+    applyJournalVisibility();
+  }, 220);
+});
+
+journalFiltersEl.addEventListener("dblclick", (e) => {
+  const t = e.target;
+  if (!(t instanceof HTMLElement) || t.dataset.journalIdx == null) return;
+  e.preventDefault();
+  clearTimeout(journalClickTimer);
+  const idx = parseInt(t.dataset.journalIdx, 10);
+  journalBundles.forEach(b => { journalShown[b.jIdx] = (b.jIdx === idx); });
+  applyJournalVisibility();
+});
+
+syncJournalButtons();
+
+yearSlider.addEventListener("input", () => {
+  stopPlay();
+  if (!YEARS.length) return;
+  applyYear(YEARS[parseInt(yearSlider.value, 10)]);
+});
+
+allYearsBtn.addEventListener("click", () => {
+  stopPlay();
+  applyYear(null);
+});
+
+playBtn.addEventListener("click", () => {
+  if (playTimer) stopPlay();
+  else startPlay();
 });
 
 document.querySelectorAll("#scopeFilters .filter-btn").forEach(btn => {
@@ -3152,7 +3488,6 @@ document.querySelectorAll("#scopeFilters .filter-btn").forEach(btn => {
     const key = btn.dataset.scope;
     visibility[key] = !visibility[key];
     btn.classList.toggle("active", visibility[key]);
-    // Keep at least one category visible
     if (!visibility.primary && !visibility.borderline && !visibility.oos) {
       visibility[key] = true;
       btn.classList.add("active");
@@ -3171,7 +3506,6 @@ if (window.ResizeObserver) {
   document.querySelectorAll(".plot-wrap").forEach(el => ro.observe(el));
   ro.observe(document.body);
 }
-// Combined-dashboard iframe: parent may call this after tab show / fullscreen
 window.resizeNetworkMaps = resizeAllPlots;
 setTimeout(resizeAllPlots, 50);
 setTimeout(resizeAllPlots, 300);
@@ -3301,10 +3635,21 @@ def build_network_maps_dashboard(scope_data: dict) -> None:
     log.info("Building Network Maps Dashboard")
     log.info("=" * 60)
 
+    meta = scope_data.get("meta") or {}
+    years = meta.get("oos_per_year_years") or []
+    if not years:
+        yr_range = meta.get("year_range") or []
+        if len(yr_range) == 2:
+            years = list(range(int(yr_range[0]), int(yr_range[1]) + 1))
+
     data_json = json.dumps(
         {
             "journals": scope_data.get("journals", []),
             "communities": scope_data.get("communities", []),
+            "meta": {
+                "years": [int(y) for y in years],
+                "year_range": meta.get("year_range") or [],
+            },
         },
         separators=(",", ":"),
     )
