@@ -1,0 +1,15 @@
+{
+  "join_path": "article.taxonomy_id\u2192taxonomy; article_research_topic_id\u2192research_topic",
+  "journal": "Frontiers in Neurorobotics",
+  "n_scatter": 1037,
+  "n_matched_rdm": 1037,
+  "n_with_section": 0,
+  "n_with_rt": 836,
+  "taxonomy_types": {
+    "Specialty Journal": 1037
+  },
+  "oos_pct_overall": 20.8,
+  "oos_pct_rt": 21.9,
+  "oos_pct_non_rt": 16.4,
+  "verdict": "Via taxonomy join: all Neurorobotics papers are taxonomy_type='Specialty Journal' with null section \u2014 no Specialty Section rows. Section launch cannot explain drift. Use Research Topics (article_research_topic_id) as the structural launch unit."
+}

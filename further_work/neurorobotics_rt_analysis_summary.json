@@ -1,0 +1,344 @@
+{
+  "n_papers": 1037,
+  "n_rt": 836,
+  "n_spontaneous": 201,
+  "oos_pct_rt": 21.9,
+  "oos_pct_spontaneous": 16.4,
+  "cv_pct_rt": 23.4,
+  "cv_pct_spontaneous": 39.8,
+  "neuro_pct_rt": 15.2,
+  "neuro_pct_spontaneous": 8.5,
+  "n_rts": 150,
+  "n_remove": 11,
+  "n_gate": 16,
+  "n_keep_grow": 60,
+  "top_oos_rts": [
+    {
+      "research_topic_title": "Neurorobotics explores Machine Learning",
+      "n": 17,
+      "oos_n": 8,
+      "oos_pct": 47.1,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Bio A.I. - From Embodied Cognition to Enactive Robotics",
+      "n": 19,
+      "oos_n": 6,
+      "oos_pct": 31.6,
+      "recommendation": "review / tighten scope"
+    },
+    {
+      "research_topic_title": "Advancing Neural Network-Based Intelligent Algorithms in Robotics: Challenges, Solutions, and Future Perspectives",
+      "n": 16,
+      "oos_n": 5,
+      "oos_pct": 31.2,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Intelligence and Safety for Humanoid Robots: Design, Control, and Applications",
+      "n": 11,
+      "oos_n": 5,
+      "oos_pct": 45.5,
+      "recommendation": "review / tighten scope"
+    },
+    {
+      "research_topic_title": "Privacy-preserving Deep Heterogeneous View Perception for Data Learning",
+      "n": 8,
+      "oos_n": 5,
+      "oos_pct": 62.5,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Towards a Novel Paradigm in Brain-Inspired Computer Vision",
+      "n": 8,
+      "oos_n": 5,
+      "oos_pct": 62.5,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Integrated Multi-modal and Sensorimotor Coordination for Enhanced Human-Robot Interaction",
+      "n": 14,
+      "oos_n": 5,
+      "oos_pct": 35.7,
+      "recommendation": "review / tighten scope"
+    },
+    {
+      "research_topic_title": "Dynamic Neural Networks for Robot Systems: Data-Driven and Model-Based Applications",
+      "n": 21,
+      "oos_n": 4,
+      "oos_pct": 19.0,
+      "recommendation": "keep"
+    }
+  ],
+  "top_drift_rts": [
+    {
+      "research_topic_title": "Recent Advances in Image Fusion and Quality Improvement for Cyber-Physical Systems",
+      "n": 14,
+      "cv_n": 14,
+      "neuro_n": 0,
+      "drift_pull": 14.0,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Recent Advances in Artificial Neural Networks and Embedded Systems for Multi-Source Image Fusion",
+      "n": 13,
+      "cv_n": 12,
+      "neuro_n": 0,
+      "drift_pull": 12.0,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Dynamic Neural Networks for Robot Systems: Data-Driven and Model-Based Applications",
+      "n": 21,
+      "cv_n": 9,
+      "neuro_n": 1,
+      "drift_pull": 8.0,
+      "recommendation": "keep"
+    },
+    {
+      "research_topic_title": "Recent Advances in Image Fusion and Quality Improvement for Cyber-Physical Systems, Volume II",
+      "n": 6,
+      "cv_n": 6,
+      "neuro_n": 0,
+      "drift_pull": 6.0,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Recent Advances in Image Fusion and Quality Improvement for Cyber-Physical Systems, Volume III",
+      "n": 8,
+      "cv_n": 5,
+      "neuro_n": 0,
+      "drift_pull": 5.0,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Machine Learning and Applied Neuroscience",
+      "n": 8,
+      "cv_n": 5,
+      "neuro_n": 0,
+      "drift_pull": 5.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Advancing Neural Network-Based Intelligent Algorithms in Robotics: Challenges, Solutions, and Future Perspectives - Volume II",
+      "n": 9,
+      "cv_n": 5,
+      "neuro_n": 0,
+      "drift_pull": 5.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Advanced Planning, Control, and Signal Processing Methods and Applications in Robotic Systems Volume II",
+      "n": 13,
+      "cv_n": 4,
+      "neuro_n": 0,
+      "drift_pull": 4.0,
+      "recommendation": "keep"
+    }
+  ],
+  "remove_list": [
+    {
+      "research_topic_title": "Privacy-preserving Deep Heterogeneous View Perception for Data Learning",
+      "n": 8,
+      "oos_pct": 62.5,
+      "cv_pct": 37.5,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Recent Advances in Image Fusion and Quality Improvement for Cyber-Physical Systems, Volume III",
+      "n": 8,
+      "oos_pct": 50.0,
+      "cv_pct": 62.5,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Biomechanical and cognitive patterns assessment in human-machine collaborative tasks for industrial robotics",
+      "n": 7,
+      "oos_pct": 57.1,
+      "cv_pct": 42.9,
+      "recommendation": "remove / tight gate"
+    },
+    {
+      "research_topic_title": "Human Inspired Robotic Intelligence and Structure in Demanding Environments",
+      "n": 7,
+      "oos_pct": 57.1,
+      "cv_pct": 28.6,
+      "recommendation": "remove / tight gate"
+    },
+    {
+      "research_topic_title": "Towards Neuroscience-Inspired Intelligent Computing: Theory, Methods, and Applications",
+      "n": 4,
+      "oos_pct": 100.0,
+      "cv_pct": 0.0,
+      "recommendation": "remove / tight gate"
+    },
+    {
+      "research_topic_title": "Human-in-the-loop Cyber-Physical Systems",
+      "n": 6,
+      "oos_pct": 50.0,
+      "cv_pct": 16.7,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Robotics, Neural Networks and Cyber-Physical Systems Applied to Sustainable Development and Advanced Manufacturing",
+      "n": 7,
+      "oos_pct": 42.9,
+      "cv_pct": 0.0,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Deformable Object Manipulation",
+      "n": 4,
+      "oos_pct": 75.0,
+      "cv_pct": 0.0,
+      "recommendation": "remove / tight gate"
+    },
+    {
+      "research_topic_title": "Recent Advances in Image Fusion and Quality Improvement for Cyber-Physical Systems",
+      "n": 14,
+      "oos_pct": 7.1,
+      "cv_pct": 100.0,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Recent Advances in Artificial Neural Networks and Embedded Systems for Multi-Source Image Fusion",
+      "n": 13,
+      "oos_pct": 7.7,
+      "cv_pct": 92.3,
+      "recommendation": "remove / do not renew"
+    },
+    {
+      "research_topic_title": "Recent Advances in Image Fusion and Quality Improvement for Cyber-Physical Systems, Volume II",
+      "n": 6,
+      "oos_pct": 0.0,
+      "cv_pct": 100.0,
+      "recommendation": "remove / do not renew"
+    }
+  ],
+  "gate_list": [
+    {
+      "research_topic_title": "Neurorobotics explores Machine Learning",
+      "n": 17,
+      "oos_pct": 47.1,
+      "cv_pct": 17.6,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Advancing Neural Network-Based Intelligent Algorithms in Robotics: Challenges, Solutions, and Future Perspectives",
+      "n": 16,
+      "oos_pct": 31.2,
+      "cv_pct": 25.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Towards a Novel Paradigm in Brain-Inspired Computer Vision",
+      "n": 8,
+      "oos_pct": 62.5,
+      "cv_pct": 37.5,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Efficient Deep Neural Network For Intelligent Robot System: Focusing On Visual Signal Processing",
+      "n": 12,
+      "oos_pct": 33.3,
+      "cv_pct": 41.7,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Multi-source and Multi-domain Data Fusion and Enhancement: Methods, Evaluation, and Applications",
+      "n": 6,
+      "oos_pct": 50.0,
+      "cv_pct": 50.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Neural Network Models in Autonomous Robotics",
+      "n": 6,
+      "oos_pct": 33.3,
+      "cv_pct": 50.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Hybrid Intelligent Algorithms Based Learning, Optimization, and Application to Autonomic Control Systems, Volume II",
+      "n": 6,
+      "oos_pct": 33.3,
+      "cv_pct": 16.7,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Evolutionary computation-based machine learning and its\napplications for multi-robot systems",
+      "n": 5,
+      "oos_pct": 40.0,
+      "cv_pct": 20.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Machine Learning and Applied Neuroscience: Volume II",
+      "n": 4,
+      "oos_pct": 50.0,
+      "cv_pct": 25.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Machine Learning and Applied Neuroscience",
+      "n": 8,
+      "oos_pct": 12.5,
+      "cv_pct": 62.5,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Perceiving the World, Planning the Future: Advanced Perception and Planning Technology in Robotics",
+      "n": 3,
+      "oos_pct": 33.3,
+      "cv_pct": 100.0,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Privacy-preserving Deep Heterogeneous View Perception for Data Learning in Neurorobotics Volume II",
+      "n": 5,
+      "oos_pct": 20.0,
+      "cv_pct": 40.0,
+      "recommendation": "gate / do not renew series"
+    },
+    {
+      "research_topic_title": "Advancing Neural Network-Based Intelligent Algorithms in Robotics: Challenges, Solutions, and Future Perspectives - Volume II",
+      "n": 9,
+      "oos_pct": 0.0,
+      "cv_pct": 55.6,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Perception Recovery and Augmentation in Medical Robotics",
+      "n": 6,
+      "oos_pct": 0.0,
+      "cv_pct": 66.7,
+      "recommendation": "gate (robot/embodied required)"
+    },
+    {
+      "research_topic_title": "Granular Computing-Based Artificial Neural Networks: Toward Building Robust and Transparent Intelligent Systems",
+      "n": 4,
+      "oos_pct": 0.0,
+      "cv_pct": 50.0,
+      "recommendation": "gate (robot/embodied required)"
+    }
+  ],
+  "add_proposals": [
+    {
+      "proposed_rt": "Embodied robot vision & multimodal perception",
+      "rationale": "CV already dominates volume; formalise robot-gated vision so spontaneous/CV RTs don't stretch OOS."
+    },
+    {
+      "proposed_rt": "Therapeutic & assistive robotics (exoskeletons, prostheses, rehab)",
+      "rationale": "Therapeutic Movement share fell; dedicated RT can rebuild neural\u2013rehab identity."
+    },
+    {
+      "proposed_rt": "Neural interfaces \u2194 robot control (BCI, motor decoding, neurorobotic loops)",
+      "rationale": "Neuroscience share collapsed to ~6\u20137%; RT can re-anchor the journal name."
+    },
+    {
+      "proposed_rt": "Learning & control for physical agents (embodied RL, adaptive control)",
+      "rationale": "Aligns with Autonomous Systems primary; keeps ML on-robot rather than generic ML."
+    }
+  ],
+  "verdict": "Spontaneous submissions are more CV-heavy than RTs (~40% vs ~23% CV) and slightly less OOS (~16% vs ~22%). So the CV takeover is not 'RTs alone' \u2014 open submissions drive mix shift; RTs add OOS risk and volume, especially ML/vision/cyber-physical topics (2020-22 launch wave). Close/gate off-brand high-OOS RTs; add rehab / neural-interface / embodied-vision RTs to rebalance identity."
+}
