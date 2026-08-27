@@ -62,7 +62,6 @@ Results are written to `output/`:
 - `config_comparison.txt` — Edge weight config comparison
 
 
-
 #### 
 
 How to run efficiently
@@ -78,3 +77,19 @@ Individual runs are:
 1. subprocess_leiden - you need to make sure your resolution and timestamp is right
 2. taxonomy_naming.py - names the files
 3. files come from run_pipeline
+
+## HOW TO RUN IN VM
+
+nohup env START_YEAR=2020 END_YEAR=2026 NETWORK_MODE=full ENABLE_BC_EDGES=false python cwts_export.py > cwts_output.log 2>&1 &
+
+nohup env START_YEAR=2020 END_YEAR=2026 NETWORK_MODE=full ENABLE_BC_EDGES=false python cwts_export.py 2>&1 &
+
+check if its running;
+# Is it still running?
+ps aux | grep cwts_export.py
+
+# Watch live output (raw stdout/stderr redirect)
+tail -f cwts_output.log
+
+# Watch the script's own structured log (more useful — has step-by-step progress)
+tail -f cwts_logs/cwts_export_*.log
