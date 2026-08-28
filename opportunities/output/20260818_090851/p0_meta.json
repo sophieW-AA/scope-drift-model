@@ -1,0 +1,3169 @@
+{
+  "baseline_year": 2020,
+  "late_year": 2026,
+  "n_journals": 351,
+  "n_papers": 296335,
+  "n_candidates": 739,
+  "journals": [
+    {
+      "journal": "Advances in Drug and Alcohol Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 48,
+      "n_3y": 22,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Aerospace Research Communications",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 32,
+      "n_3y": 25,
+      "baseline_primary": "0,4",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Dystonia",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 62,
+      "n_3y": 38,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "European Journal of Cultural Management and Policy",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 45,
+      "n_3y": 40,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "FRONTIERS IN CHEMICAL SCIENCES",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 10,
+      "n_3y": 7,
+      "baseline_primary": "0,1",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 5,
+      "n_3y": 3,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers A Journal of Women Studies",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 16,
+      "n_3y": 10,
+      "baseline_primary": "0,2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers Research of Architecture and Engineering",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers The Interdisciplinary Journal of Study Abroad",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 95,
+      "n_3y": 61,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers for Young Minds",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 353,
+      "n_3y": 276,
+      "baseline_primary": "0,1,2",
+      "current_primary": "0,1,2"
+    },
+    {
+      "journal": "Frontiers in Acoustics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 32,
+      "n_3y": 25,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1,3"
+    },
+    {
+      "journal": "Frontiers in Adolescent Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 36,
+      "n_3y": 34,
+      "baseline_primary": "1,2",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Advanced Materials Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 17,
+      "n_3y": 12,
+      "baseline_primary": "0,5",
+      "current_primary": "0,5"
+    },
+    {
+      "journal": "Frontiers in Aerospace Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 28,
+      "n_3y": 14,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in African business research",
+      "baseline_year": 2026,
+      "late_year": 2026,
+      "n_papers": 4,
+      "n_3y": 4,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Aging",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 507,
+      "n_3y": 418,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Aging Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 2487,
+      "n_3y": 1647,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Agriculture",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 8,
+      "n_3y": 8,
+      "baseline_primary": "0",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Agronomy",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 607,
+      "n_3y": 508,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Allergy",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 582,
+      "n_3y": 437,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Amphibian and Reptile Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 87,
+      "n_3y": 77,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Analytical Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 64,
+      "n_3y": 34,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Anesthesiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 90,
+      "n_3y": 70,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Animal Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 627,
+      "n_3y": 474,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Antennas and Propagation",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 22,
+      "n_3y": 22,
+      "baseline_primary": "1,3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers in Antibiotics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 99,
+      "n_3y": 71,
+      "baseline_primary": "0",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Applied Engineering and Technology",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 6,
+      "n_3y": 6,
+      "baseline_primary": "2,3",
+      "current_primary": "0,2,3"
+    },
+    {
+      "journal": "Frontiers in Applied Mathematics and Statistics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 397,
+      "n_3y": 254,
+      "baseline_primary": "0,1,3,5",
+      "current_primary": "0,2,3,5"
+    },
+    {
+      "journal": "Frontiers in Applied Physics and Mathematics",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 8,
+      "n_3y": 8,
+      "baseline_primary": "2,3,4,5",
+      "current_primary": "0,2,3,4"
+    },
+    {
+      "journal": "Frontiers in Aquaculture",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 110,
+      "n_3y": 86,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Arachnid Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 28,
+      "n_3y": 20,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Art Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 190,
+      "n_3y": 73,
+      "baseline_primary": "2",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Art and Design",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Artificial Intelligence",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1576,
+      "n_3y": 1346,
+      "baseline_primary": "0,2,3",
+      "current_primary": "1,2,3"
+    },
+    {
+      "journal": "Frontiers in Artificial Intelligence Research",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 28,
+      "n_3y": 28,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Astronomy and Space Sciences",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 806,
+      "n_3y": 489,
+      "baseline_primary": "3,4",
+      "current_primary": "3,4"
+    },
+    {
+      "journal": "Frontiers in Audiology and Otology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 119,
+      "n_3y": 98,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Bacteriology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 65,
+      "n_3y": 52,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Batteries and Electrochemistry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 39,
+      "n_3y": 31,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Bee Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 53,
+      "n_3y": 43,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Behavioral Economics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 91,
+      "n_3y": 73,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Behavioral Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 682,
+      "n_3y": 404,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Big Data",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 366,
+      "n_3y": 246,
+      "baseline_primary": "0,2,3",
+      "current_primary": "1,2,3"
+    },
+    {
+      "journal": "Frontiers in Bioengineering and Biotechnology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 4566,
+      "n_3y": 2880,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Bioinformatics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 489,
+      "n_3y": 382,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Biomaterials Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 45,
+      "n_3y": 26,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Biophysics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 23,
+      "n_3y": 20,
+      "baseline_primary": "0,1,2",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Bioscience-Landmark",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1305,
+      "n_3y": 950,
+      "baseline_primary": "0,1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Bioscience-Scholar",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 74,
+      "n_3y": 57,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Biotechnology and Genetics",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 6,
+      "n_3y": 6,
+      "baseline_primary": "0,1,2",
+      "current_primary": "0,1,2"
+    },
+    {
+      "journal": "Frontiers in Bird Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 46,
+      "n_3y": 37,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Blockchain",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 187,
+      "n_3y": 149,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Built Environment",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 975,
+      "n_3y": 767,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Business Economics and Management",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 899,
+      "n_3y": 542,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Business Innovations and Management",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 3,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Business and Economics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 18,
+      "n_3y": 4,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Business and Finance",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 24,
+      "n_3y": 24,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Cancer Control and Society",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 37,
+      "n_3y": 36,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Carbon",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 24,
+      "n_3y": 14,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Cardiovascular Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 6587,
+      "n_3y": 4334,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Catalysis",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 33,
+      "n_3y": 20,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Cell Death",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 36,
+      "n_3y": 25,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Cell Science",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 7,
+      "n_3y": 7,
+      "baseline_primary": "0",
+      "current_primary": "0,1,2"
+    },
+    {
+      "journal": "Frontiers in Cell and Developmental Biology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3940,
+      "n_3y": 2648,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Cellular Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1272,
+      "n_3y": 772,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Cellular and Infection Microbiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 5073,
+      "n_3y": 3612,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Ceramics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 1,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Chemical Biology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 86,
+      "n_3y": 78,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Chemical Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 178,
+      "n_3y": 121,
+      "baseline_primary": "0,1",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Chemistry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1941,
+      "n_3y": 1194,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Chemistry Materials and Catalysis",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 4,
+      "n_3y": 4,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Child and Adolescent Psychiatry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 245,
+      "n_3y": 185,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Chinese linguistics",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Climate",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 644,
+      "n_3y": 510,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Clinical Diabetes and Healthcare",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 258,
+      "n_3y": 193,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Coatings, Dyes and Interface Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 11,
+      "n_3y": 10,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Cognition",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 163,
+      "n_3y": 131,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Combinatorics and Number Theory",
+      "baseline_year": 2026,
+      "late_year": 2026,
+      "n_papers": 11,
+      "n_3y": 11,
+      "baseline_primary": "5",
+      "current_primary": "5"
+    },
+    {
+      "journal": "Frontiers in Communication",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1143,
+      "n_3y": 891,
+      "baseline_primary": "1,2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Communications and Networks",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 96,
+      "n_3y": 76,
+      "baseline_primary": "0,2,3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers in Community Service and Empowerment",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 27,
+      "n_3y": 22,
+      "baseline_primary": "2",
+      "current_primary": "0,1,2"
+    },
+    {
+      "journal": "Frontiers in Complex Systems",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 53,
+      "n_3y": 41,
+      "baseline_primary": "0,2,3",
+      "current_primary": "0,2,3"
+    },
+    {
+      "journal": "Frontiers in Computational Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 407,
+      "n_3y": 282,
+      "baseline_primary": "1,3",
+      "current_primary": "1,3"
+    },
+    {
+      "journal": "Frontiers in Computer Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 652,
+      "n_3y": 504,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Computer Science and Artificial Intelligence",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 20,
+      "n_3y": 18,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Computing and Intelligent Systems",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 498,
+      "n_3y": 305,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Conservation Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 360,
+      "n_3y": 258,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Control Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 23,
+      "n_3y": 8,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Dementia",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 173,
+      "n_3y": 136,
+      "baseline_primary": "1",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Dental Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 434,
+      "n_3y": 385,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Dentistry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 122,
+      "n_3y": 78,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Detector Science and Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 25,
+      "n_3y": 21,
+      "baseline_primary": "0,4",
+      "current_primary": "0,4"
+    },
+    {
+      "journal": "Frontiers in Developmental Psychology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 168,
+      "n_3y": 154,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Digital Health",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1345,
+      "n_3y": 1109,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Digital Twin Urban Ecosystems",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Disaster and Emergency Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 74,
+      "n_3y": 65,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Drug Delivery",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 78,
+      "n_3y": 55,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Drug Design & Discovery",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 0,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Drug Discovery",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 115,
+      "n_3y": 80,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Drug Safety and Regulation",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 82,
+      "n_3y": 59,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Earth Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3723,
+      "n_3y": 1872,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Ecology and Evolution",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1881,
+      "n_3y": 831,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Ecology and the Environment",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 220,
+      "n_3y": 142,
+      "baseline_primary": "0,2",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Economics & Policy Modeling",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 4,
+      "n_3y": 4,
+      "baseline_primary": "0,2,3",
+      "current_primary": "0,2,3"
+    },
+    {
+      "journal": "Frontiers in Education",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 4966,
+      "n_3y": 4007,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Education Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 18,
+      "n_3y": 5,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Educational Innovation and Research",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 3,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Educational Practice and Research",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 3,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Educational Psychology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 7,
+      "n_3y": 4,
+      "baseline_primary": "2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Educational Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 448,
+      "n_3y": 194,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Electronic Materials",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 24,
+      "n_3y": 11,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Electronics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 66,
+      "n_3y": 51,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Emergency Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 37,
+      "n_3y": 24,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Emerging Artificial Intelligence and Machine Learning",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "2",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Emerging Computer Science and Information Technology",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers in Emerging Engineering & Technologies",
+      "baseline_year": 2026,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers in Endocrinology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 9693,
+      "n_3y": 6462,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Energy",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 178,
+      "n_3y": 124,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Energy Efficiency",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 24,
+      "n_3y": 17,
+      "baseline_primary": "0,2,3",
+      "current_primary": "0,2,3"
+    },
+    {
+      "journal": "Frontiers in Energy Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 2790,
+      "n_3y": 1537,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Engineering",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 12,
+      "n_3y": 12,
+      "baseline_primary": "0",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Engineering Innovation Research",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Engineering and Built Environment",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 46,
+      "n_3y": 30,
+      "baseline_primary": "2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Engineering and Informatics",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers in English Language and Linguistics",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Environmental Archaeology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 126,
+      "n_3y": 108,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Environmental Chemistry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 76,
+      "n_3y": 56,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Environmental Economics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 103,
+      "n_3y": 77,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Environmental Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 54,
+      "n_3y": 45,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Environmental Health",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 70,
+      "n_3y": 58,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1,2"
+    },
+    {
+      "journal": "Frontiers in Environmental Microbiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 19,
+      "n_3y": 13,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Environmental Research",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 11,
+      "n_3y": 11,
+      "baseline_primary": "0,2",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Environmental Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3753,
+      "n_3y": 2368,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Environmental Science and Sustainability",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Epidemiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 206,
+      "n_3y": 141,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Epigenetics and Epigenomics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 54,
+      "n_3y": 46,
+      "baseline_primary": "0,1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Ethology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 66,
+      "n_3y": 59,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Eukaryotic Microbiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 14,
+      "n_3y": 13,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Fish Science",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 46,
+      "n_3y": 46,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Food Science and Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 185,
+      "n_3y": 136,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Forests and Global Change",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 898,
+      "n_3y": 568,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Freshwater Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 30,
+      "n_3y": 26,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Fuels",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 22,
+      "n_3y": 19,
+      "baseline_primary": "0,3",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Fungal Biology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 165,
+      "n_3y": 129,
+      "baseline_primary": "0",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Future Transportation",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 96,
+      "n_3y": 72,
+      "baseline_primary": "3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Gastroenterology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 142,
+      "n_3y": 102,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Genetics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 4096,
+      "n_3y": 2328,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Genome Editing",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 162,
+      "n_3y": 104,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Geochemistry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 31,
+      "n_3y": 25,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Global Research",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Global Women's Health",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 732,
+      "n_3y": 575,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Health Informatics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 98,
+      "n_3y": 66,
+      "baseline_primary": "1,2,3",
+      "current_primary": "1,2,3"
+    },
+    {
+      "journal": "Frontiers in Health Services",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 797,
+      "n_3y": 633,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Healthcare Technology",
+      "baseline_year": 2026,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Heat and Mass Transfer",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 302,
+      "n_3y": 244,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Hematology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 136,
+      "n_3y": 106,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in High Performance Computing",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 40,
+      "n_3y": 36,
+      "baseline_primary": "0,2,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Horticulture",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 147,
+      "n_3y": 115,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Human Dynamics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 318,
+      "n_3y": 262,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Human Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1857,
+      "n_3y": 1272,
+      "baseline_primary": "1,2,3",
+      "current_primary": "1,2,3"
+    },
+    {
+      "journal": "Frontiers in Humanities and Social Research",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 5,
+      "n_3y": 5,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Humanities and Social Sciences",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 315,
+      "n_3y": 260,
+      "baseline_primary": "2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Imaging",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 34,
+      "n_3y": 30,
+      "baseline_primary": "1,3",
+      "current_primary": "1,3"
+    },
+    {
+      "journal": "Frontiers in Immunology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 23221,
+      "n_3y": 16920,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Industrial Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 20,
+      "n_3y": 16,
+      "baseline_primary": "0,2,6",
+      "current_primary": "0,2,3"
+    },
+    {
+      "journal": "Frontiers in Industrial Microbiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 33,
+      "n_3y": 28,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Insect Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 234,
+      "n_3y": 154,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Integrative Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 140,
+      "n_3y": 77,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Interdisciplinary Applied Science",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 10,
+      "n_3y": 10,
+      "baseline_primary": "3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Interdisciplinary Educational Methodology",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 5,
+      "n_3y": 5,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Lab on a Chip Technologies",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 49,
+      "n_3y": 44,
+      "baseline_primary": "0",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Language Sciences",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 170,
+      "n_3y": 138,
+      "baseline_primary": "1,2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Law",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 19,
+      "n_3y": 14,
+      "baseline_primary": "2",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Lupus",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 50,
+      "n_3y": 43,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Malaria",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 49,
+      "n_3y": 44,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Mammal Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 29,
+      "n_3y": 20,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Management Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 70,
+      "n_3y": 41,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Management and Business",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 8,
+      "n_3y": 5,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Management and Social Sciences",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 3,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Manufacturing Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 44,
+      "n_3y": 27,
+      "baseline_primary": "0,2,3",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Marine Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 5745,
+      "n_3y": 3614,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Materials",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1316,
+      "n_3y": 790,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Mechanical Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 477,
+      "n_3y": 387,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Medical Case Reports",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 16,
+      "n_3y": 8,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Medical Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 30,
+      "n_3y": 25,
+      "baseline_primary": "1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Medical Science Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 74,
+      "n_3y": 30,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Medical Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 233,
+      "n_3y": 164,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2,3"
+    },
+    {
+      "journal": "Frontiers in Medicinal Chemistry - Online",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 5,
+      "n_3y": 0,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 13785,
+      "n_3y": 11114,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Membrane Science and Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 51,
+      "n_3y": 44,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Metals and Alloys",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 11,
+      "n_3y": 4,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Microbiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 12009,
+      "n_3y": 7947,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Microbiology and Biotechnology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 5,
+      "n_3y": 2,
+      "baseline_primary": "0",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Microbiomes",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 219,
+      "n_3y": 162,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Molecular Biosciences",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1958,
+      "n_3y": 1191,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Molecular Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 56,
+      "n_3y": 29,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Molecular Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1030,
+      "n_3y": 523,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Multidisciplinary Research and Studies",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 4,
+      "n_3y": 4,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Musculoskeletal Disorders",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 29,
+      "n_3y": 27,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Nanotechnology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 247,
+      "n_3y": 191,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Natural Product Chemistry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 4,
+      "n_3y": 0,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Natural Products",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 68,
+      "n_3y": 50,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Nephrology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 212,
+      "n_3y": 150,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Network Physiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 193,
+      "n_3y": 139,
+      "baseline_primary": "1,3,6",
+      "current_primary": "1,3"
+    },
+    {
+      "journal": "Frontiers in Neural Circuits",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 231,
+      "n_3y": 144,
+      "baseline_primary": "0,1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Neuroanatomy",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 228,
+      "n_3y": 148,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Neuroendocrinology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 115,
+      "n_3y": 79,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Neuroergonomics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 107,
+      "n_3y": 71,
+      "baseline_primary": "1,2,3",
+      "current_primary": "1,2,3"
+    },
+    {
+      "journal": "Frontiers in Neuroimaging",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 142,
+      "n_3y": 89,
+      "baseline_primary": "1,3",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Neuroinformatics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 222,
+      "n_3y": 141,
+      "baseline_primary": "1,3",
+      "current_primary": "1,3"
+    },
+    {
+      "journal": "Frontiers in Neurology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 8210,
+      "n_3y": 5759,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Neurorobotics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 455,
+      "n_3y": 248,
+      "baseline_primary": "3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers in Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 4813,
+      "n_3y": 2724,
+      "baseline_primary": "1,3",
+      "current_primary": "1,3"
+    },
+    {
+      "journal": "Frontiers in Nuclear Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 153,
+      "n_3y": 107,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Nuclear Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 129,
+      "n_3y": 84,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Nutrition",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 8039,
+      "n_3y": 6115,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Ocean Sustainability",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 74,
+      "n_3y": 69,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Oncology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 15194,
+      "n_3y": 10537,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Ophthalmology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 358,
+      "n_3y": 257,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Oral Health",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 807,
+      "n_3y": 706,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Organizational Psychology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 123,
+      "n_3y": 116,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Pain Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 624,
+      "n_3y": 429,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Parasitology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 104,
+      "n_3y": 62,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Pediatrics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 5379,
+      "n_3y": 3719,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Pharmacology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 12306,
+      "n_3y": 9120,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Photobiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 33,
+      "n_3y": 29,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Photonics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 64,
+      "n_3y": 44,
+      "baseline_primary": "0",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Physics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1882,
+      "n_3y": 1059,
+      "baseline_primary": "0,1,3,4",
+      "current_primary": "0,1,3,4"
+    },
+    {
+      "journal": "Frontiers in Physiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 4494,
+      "n_3y": 2711,
+      "baseline_primary": "0,1,6",
+      "current_primary": "0,1,6"
+    },
+    {
+      "journal": "Frontiers in Plant Physiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 40,
+      "n_3y": 30,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Plant Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 11904,
+      "n_3y": 7792,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Political Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 819,
+      "n_3y": 709,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Power and Energy Systems",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 16,
+      "n_3y": 15,
+      "baseline_primary": "3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Preventive Medicine",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 14,
+      "n_3y": 14,
+      "baseline_primary": "1",
+      "current_primary": "1,2,3"
+    },
+    {
+      "journal": "Frontiers in Psychiatry",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 7616,
+      "n_3y": 5320,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Psychology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 14945,
+      "n_3y": 10212,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Public Health",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 16813,
+      "n_3y": 12303,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Public Management",
+      "baseline_year": 2026,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 3,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Quantum Science and Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 68,
+      "n_3y": 47,
+      "baseline_primary": "0,4",
+      "current_primary": "0,4"
+    },
+    {
+      "journal": "Frontiers in RNA Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 29,
+      "n_3y": 20,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Radiology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 230,
+      "n_3y": 188,
+      "baseline_primary": "1,3",
+      "current_primary": "1,3"
+    },
+    {
+      "journal": "Frontiers in Rehabilitation Sciences",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 668,
+      "n_3y": 485,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Remote Sensing",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 350,
+      "n_3y": 283,
+      "baseline_primary": "0",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Reproductive Health",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 576,
+      "n_3y": 444,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Research",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 17,
+      "n_3y": 17,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Research Journal.",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 6,
+      "n_3y": 6,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Research Metrics and Analytics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 215,
+      "n_3y": 147,
+      "baseline_primary": "2,3",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Robotics and AI",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 841,
+      "n_3y": 614,
+      "baseline_primary": "0,2,3",
+      "current_primary": "0,2,3"
+    },
+    {
+      "journal": "Frontiers in Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 128,
+      "n_3y": 111,
+      "baseline_primary": "1,2",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Science and Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 239,
+      "n_3y": 189,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2,3"
+    },
+    {
+      "journal": "Frontiers in Scientific Reports",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Scientific Research and Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 62,
+      "n_3y": 35,
+      "baseline_primary": "0,3",
+      "current_primary": "0,5"
+    },
+    {
+      "journal": "Frontiers in Sensors",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 60,
+      "n_3y": 46,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1,3"
+    },
+    {
+      "journal": "Frontiers in Signal Processing",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 110,
+      "n_3y": 85,
+      "baseline_primary": "1,3",
+      "current_primary": "1,3"
+    },
+    {
+      "journal": "Frontiers in Sleep",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 208,
+      "n_3y": 144,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Smart Grids",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 18,
+      "n_3y": 16,
+      "baseline_primary": "3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers in Social Psychology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 99,
+      "n_3y": 89,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Social Sciences Research",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Social Thoughts and Humanity",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Sociology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1075,
+      "n_3y": 785,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Soft Matter",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 80,
+      "n_3y": 45,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Soil Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 219,
+      "n_3y": 172,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in South and Southeast Asian Development Research.",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 33,
+      "n_3y": 33,
+      "baseline_primary": "2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Space Technologies",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 84,
+      "n_3y": 60,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Sport Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 81,
+      "n_3y": 45,
+      "baseline_primary": "2,6",
+      "current_primary": "2,6"
+    },
+    {
+      "journal": "Frontiers in Sports and Active Living",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 2276,
+      "n_3y": 1842,
+      "baseline_primary": "1,2,6",
+      "current_primary": "1,2,6"
+    },
+    {
+      "journal": "Frontiers in Strategic Management",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 4,
+      "n_3y": 4,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Stroke",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 170,
+      "n_3y": 128,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Surgery",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3252,
+      "n_3y": 2141,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Sustainability",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 573,
+      "n_3y": 456,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Sustainable Cities",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 525,
+      "n_3y": 407,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Sustainable Development",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 192,
+      "n_3y": 139,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Sustainable Energy Policy",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 57,
+      "n_3y": 42,
+      "baseline_primary": "2",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in Sustainable Food Systems",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3642,
+      "n_3y": 2755,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Sustainable Resource Management",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 50,
+      "n_3y": 41,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Sustainable Science and Technology",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Sustainable Tourism",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 110,
+      "n_3y": 84,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Synaptic Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 79,
+      "n_3y": 41,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Synthetic Biology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 24,
+      "n_3y": 20,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Systems Biology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 134,
+      "n_3y": 96,
+      "baseline_primary": "0,1,2",
+      "current_primary": "0,1,2"
+    },
+    {
+      "journal": "Frontiers in Systems Neuroscience",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 167,
+      "n_3y": 103,
+      "baseline_primary": "1",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers in Thermal Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 40,
+      "n_3y": 26,
+      "baseline_primary": "0,1",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Toxicology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 481,
+      "n_3y": 386,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in Traffic and Transportation Engineering",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 9,
+      "n_3y": 9,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers in Transplantation",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 261,
+      "n_3y": 179,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Tropical Diseases",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 275,
+      "n_3y": 200,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Tuberculosis",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 61,
+      "n_3y": 54,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Urology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 142,
+      "n_3y": 81,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Veterinary Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 5947,
+      "n_3y": 4359,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Virology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 154,
+      "n_3y": 103,
+      "baseline_primary": "0,1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in Virtual Reality",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 524,
+      "n_3y": 406,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Water",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 625,
+      "n_3y": 463,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in Water and Environment",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 3,
+      "baseline_primary": "0,2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers in Zoology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 134,
+      "n_3y": 95,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in aerospace science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 0,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in anti-infective drug discovery",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in antimicrobial agents",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 6,
+      "n_3y": 0,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in applied dynamical systems: reviews and tutorials",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 0,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in artificial intelligence and applications",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1987,
+      "n_3y": 1221,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in biomedical technologies",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 116,
+      "n_3y": 75,
+      "baseline_primary": "0,1,3",
+      "current_primary": "0,1,3"
+    },
+    {
+      "journal": "Frontiers in cancer immunology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 0,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in clinical drug research. Anti-infectives/Frontiers in clinical drug research. Anti infectives",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in clinical drug research. CNS and neurological disorders",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 6,
+      "n_3y": 4,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in clinical drug research. Diabetes and obesity",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 4,
+      "n_3y": 0,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers in computational chemistry",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 5,
+      "n_3y": 5,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers in economic history",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 48,
+      "n_3y": 37,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in international relations",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 14,
+      "n_3y": 12,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in mathematics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 18,
+      "n_3y": 10,
+      "baseline_primary": "0,3,5",
+      "current_primary": "0,3,5"
+    },
+    {
+      "journal": "Frontiers in neuroscience",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers in probability and the statistical sciences",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 2,
+      "baseline_primary": "3",
+      "current_primary": "3,5"
+    },
+    {
+      "journal": "Frontiers in sociology and social research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 42,
+      "n_3y": 28,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in the Internet of Things",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 27,
+      "n_3y": 16,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers in the history of science",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of Agricultural Science and Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 152,
+      "n_3y": 103,
+      "baseline_primary": "0,1",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Architectural Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 443,
+      "n_3y": 372,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of Biogeography",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 100,
+      "n_3y": 75,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Chemical Science and Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 391,
+      "n_3y": 238,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Chinese Land Sciences",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 0,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of Chinese Mechanical Engineering and Technology",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 1,
+      "baseline_primary": "0",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers of Chinese Pure Mathematics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 0,
+      "baseline_primary": "5",
+      "current_primary": "5"
+    },
+    {
+      "journal": "Frontiers of Computer Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 478,
+      "n_3y": 357,
+      "baseline_primary": "3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers of Contemporary Education",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 6,
+      "n_3y": 4,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers of Earth Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 178,
+      "n_3y": 105,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Engineering Management",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 167,
+      "n_3y": 119,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers of Engineering and Scientific Research",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 3,
+      "n_3y": 2,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Environmental Science & Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 407,
+      "n_3y": 280,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Finance",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 9,
+      "n_3y": 8,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of Health Services Management",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 39,
+      "n_3y": 29,
+      "baseline_primary": "2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers of Information Technology & Electronic Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 412,
+      "n_3y": 271,
+      "baseline_primary": "3",
+      "current_primary": "3"
+    },
+    {
+      "journal": "Frontiers of International Accounting",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 184,
+      "n_3y": 171,
+      "baseline_primary": "2,3",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of Materials Science",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 142,
+      "n_3y": 101,
+      "baseline_primary": "0,1",
+      "current_primary": "0,1"
+    },
+    {
+      "journal": "Frontiers of Mathematical Finance",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 48,
+      "n_3y": 32,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers of Mathematics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 154,
+      "n_3y": 120,
+      "baseline_primary": "5",
+      "current_primary": "5"
+    },
+    {
+      "journal": "Frontiers of Mechanical Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 150,
+      "n_3y": 97,
+      "baseline_primary": "0,3",
+      "current_primary": "0,3"
+    },
+    {
+      "journal": "Frontiers of Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 200,
+      "n_3y": 119,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers of Narrative Studies",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 30,
+      "n_3y": 21,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of Nursing",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 126,
+      "n_3y": 93,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers of Optoelectronics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 121,
+      "n_3y": 73,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Oral and Maxillofacial Medicine",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 88,
+      "n_3y": 59,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers of Physics",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 394,
+      "n_3y": 268,
+      "baseline_primary": "0,4",
+      "current_primary": "0,4"
+    },
+    {
+      "journal": "Frontiers of Structural and Civil Engineering",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 324,
+      "n_3y": 211,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of Urban and Rural Planning",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 73,
+      "n_3y": 53,
+      "baseline_primary": "2,3",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers of artificial intelligence, ethics and multidisciplinary applications.",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 125,
+      "n_3y": 125,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3"
+    },
+    {
+      "journal": "Frontiers of biomechanics",
+      "baseline_year": 2025,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of digital education.",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 78,
+      "n_3y": 78,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of entrepreneurship research",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 2,
+      "n_3y": 2,
+      "baseline_primary": "0",
+      "current_primary": "0"
+    },
+    {
+      "journal": "Frontiers of globalization series.",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 1,
+      "n_3y": 1,
+      "baseline_primary": "2",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers of hormone research",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 15,
+      "n_3y": 15,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    },
+    {
+      "journal": "Frontiers on Healthcare Research",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 8,
+      "n_3y": 8,
+      "baseline_primary": "1,2",
+      "current_primary": "1,2"
+    },
+    {
+      "journal": "Frontiers.",
+      "baseline_year": 2024,
+      "late_year": 2026,
+      "n_papers": 22,
+      "n_3y": 22,
+      "baseline_primary": "0,2,3",
+      "current_primary": "0,1,2"
+    },
+    {
+      "journal": "Journal of Abdominal Wall Surgery",
+      "baseline_year": 2023,
+      "late_year": 2026,
+      "n_papers": 166,
+      "n_3y": 132,
+      "baseline_primary": "1",
+      "current_primary": "1"
+    }
+  ],
+  "paper_source": "bigquery"
+}

@@ -1,0 +1,10 @@
+{
+  "run": "20260721_122750",
+  "n_rows": 1017,
+  "calls": {
+    "emerging_watch": 661,
+    "redirect_crosslist": 302,
+    "gate_intake": 54
+  },
+  "pending_launch": 51
+}

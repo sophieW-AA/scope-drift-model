@@ -1,0 +1,13 @@
+{
+  "run": "20260818_090851",
+  "n_rows": 739,
+  "calls": {
+    "redirect_crosslist": 520,
+    "emerging_watch": 110,
+    "gate_intake": 109
+  },
+  "presence": {
+    "already_publish": 739
+  },
+  "pending_launch": 23
+}

@@ -1,0 +1,586 @@
+{
+  "baseline_year": 2020,
+  "late_year": 2026,
+  "n_journals": 64,
+  "n_papers": 483006,
+  "n_candidates": 1017,
+  "journals": [
+    {
+      "journal": "Frontiers in Aging",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 680,
+      "n_3y": 385,
+      "baseline_primary": "4,8,12",
+      "current_primary": "1,4,5,12,14,22,23"
+    },
+    {
+      "journal": "Frontiers in Aging Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 5420,
+      "n_3y": 1558,
+      "baseline_primary": "1,4",
+      "current_primary": "1,4,14"
+    },
+    {
+      "journal": "Frontiers in Agronomy",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 804,
+      "n_3y": 449,
+      "baseline_primary": "7",
+      "current_primary": "2,5,7"
+    },
+    {
+      "journal": "Frontiers in Artificial Intelligence",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1992,
+      "n_3y": 1206,
+      "baseline_primary": "1,2,3,4,8,13,17,18,20,24,28,32",
+      "current_primary": "1,2,3,4,8,12,14,15,17,18,20"
+    },
+    {
+      "journal": "Frontiers in Behavioral Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1814,
+      "n_3y": 379,
+      "baseline_primary": "1,4,5",
+      "current_primary": "1,4,5,23"
+    },
+    {
+      "journal": "Frontiers in Bioengineering and Biotechnology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 9865,
+      "n_3y": 2745,
+      "baseline_primary": "0,1,4,5,7,14,19,21,27",
+      "current_primary": "0,1,4,5,7,14,21,27,29"
+    },
+    {
+      "journal": "Frontiers in Bioscience-Landmark",
+      "baseline_year": 2021,
+      "late_year": 2026,
+      "n_papers": 1690,
+      "n_3y": 860,
+      "baseline_primary": "1,4,5,7,12,14,19,23,37,43",
+      "current_primary": "1,4,5,7,12,14,30"
+    },
+    {
+      "journal": "Frontiers in Built Environment",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1586,
+      "n_3y": 728,
+      "baseline_primary": "2,3,9,48",
+      "current_primary": "2,3,8,9"
+    },
+    {
+      "journal": "Frontiers in Cardiovascular Medicine",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 12374,
+      "n_3y": 4004,
+      "baseline_primary": "1,4,8,12,14",
+      "current_primary": "1,4,12,14,25"
+    },
+    {
+      "journal": "Frontiers in Cell and Developmental Biology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 11917,
+      "n_3y": 2471,
+      "baseline_primary": "1,4,5,12,14,26",
+      "current_primary": "1,4,5,14,23,26"
+    },
+    {
+      "journal": "Frontiers in Cellular Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 2957,
+      "n_3y": 747,
+      "baseline_primary": "1,4,14,30,34",
+      "current_primary": "1,4,14,30,34"
+    },
+    {
+      "journal": "Frontiers in Cellular and Infection Microbiology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 9072,
+      "n_3y": 3352,
+      "baseline_primary": "1,5,12,19,26,40",
+      "current_primary": "1,5,12,19,26,35,40"
+    },
+    {
+      "journal": "Frontiers in Chemistry",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 6003,
+      "n_3y": 1120,
+      "baseline_primary": "0,1,6,11",
+      "current_primary": "0,1,5,6,11"
+    },
+    {
+      "journal": "Frontiers in Climate",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1073,
+      "n_3y": 478,
+      "baseline_primary": "2,3",
+      "current_primary": "2,3,13"
+    },
+    {
+      "journal": "Frontiers in Communication",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1463,
+      "n_3y": 688,
+      "baseline_primary": "2,3,4,12,13,20,38",
+      "current_primary": "2,3,4,8,12,20,22,28,38"
+    },
+    {
+      "journal": "Frontiers in Computational Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 821,
+      "n_3y": 258,
+      "baseline_primary": "1,4,8,15,18,27,45",
+      "current_primary": "1,3,4,8,15,17,18"
+    },
+    {
+      "journal": "Frontiers in Computer Science",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 912,
+      "n_3y": 453,
+      "baseline_primary": "2,3,4,8,17,18,20,22,28",
+      "current_primary": "1,2,3,4,8,15,17,18,20,28"
+    },
+    {
+      "journal": "Frontiers in Dementia",
+      "baseline_year": 2022,
+      "late_year": 2026,
+      "n_papers": 177,
+      "n_3y": 131,
+      "baseline_primary": "4,12,22",
+      "current_primary": "4,20,22"
+    },
+    {
+      "journal": "Frontiers in Digital Health",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1743,
+      "n_3y": 984,
+      "baseline_primary": "1,2,3,4,5,12,14,20,22,37",
+      "current_primary": "1,3,4,8,12,14,18,20,22,25,28"
+    },
+    {
+      "journal": "Frontiers in Earth Science",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 7870,
+      "n_3y": 1835,
+      "baseline_primary": "2,13",
+      "current_primary": "2,9,13"
+    },
+    {
+      "journal": "Frontiers in Ecology and Evolution",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 4583,
+      "n_3y": 769,
+      "baseline_primary": "2,7,13,23",
+      "current_primary": "2,3,7,13,23"
+    },
+    {
+      "journal": "Frontiers in Ecology and the Environment",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 448,
+      "n_3y": 126,
+      "baseline_primary": "2,7,38",
+      "current_primary": "2,7,23"
+    },
+    {
+      "journal": "Frontiers in Endocrinology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 15676,
+      "n_3y": 6034,
+      "baseline_primary": "1,4,5,14,23,26,34,39",
+      "current_primary": "1,4,5,14,26,34,39"
+    },
+    {
+      "journal": "Frontiers in Energy Research",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 5696,
+      "n_3y": 1470,
+      "baseline_primary": "0,3,6,13,16",
+      "current_primary": "0,3,13,15,16,17"
+    },
+    {
+      "journal": "Frontiers in Environmental Science",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 7093,
+      "n_3y": 2183,
+      "baseline_primary": "0,2,7",
+      "current_primary": "2,3,7"
+    },
+    {
+      "journal": "Frontiers in Forests and Global Change",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1524,
+      "n_3y": 533,
+      "baseline_primary": "2,7",
+      "current_primary": "2,7"
+    },
+    {
+      "journal": "Frontiers in Genetics",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 12163,
+      "n_3y": 2237,
+      "baseline_primary": "1,4,5,7,12,14,23",
+      "current_primary": "1,4,5,7,12,14,23,26"
+    },
+    {
+      "journal": "Frontiers in Human Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 4068,
+      "n_3y": 1202,
+      "baseline_primary": "1,4,27,34",
+      "current_primary": "1,4,12,27"
+    },
+    {
+      "journal": "Frontiers in Immunology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 39599,
+      "n_3y": 15687,
+      "baseline_primary": "1,4,5,12,14,19,40",
+      "current_primary": "1,4,5,12,14,19"
+    },
+    {
+      "journal": "Frontiers in Marine Science",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 11633,
+      "n_3y": 3476,
+      "baseline_primary": "0,2,23",
+      "current_primary": "0,2,13,23"
+    },
+    {
+      "journal": "Frontiers in Materials",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 3123,
+      "n_3y": 748,
+      "baseline_primary": "0,6,9,10",
+      "current_primary": "0,1,6,9,10"
+    },
+    {
+      "journal": "Frontiers in Medicine",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 20565,
+      "n_3y": 10138,
+      "baseline_primary": "0,1,4,5,12,14,19,22,24,25,26,40",
+      "current_primary": "1,4,5,8,12,14,19,21,22,24,25,26,30"
+    },
+    {
+      "journal": "Frontiers in Microbiology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 24743,
+      "n_3y": 7531,
+      "baseline_primary": "0,1,2,5,7,12,19",
+      "current_primary": "0,1,5,7,12,19"
+    },
+    {
+      "journal": "Frontiers in Molecular Biosciences",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 5158,
+      "n_3y": 1157,
+      "baseline_primary": "1,4,5,11,12,19",
+      "current_primary": "0,1,4,5,11,12,19"
+    },
+    {
+      "journal": "Frontiers in Molecular Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 2374,
+      "n_3y": 500,
+      "baseline_primary": "1,4,5,14,22",
+      "current_primary": "1,4,5,14"
+    },
+    {
+      "journal": "Frontiers in Nanotechnology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 455,
+      "n_3y": 180,
+      "baseline_primary": "0,6,14",
+      "current_primary": "0,1,6,7,10"
+    },
+    {
+      "journal": "Frontiers in Neurology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 15385,
+      "n_3y": 5511,
+      "baseline_primary": "1,4,12,14,27,34",
+      "current_primary": "1,4,12,14,27,34"
+    },
+    {
+      "journal": "Frontiers in Neurorobotics",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1037,
+      "n_3y": 239,
+      "baseline_primary": "4,8,15,27",
+      "current_primary": "4,8,15,27"
+    },
+    {
+      "journal": "Frontiers in Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 10239,
+      "n_3y": 2600,
+      "baseline_primary": "0,1,4,5,8,14,34",
+      "current_primary": "1,4,5,8,14,27,34"
+    },
+    {
+      "journal": "Frontiers in Nutrition",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 12395,
+      "n_3y": 5695,
+      "baseline_primary": "0,1,5,7,12,14,22,33",
+      "current_primary": "1,4,5,7,14,22,33,39"
+    },
+    {
+      "journal": "Frontiers in Oncology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 30899,
+      "n_3y": 9913,
+      "baseline_primary": "1,5,22,24,36,37",
+      "current_primary": "1,5,22,24,36,37"
+    },
+    {
+      "journal": "Frontiers in Pediatrics",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 9668,
+      "n_3y": 3390,
+      "baseline_primary": "1,4,5,12,14,19,22,25,26,32,36,42",
+      "current_primary": "1,4,5,12,14,19,21,24,25,26,32,36,42"
+    },
+    {
+      "journal": "Frontiers in Pharmacology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 23850,
+      "n_3y": 8715,
+      "baseline_primary": "1,4,5,11,12,14,19",
+      "current_primary": "1,4,5,11,12,14,19"
+    },
+    {
+      "journal": "Frontiers in Physics",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 4447,
+      "n_3y": 997,
+      "baseline_primary": "0,1,3,4,6,9,11,12,16,17,31,41,44,49",
+      "current_primary": "0,1,3,4,6,8,9,10,11,13,16,17,18,31,41,44"
+    },
+    {
+      "journal": "Frontiers in Physiology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 11239,
+      "n_3y": 2525,
+      "baseline_primary": "1,4,5,7,12,14,23,26,27",
+      "current_primary": "1,4,5,7,12,14,22,23,25,26,27"
+    },
+    {
+      "journal": "Frontiers in Plant Science",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 22466,
+      "n_3y": 7314,
+      "baseline_primary": "2,5,7,23",
+      "current_primary": "2,5,7,8"
+    },
+    {
+      "journal": "Frontiers in Psychiatry",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 14217,
+      "n_3y": 4902,
+      "baseline_primary": "4,5,12,22,32",
+      "current_primary": "1,4,5,12,22,32"
+    },
+    {
+      "journal": "Frontiers in Psychology",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 30829,
+      "n_3y": 9076,
+      "baseline_primary": "2,3,4,12,20,22,27,28,32",
+      "current_primary": "3,4,12,20,22,27,28,32"
+    },
+    {
+      "journal": "Frontiers in Public Health",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 24052,
+      "n_3y": 11303,
+      "baseline_primary": "1,2,3,4,5,8,12,14,19,20,22,32,33",
+      "current_primary": "1,2,3,4,5,12,14,19,20,22,32,33,35"
+    },
+    {
+      "journal": "Frontiers in Rehabilitation Sciences",
+      "baseline_year": 2021,
+      "late_year": 2026,
+      "n_papers": 984,
+      "n_3y": 442,
+      "baseline_primary": "1,4,12,21,22,27",
+      "current_primary": "1,4,12,14,21,22,27"
+    },
+    {
+      "journal": "Frontiers in Remote Sensing",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 501,
+      "n_3y": 265,
+      "baseline_primary": "2,15",
+      "current_primary": "2"
+    },
+    {
+      "journal": "Frontiers in Robotics and AI",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1791,
+      "n_3y": 586,
+      "baseline_primary": "0,4,8,15,20,27",
+      "current_primary": "0,3,4,8,15,20,27"
+    },
+    {
+      "journal": "Frontiers in Soil Science",
+      "baseline_year": 2021,
+      "late_year": 2026,
+      "n_papers": 300,
+      "n_3y": 153,
+      "baseline_primary": "2,7",
+      "current_primary": "0,2,7"
+    },
+    {
+      "journal": "Frontiers in Sports and Active Living",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 3077,
+      "n_3y": 1649,
+      "baseline_primary": "4,12,21,22,27,42",
+      "current_primary": "1,3,4,12,21,22,27"
+    },
+    {
+      "journal": "Frontiers in Surgery",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 5885,
+      "n_3y": 2026,
+      "baseline_primary": "1,12,14,21,24,25,26,34,36",
+      "current_primary": "1,4,14,21,22,24,25,26,34,36"
+    },
+    {
+      "journal": "Frontiers in Sustainability",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 812,
+      "n_3y": 424,
+      "baseline_primary": "3,7,20,28",
+      "current_primary": "0,2,3,7,9,33"
+    },
+    {
+      "journal": "Frontiers in Sustainable Cities",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 875,
+      "n_3y": 371,
+      "baseline_primary": "0,2,3,4,17,25,47",
+      "current_primary": "2,3,8,9,47"
+    },
+    {
+      "journal": "Frontiers in Sustainable Food Systems",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 4893,
+      "n_3y": 2521,
+      "baseline_primary": "2,3,5,7,33",
+      "current_primary": "2,3,5,7,33"
+    },
+    {
+      "journal": "Frontiers in Systems Neuroscience",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 576,
+      "n_3y": 96,
+      "baseline_primary": "1,4,34",
+      "current_primary": "1,4,27,34"
+    },
+    {
+      "journal": "Frontiers in Veterinary Science",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 10236,
+      "n_3y": 4041,
+      "baseline_primary": "1,2,5,12,19,23,26,40",
+      "current_primary": "1,2,5,12,19,23,26,40"
+    },
+    {
+      "journal": "Frontiers in Virtual Reality",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 878,
+      "n_3y": 369,
+      "baseline_primary": "4,27,28",
+      "current_primary": "3,4,20,27,28"
+    },
+    {
+      "journal": "Frontiers in Water",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 1100,
+      "n_3y": 432,
+      "baseline_primary": "2",
+      "current_primary": "0,2"
+    },
+    {
+      "journal": "Frontiers of Earth Science",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 384,
+      "n_3y": 103,
+      "baseline_primary": "2,9,13",
+      "current_primary": "2,13"
+    },
+    {
+      "journal": "Frontiers of Environmental Science & Engineering",
+      "baseline_year": 2020,
+      "late_year": 2026,
+      "n_papers": 857,
+      "n_3y": 280,
+      "baseline_primary": "0,2,7",
+      "current_primary": "0,2,7"
+    }
+  ],
+  "paper_source": "bigquery"
+}

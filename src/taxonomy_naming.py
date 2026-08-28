@@ -4,32 +4,47 @@ taxonomy_naming.py
 Maps CWTS publication clusters to academic taxonomy using BigQuery taxonomy tables
 and GPT-4o for structured judgment.
 
-Pipeline:
-1. Load CWTS clusters from BigQuery (classification + pub_metadata)
-2. Load L0/L1/L2 taxonomy hierarchy from BigQuery
-3. Pull taxonomy scores for publications
+Pipeline (per level, coarsest first):
+1. Cluster index from classification_raw_{timestamp} (counts only)
+2. Sample up to 300 papers per cluster in BigQuery (QUALIFY ROW_NUMBER), with pub_year
+3. JOIN taxonomy scores to that sample; years read straight off the sample
 4. Build community profiles and filter in-scope L2 topics
 5. Aggregate L2 → L1 → L1-cluster → L0
 6. Build candidate hierarchy per cluster
-7. LLM assigns each cluster to core/bleed taxonomy categories
-8. Output: cluster → taxonomy mapping
+7. LLM assigns each cluster to core/bleed taxonomy categories (checkpointed per cluster)
+8. Upload this level to BigQuery before the next level starts
 
 Usage:
-    python taxonomy_naming.py <timestamp>
-    
+    python taxonomy_naming.py <timestamp>                       # macro, meso, micro
+    python taxonomy_naming.py <timestamp> --levels micro        # one level only
+    python taxonomy_naming.py <timestamp> --fresh               # ignore checkpoints
+
     Or import and call (same timestamp as classification_raw_{timestamp}):
         import taxonomy_naming
-        taxonomy_naming.main(timestamp)  # labels micro, meso, and macro
+        taxonomy_naming.main(timestamp)                  # macro, meso, micro
+        taxonomy_naming.main(timestamp, levels="micro")  # one level only
 
-    CLI also reads env RUN_TIMESTAMP (same as cwts_export / dashboards).
+    CLI also reads env RUN_TIMESTAMP (same as cwts_export / dashboards) and
+    env CLUSTER_LEVELS.
+
+Levels:
+    All three run by default, coarsest first, so macro (~26 clusters) and meso
+    (~323) are labelled and uploaded before micro (~3k GPT calls) starts.
+
+Resume:
+    Each cluster's LLM result is appended to
+    cwts_output/llm_checkpoints/llm_{timestamp}_{level}.jsonl, so a dropped run
+    picks up where it stopped instead of re-paying for GPT. Use --fresh to ignore.
 
 Output:
     cwts_output/cluster_taxonomy_labels.csv
     cwts_output/{macro|meso|micro}_labels.csv
     cwts_output/cluster_taxonomy_labels_{macro|meso|micro}.csv
-    BigQuery ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_labels_{level}_{timestamp}
-        one row per cluster; cluster_id = classification_raw_{timestamp}.{level}
-    BigQuery ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_taxonomy_labels_{level}_{timestamp}
+    BigQuery ocean-tech-adv-analytics-c-tfs.taxonomy_labelling (3 tables per run):
+      labels_dashboard_{timestamp}  — one row per cluster (level in classification_join_column)
+      labels_detail_{timestamp}     — core/bleed taxonomy rows per cluster
+      sample_pubs_{timestamp}       — sampled papers (publication_id, community_id,
+                                      cluster_level, pub_year)
 """
 
 import json
@@ -69,7 +84,8 @@ BQ_SRC_DATASET = "raw_citation_network_data"
 
 # Source tables
 TBL_SCORES = f"{PROJECT_DATA}.aa_taxonomy.article_taxonomy_scores_current"
-TBL_PUB = "ocean-breeze-tier-1.airak.Publication"
+# Publication years now come from pub_metadata_raw via the sample table,
+# so AIRAK Publication (~163M rows) is no longer joined.
 TBL_L2_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l2_cluster_assignments"
 TBL_L1_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l1_cluster_assignments"
 
@@ -80,20 +96,38 @@ RUN_TIMESTAMP = os.environ.get("RUN_TIMESTAMP", "")
 
 # Taxonomy labels land in a dedicated dataset; cluster_id joins
 # classification_raw_{ts}.{macro|meso|micro} from the scope-drift run.
+# Per run: labels_dashboard_{ts}, labels_detail_{ts}, sample_pubs_{ts}.
 BQ_DEST_PROJECT = "ocean-tech-adv-analytics-c-tfs"
 BQ_LABEL_DATASET = "taxonomy_labelling"
 BQ_LOCATION = "EU"
 pandas_gbq.context.location = BQ_LOCATION
 
-# Cluster levels to label in one run (classification_raw has micro, meso, macro)
-CLUSTER_LEVELS = ("micro", "meso", "macro")
+
+def bq_labels_dashboard(timestamp: str) -> str:
+    return f"{BQ_DEST_PROJECT}.{BQ_LABEL_DATASET}.labels_dashboard_{timestamp}"
+
+
+def bq_labels_detail(timestamp: str) -> str:
+    return f"{BQ_DEST_PROJECT}.{BQ_LABEL_DATASET}.labels_detail_{timestamp}"
+
+
+def bq_sample_pubs(timestamp: str) -> str:
+    return f"{BQ_DEST_PROJECT}.{BQ_LABEL_DATASET}.sample_pubs_{timestamp}"
+
+# Cluster levels to label in one run (classification_raw has micro, meso, macro).
+# Coarsest first so usable labels land before the expensive levels run.
+ALL_CLUSTER_LEVELS = ("macro", "meso", "micro")
+# All three by default; narrow with --levels or env CLUSTER_LEVELS when testing.
+CLUSTER_LEVELS = ALL_CLUSTER_LEVELS
 CLUSTER_LEVEL = "macro"  # current level while a run is in progress
 
-# Sample size per cluster (None = use all papers, set to 300 for memory efficiency)
+# Sample size per cluster in BigQuery (None = all papers in the cluster)
 SAMPLE_SIZE_PER_CLUSTER = 300
 
 # Output
 OUTPUT_DIR = Path("cwts_output")
+# Per-cluster LLM results, so a dropped run resumes instead of re-paying for GPT
+CHECKPOINT_DIR = OUTPUT_DIR / "llm_checkpoints"
 
 # Scope thresholds
 SCOPE_ABS_FLOORS = {"micro": 2, "small": 3, "medium": 5, "large": 10, "mega": 15}
@@ -147,13 +181,164 @@ def init_clients():
     """Initialize BigQuery and OpenAI clients."""
     global bq, bq_src, oai
     log.info("Initializing clients...")
-    bq = bigquery.Client(project=PROJECT_BILL)
-    bq_src = bigquery.Client(project=BQ_SRC_PROJECT)
+    bq = bigquery.Client(project=PROJECT_BILL, location=BQ_LOCATION)
+    bq_src = bigquery.Client(project=BQ_SRC_PROJECT, location=BQ_LOCATION)
     api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GPT4_OPENAI_KEY")
     if not api_key:
         raise RuntimeError("Set OPENAI_API_KEY environment variable")
     oai = OpenAI(api_key=api_key)
     log.info("Clients ready. Run date: %s", RUN_DATE)
+
+
+BQ_QUERY_RETRIES = 6
+CLUSTER_LEVEL_COLS = ("micro", "meso", "macro")
+
+
+def _is_transient_bq(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(
+        token in msg
+        for token in (
+            "ssl",
+            "eof",
+            "max retries",
+            "connection reset",
+            "connection aborted",
+            "timeout of",
+            "temporarily unavailable",
+            "503",
+            "429",
+            "502",
+            "reset by peer",
+            "broken pipe",
+        )
+    )
+
+
+def query_df(sql: str, job_config=None, *, client=None, retries: int = BQ_QUERY_RETRIES) -> pd.DataFrame:
+    """Run a query and download results, retrying SSL / connection drops."""
+    cli = client or bq
+    last = None
+    for attempt in range(1, retries + 1):
+        try:
+            return cli.query(sql, job_config=job_config).to_dataframe()
+        except Exception as exc:
+            last = exc
+            if attempt >= retries or not _is_transient_bq(exc):
+                raise
+            wait = min(2 ** attempt, 60)
+            log.warning(
+                "BigQuery query failed (%s); retry %s/%s in %ss",
+                type(exc).__name__,
+                attempt,
+                retries,
+                wait,
+            )
+            time.sleep(wait)
+    raise last
+
+
+def run_sql(sql: str, *, client=None, retries: int = BQ_QUERY_RETRIES):
+    """Run a DDL/DML job (no dataframe), retrying SSL / connection drops."""
+    cli = client or bq_src
+    last = None
+    for attempt in range(1, retries + 1):
+        try:
+            return cli.query(sql).result()
+        except Exception as exc:
+            last = exc
+            if attempt >= retries or not _is_transient_bq(exc):
+                raise
+            wait = min(2 ** attempt, 60)
+            log.warning(
+                "BigQuery job failed (%s); retry %s/%s in %ss",
+                type(exc).__name__,
+                attempt,
+                retries,
+                wait,
+            )
+            time.sleep(wait)
+    raise last
+
+
+def _assert_level(level: str) -> str:
+    if level not in CLUSTER_LEVEL_COLS:
+        raise ValueError(f"level must be one of {CLUSTER_LEVEL_COLS}, got {level!r}")
+    return level
+
+
+def cluster_sample_select_sql(level: str) -> str:
+    """Up to SAMPLE_SIZE_PER_CLUSTER papers per cluster, chosen in BigQuery."""
+    level = _assert_level(level)
+    qualify = ""
+    if SAMPLE_SIZE_PER_CLUSTER:
+        qualify = f"""
+        QUALIFY ROW_NUMBER() OVER (
+          PARTITION BY c.{level}
+          ORDER BY FARM_FINGERPRINT(CAST(m.pub_id AS STRING))
+        ) <= {int(SAMPLE_SIZE_PER_CLUSTER)}
+        """
+    return f"""
+    SELECT
+      CAST(m.pub_id AS INT64) AS publication_id,
+      CAST(c.{level} AS INT64) AS community_id,
+      '{level}' AS cluster_level,
+      EXTRACT(YEAR FROM SAFE.PARSE_DATE(
+        '%Y-%m-%d', SUBSTR(CAST(m.date AS STRING), 1, 10)
+      )) AS pub_year
+    FROM `{TBL_CLASSIF}` c
+    INNER JOIN `{TBL_PUB_META}` m
+      ON c.int_id = m.int_id
+    WHERE c.{level} IS NOT NULL
+      AND SAFE_CAST(m.pub_id AS INT64) IS NOT NULL
+    {qualify}
+    """
+
+
+def bq_table_columns(fq: str, *, client=None) -> set[str] | None:
+    """Column names for a table, or None when it does not exist."""
+    from google.cloud.exceptions import NotFound
+
+    cli = client or bq_src
+    try:
+        return {f.name for f in cli.get_table(fq).schema}
+    except NotFound:
+        return None
+
+
+def materialize_cluster_sample(
+    level: str, timestamp: str, *, replace_table: bool = False
+) -> str:
+    """Write sampled pubs into sample_pubs_{ts} (all levels share one table).
+
+    Columns: publication_id, community_id, cluster_level, pub_year.
+    First level of a run uses CREATE OR REPLACE; later levels DELETE+INSERT that level.
+    """
+    ensure_label_dataset()
+    fq = bq_sample_pubs(timestamp)
+    cap = SAMPLE_SIZE_PER_CLUSTER or "all"
+    log.info("Sampling up to %s papers per %s cluster in BigQuery → %s", cap, level, fq)
+    select_sql = cluster_sample_select_sql(level)
+    cols = bq_table_columns(fq)
+    # Rebuild when missing, or when an older run left a table without pub_year
+    if replace_table or cols is None or "pub_year" not in cols:
+        run_sql(f"CREATE OR REPLACE TABLE `{fq}` AS\n{select_sql}", client=bq_src)
+    else:
+        run_sql(
+            f"DELETE FROM `{fq}` WHERE cluster_level = '{level}'",
+            client=bq_src,
+        )
+        run_sql(f"INSERT INTO `{fq}`\n{select_sql}", client=bq_src)
+    n = query_df(
+        f"SELECT COUNT(*) AS n FROM `{fq}` WHERE cluster_level = '{level}'",
+        client=bq_src,
+    )
+    log.info(
+        "%s sample: %s publication rows",
+        level,
+        f"{int(n['n'].iloc[0]):,}" if len(n) else "0",
+    )
+    return fq
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -174,54 +359,56 @@ def fetch_classification_papers() -> pd.DataFrame:
 
 
 def group_communities(df: pd.DataFrame, level: str) -> dict:
-    """Group papers by CWTS cluster id at this level. cluster_id == classification.{level}."""
+    """Cluster ids and full paper counts at this level. Sampling happens in SQL."""
     global community_names, community_pubs, CLUSTER_LEVEL
-    import random
 
-    CLUSTER_LEVEL = level
+    CLUSTER_LEVEL = _assert_level(level)
     if level not in df.columns:
         raise ValueError(f"No column {level!r} in classification papers")
 
-    g = df.dropna(subset=[level]).groupby(level)["pub_id"].apply(list)
-    communities_full = {int(k): list(v) for k, v in g.items()}
-    if SAMPLE_SIZE_PER_CLUSTER:
-        log.info(
-            "Sampling up to %d papers per %s cluster...",
-            SAMPLE_SIZE_PER_CLUSTER,
-            level,
-        )
-        random.seed(42)
-        communities = {}
-        for k, pubs in communities_full.items():
-            if len(pubs) > SAMPLE_SIZE_PER_CLUSTER:
-                communities[k] = random.sample(pubs, SAMPLE_SIZE_PER_CLUSTER)
-            else:
-                communities[k] = pubs
-    else:
-        communities = communities_full
-
-    community_ids = sorted(communities)
+    counts = df.dropna(subset=[level]).groupby(level).size()
+    community_pubs = {int(k): int(n) for k, n in counts.items()}
+    community_ids = sorted(community_pubs)
     community_names = {cid: f"Cluster {cid}" for cid in community_ids}
-    community_pubs = {cid: communities[cid] for cid in community_ids}
-    all_pub_ids = [int(pid) for pubs in community_pubs.values() for pid in pubs]
-    pub_to_comm = {pid: cid for cid, pubs in community_pubs.items() for pid in pubs}
 
+    log.info("%s communities: %d | publications (full): %s",
+             level, len(community_ids), f"{sum(community_pubs.values()):,}")
+    return {"community_ids": community_ids}
+
+
+def load_cluster_index(level: str) -> dict:
+    """Cluster ids + full n_papers from classification — does not download papers."""
+    global community_names, community_pubs, CLUSTER_LEVEL
+
+    CLUSTER_LEVEL = _assert_level(level)
+    df = query_df(
+        f"""
+        SELECT
+          CAST({level} AS INT64) AS community_id,
+          COUNT(*) AS n_papers
+        FROM `{TBL_CLASSIF}`
+        WHERE {level} IS NOT NULL
+        GROUP BY 1
+        """,
+        client=bq_src,
+    )
+    community_pubs = {
+        int(r.community_id): int(r.n_papers) for r in df.itertuples(index=False)
+    }
+    community_ids = sorted(community_pubs)
+    community_names = {cid: f"Cluster {cid}" for cid in community_ids}
     log.info(
-        "%s communities: %d | publications (sampled): %d",
+        "%s communities: %d | publications (full): %s",
         level,
         len(community_ids),
-        len(all_pub_ids),
+        f"{sum(community_pubs.values()):,}",
     )
-    return {
-        "community_ids": community_ids,
-        "all_pub_ids": all_pub_ids,
-        "pub_to_comm": pub_to_comm,
-    }
+    return {"community_ids": community_ids}
 
 
 def load_communities() -> dict:
-    """Back-compat: load papers and group by the current CLUSTER_LEVEL."""
-    return group_communities(fetch_classification_papers(), CLUSTER_LEVEL)
+    """Back-compat: cluster index for the current CLUSTER_LEVEL."""
+    return load_cluster_index(CLUSTER_LEVEL)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -321,30 +508,51 @@ def load_taxonomy():
 # ══════════════════════════════════════════════════════════════════════════════
 # 4. PULL TAXONOMY SCORES
 # ══════════════════════════════════════════════════════════════════════════════
-def pull_taxonomy_scores(all_pub_ids: list, pub_to_comm: dict) -> pd.DataFrame:
-    """Pull L2 taxonomy scores for all community publications."""
-    log.info("Pulling taxonomy scores for %d publications...", len(all_pub_ids))
-    
-    df_scores_raw = bq.query(f"""
+def pull_taxonomy_scores(id_table: str, level: str | None = None) -> pd.DataFrame:
+    """L2 taxonomy scores for the SQL-sampled papers (community_id already on the sample)."""
+    level = level or CLUSTER_LEVEL
+    log.info("Pulling taxonomy scores from sample %s (level=%s)", id_table, level)
+    df_scores_raw = query_df(
+        f"""
         SELECT
             CAST(t.publication_id AS INT64) AS publication_id,
             t.taxref AS l2_key,
-            l2.l2_name
-        FROM `{TBL_SCORES}` t
-        JOIN `{TBL_L2_CLUS}` l2 ON t.taxref = l2.l2_taxref
+            l2.l2_name,
+            ids.community_id
+        FROM `{id_table}` ids
+        INNER JOIN `{TBL_SCORES}` t
+          ON CAST(t.publication_id AS INT64) = ids.publication_id
+        INNER JOIN `{TBL_L2_CLUS}` l2
+          ON t.taxref = l2.l2_taxref
         WHERE t.level = 2
           AND t.in_top_k = TRUE
           AND t.is_weak_match = FALSE
-          AND CAST(t.publication_id AS INT64) IN UNNEST(@pub_ids)
-    """, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)]
-    )).to_dataframe()
-    
-    log.info("Score rows: %d | Unique pubs matched: %d / %d",
-             len(df_scores_raw), df_scores_raw["publication_id"].nunique(), len(all_pub_ids))
-    
-    # Map to community
-    df_scores_raw["community_id"] = df_scores_raw["publication_id"].map(pub_to_comm)
+          AND ids.cluster_level = '{level}'
+        """,
+        client=bq_src,
+    )
+
+    if df_scores_raw is None or df_scores_raw.empty:
+        log.warning("No taxonomy score rows for this sample")
+        return pd.DataFrame(
+            columns=[
+                "community_id",
+                "l2_key",
+                "n_articles",
+                "l2_name",
+                "l1_taxref",
+                "l1_name",
+                "l0_taxref",
+                "l0_name",
+            ]
+        )
+
+    log.info(
+        "Score rows: %d | Unique pubs matched: %d",
+        len(df_scores_raw),
+        int(df_scores_raw["publication_id"].nunique()),
+    )
+
     df_scores_raw = df_scores_raw.dropna(subset=["community_id"])
     df_scores_raw["community_id"] = df_scores_raw["community_id"].astype(int)
     
@@ -368,29 +576,41 @@ def pull_taxonomy_scores(all_pub_ids: list, pub_to_comm: dict) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════
 # 5. BUILD PROFILES AND SCOPE FILTER
 # ══════════════════════════════════════════════════════════════════════════════
-def build_profiles(community_ids: list, all_pub_ids: list, pub_to_comm: dict):
+def build_profiles(community_ids: list, id_table: str, level: str | None = None):
     """Build community profiles and compute in-scope L2 filter."""
     global profiles
-    
+    level = level or CLUSTER_LEVEL
+
     log.info("Building community profiles...")
     current_year = date.today().year
-    
-    # Pull publication years
-    df_pub_years = bq.query(f"""
-        SELECT CAST(p.PublicationId AS INT64) AS publication_id, p.PublishedYear AS pub_year
-        FROM `{TBL_PUB}` p
-        WHERE CAST(p.PublicationId AS INT64) IN UNNEST(@pub_ids)
-          AND p.PublishedYear IS NOT NULL
-    """, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)]
-    )).to_dataframe()
-    
-    df_pub_years["community_id"] = df_pub_years["publication_id"].map(pub_to_comm)
-    df_pub_years = df_pub_years.dropna(subset=["community_id"])
-    df_pub_years["community_id"] = df_pub_years["community_id"].astype(int)
-    
+
+    # Years come from the sample table (pub_metadata date), aggregated in BigQuery.
+    df_pub_years = query_df(
+        f"""
+        SELECT
+          community_id,
+          pub_year,
+          COUNT(*) AS n_articles
+        FROM `{id_table}`
+        WHERE cluster_level = '{level}'
+          AND pub_year IS NOT NULL
+        GROUP BY 1, 2
+        """,
+        client=bq_src,
+    )
+
+    if df_pub_years is None or df_pub_years.empty:
+        years_by_cid: dict[int, pd.DataFrame] = {}
+    else:
+        df_pub_years = df_pub_years.dropna(subset=["community_id"])
+        df_pub_years["community_id"] = df_pub_years["community_id"].astype(int)
+        years_by_cid = {
+            int(cid): grp.sort_values("pub_year")
+            for cid, grp in df_pub_years.groupby("community_id")
+        }
+
     for cid in community_ids:
-        total = len(community_pubs[cid])
+        total = int(community_pubs[cid])
         
         # Size class
         if total < 50: size_class = "micro"
@@ -400,10 +620,8 @@ def build_profiles(community_ids: list, all_pub_ids: list, pub_to_comm: dict):
         else: size_class = "mega"
         
         # Age and growth
-        yr_grp = (df_pub_years[df_pub_years["community_id"] == cid]
-                  .groupby("pub_year")["publication_id"].count()
-                  .rename("n_articles").reset_index().sort_values("pub_year"))
-        
+        yr_grp = years_by_cid.get(cid, pd.DataFrame(columns=["pub_year", "n_articles"])).copy()
+
         if not yr_grp.empty:
             yr_grp["cumpct"] = yr_grp["n_articles"].cumsum() / yr_grp["n_articles"].sum()
             start_row = yr_grp[yr_grp["cumpct"] >= 0.10].iloc[0]
@@ -749,36 +967,99 @@ def extract_labels_from_result(result: dict) -> set:
     return labels
 
 
-def run_llm_for_all(community_ids: list) -> dict:
-    """Run LLM for all communities with duplicate tracking (Option 1)."""
-    log.info("Running LLM for %d communities (Pass 1: with used-label tracking)...", len(community_ids))
-    llm_results = {}
-    used_labels = set()  # Track (key, name) tuples already assigned
-    
-    for i, jid in enumerate(community_ids):
+def checkpoint_path(timestamp: str, level: str) -> Path:
+    return CHECKPOINT_DIR / f"llm_{timestamp}_{level}.jsonl"
+
+
+def load_checkpoint(timestamp: str, level: str) -> dict:
+    """Per-cluster LLM results already paid for in an earlier attempt."""
+    path = checkpoint_path(timestamp, level)
+    if not path.exists():
+        return {}
+    done = {}
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # truncated final write from a killed run
+            jid = rec.get("_journal_id")
+            if jid is None:
+                continue
+            done[int(jid)] = rec
+    if done:
+        log.info("Checkpoint: %d %s clusters already labelled (%s)", len(done), level, path)
+    return done
+
+
+def append_checkpoint(timestamp: str, level: str, result: dict) -> None:
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    with checkpoint_path(timestamp, level).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(result, default=str) + "\n")
+        f.flush()
+
+
+def rewrite_checkpoint(timestamp: str, level: str, llm_results: dict) -> None:
+    """Persist final results (after duplicate resolution) so a resume is consistent."""
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = checkpoint_path(timestamp, level).with_suffix(".jsonl.tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        for jid, res in llm_results.items():
+            rec = {**res, "_journal_id": int(jid)}
+            f.write(json.dumps(rec, default=str) + "\n")
+    tmp.replace(checkpoint_path(timestamp, level))
+
+
+def run_llm_for_all(
+    community_ids: list,
+    timestamp: str,
+    level: str,
+    *,
+    resume: bool = True,
+) -> dict:
+    """Run LLM per community, checkpointing each result so a crash can resume."""
+    done = load_checkpoint(timestamp, level) if resume else {}
+    todo = [jid for jid in community_ids if jid not in done]
+    log.info(
+        "Running LLM for %d %s communities (%d from checkpoint, %d to call)...",
+        len(community_ids),
+        level,
+        len(done),
+        len(todo),
+    )
+
+    llm_results = {jid: done[jid] for jid in community_ids if jid in done}
+    used_labels = set()
+    for res in llm_results.values():
+        used_labels.update(extract_labels_from_result(res))
+
+    for i, jid in enumerate(todo):
         jname = community_names.get(jid, str(jid))
         brief = briefs[jid]
-        
+
         if not (brief["l0_domains"] or brief["l1_clusters"] or brief["l1_singles"] or brief.get("l2_clusters")):
-            log.warning("[%d/%d] %s — no candidates, skipping", i + 1, len(community_ids), jname)
-            llm_results[jid] = {"core": [], "bleed": [], "match_mode": "none", 
-                               "confidence": "low", "overall_reasoning": "no candidates",
-                               "_journal_id": jid, "_journal_name": jname}
-            continue
-        
-        log.info("[%d/%d] %s...", i + 1, len(community_ids), jname)
-        # Option 1: Pass used_labels to help LLM avoid duplicates
-        llm_results[jid] = call_llm(jid, jname, brief, used_labels=used_labels)
-        
-        # Track newly assigned labels
-        new_labels = extract_labels_from_result(llm_results[jid])
-        used_labels.update(new_labels)
-    
+            log.warning("[%d/%d] %s — no candidates, skipping", i + 1, len(todo), jname)
+            result = {"core": [], "bleed": [], "match_mode": "none",
+                      "confidence": "low", "overall_reasoning": "no candidates",
+                      "_journal_id": jid, "_journal_name": jname}
+        else:
+            log.info("[%d/%d] %s...", i + 1, len(todo), jname)
+            # Option 1: Pass used_labels to help LLM avoid duplicates
+            result = call_llm(jid, jname, brief, used_labels=used_labels)
+
+        llm_results[jid] = result
+        append_checkpoint(timestamp, level, result)
+        used_labels.update(extract_labels_from_result(result))
+
     log.info("Pass 1 complete for %d communities", len(llm_results))
     
     # Option 4: Detect duplicates and retry
     llm_results = resolve_duplicates(llm_results, community_ids)
-    
+    rewrite_checkpoint(timestamp, level, llm_results)
+
     return llm_results
 
 
@@ -1022,18 +1303,50 @@ def ensure_label_dataset() -> None:
         log.info("Created BigQuery dataset %s (%s)", ds_id, BQ_LOCATION)
 
 
-def upload_labels_to_bigquery(
-    df_out: pd.DataFrame, dashboard: pd.DataFrame, run_timestamp: str
+def _upload_one_table(
+    df: pd.DataFrame, fq: str, rel: str, level: str, replace_table: bool
 ) -> None:
-    """Write labels to taxonomy_labelling; cluster_id joins classification_raw_{ts}.{level}."""
+    """Replace the rows for this level only, so earlier levels survive."""
+    cols = bq_table_columns(fq, client=bq_src)
+    if replace_table or cols is None or "classification_join_column" not in cols:
+        mode = "replace"
+    else:
+        run_sql(
+            f"DELETE FROM `{fq}` WHERE classification_join_column = '{level}'",
+            client=bq_src,
+        )
+        mode = "append"
+    pandas_gbq.to_gbq(
+        df,
+        rel,
+        project_id=BQ_DEST_PROJECT,
+        if_exists=mode,
+        location=BQ_LOCATION,
+    )
+    log.info("  → BigQuery (%s, %s): %s", level, mode, fq)
+
+
+def upload_labels_to_bigquery(
+    df_out: pd.DataFrame,
+    dashboard: pd.DataFrame,
+    run_timestamp: str,
+    level: str | None = None,
+    *,
+    replace_tables: bool = False,
+) -> None:
+    """Write one level into labels_dashboard_{ts} and labels_detail_{ts}."""
     pandas_gbq.context.location = BQ_LOCATION
     ensure_label_dataset()
+    level = level or CLUSTER_LEVEL
 
-    join_col = CLUSTER_LEVEL  # classification_raw has micro / meso / macro
+    if df_out.empty or dashboard.empty:
+        log.warning("Skipping BigQuery upload for %s — empty label frames", level)
+        return
+
     dash = dashboard.copy()
     dash["cluster_id"] = dash["cluster_id"].astype("int64")
     dash["run_timestamp"] = run_timestamp
-    dash["classification_join_column"] = join_col
+    dash["classification_join_column"] = dash["level"] if "level" in dash.columns else level
     front = ["cluster_id", "run_timestamp", "classification_join_column"]
     dash = dash[front + [c for c in dash.columns if c not in front]]
 
@@ -1042,34 +1355,30 @@ def upload_labels_to_bigquery(
         long["cluster_id"] = long["community_id"]
     long["cluster_id"] = long["cluster_id"].astype("int64")
     long["run_timestamp"] = run_timestamp
-    long["classification_join_column"] = join_col
+    long["classification_join_column"] = (
+        long["cluster_level"] if "cluster_level" in long.columns else level
+    )
     long_front = ["cluster_id", "run_timestamp", "classification_join_column"]
     long = long[long_front + [c for c in long.columns if c not in long_front]]
 
-    dest_labels = f"{BQ_LABEL_DATASET}.cluster_labels_{join_col}_{run_timestamp}"
-    dest_long = f"{BQ_LABEL_DATASET}.cluster_taxonomy_labels_{join_col}_{run_timestamp}"
-    pandas_gbq.to_gbq(
+    _upload_one_table(
         dash,
-        dest_labels,
-        project_id=BQ_DEST_PROJECT,
-        if_exists="replace",
-        location=BQ_LOCATION,
+        bq_labels_dashboard(run_timestamp),
+        f"{BQ_LABEL_DATASET}.labels_dashboard_{run_timestamp}",
+        level,
+        replace_tables,
     )
-    log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_labels)
-    pandas_gbq.to_gbq(
+    _upload_one_table(
         long,
-        dest_long,
-        project_id=BQ_DEST_PROJECT,
-        if_exists="replace",
-        location=BQ_LOCATION,
+        bq_labels_detail(run_timestamp),
+        f"{BQ_LABEL_DATASET}.labels_detail_{run_timestamp}",
+        level,
+        replace_tables,
     )
-    log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_long)
     log.info(
-        "Join to scope-drift classification: "
-        "classification_raw_%s.%s = cluster_labels_%s_%s.cluster_id",
+        "Join: classification_raw_%s.{level} = labels_dashboard_%s.cluster_id "
+        "(filter classification_join_column / level)",
         run_timestamp,
-        join_col,
-        join_col,
         run_timestamp,
     )
 
@@ -1086,11 +1395,22 @@ def resolve_timestamp(timestamp: str | None = None) -> str:
     return ts
 
 
-def run_one_level(df_papers: pd.DataFrame, level: str, timestamp: str) -> pd.DataFrame:
-    """Label all clusters at one CWTS level (micro / meso / macro)."""
+def run_one_level(
+    level: str,
+    timestamp: str,
+    *,
+    replace_sample: bool = False,
+    first_level: bool = False,
+    resume: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Label all clusters at one CWTS level (macro / meso / micro).
+
+    Uploads this level to BigQuery before returning, so a failure in a later
+    level cannot discard it.
+    """
     global CLUSTER_LEVEL, profiles, briefs, df_scope, df_l1_sig, df_clusters_agg, df_l0_agg
 
-    CLUSTER_LEVEL = level
+    CLUSTER_LEVEL = _assert_level(level)
     profiles = {}
     briefs = {}
     df_scope = None
@@ -1102,19 +1422,20 @@ def run_one_level(df_papers: pd.DataFrame, level: str, timestamp: str) -> pd.Dat
     log.info("Level: %s", level)
     log.info("=" * 60)
 
-    comm_data = group_communities(df_papers, level)
+    comm_data = load_cluster_index(level)
     community_ids = comm_data["community_ids"]
-    all_pub_ids = comm_data["all_pub_ids"]
-    pub_to_comm = comm_data["pub_to_comm"]
     if not community_ids:
         log.warning("No %s clusters — skipping", level)
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
-    df_l2_counts = pull_taxonomy_scores(all_pub_ids, pub_to_comm)
-    build_profiles(community_ids, all_pub_ids, pub_to_comm)
+    id_table = materialize_cluster_sample(
+        level, timestamp, replace_table=replace_sample
+    )
+    df_l2_counts = pull_taxonomy_scores(id_table, level)
+    build_profiles(community_ids, id_table, level)
     aggregate_to_higher_levels(df_l2_counts)
     build_all_briefs(community_ids)
-    llm_results = run_llm_for_all(community_ids)
+    llm_results = run_llm_for_all(community_ids, timestamp, level, resume=resume)
     df_out = flatten_results(llm_results, community_ids)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1124,27 +1445,60 @@ def run_one_level(df_papers: pd.DataFrame, level: str, timestamp: str) -> pd.Dat
     _, dashboard = export_dashboard_labels(df_out, level)
 
     try:
-        upload_labels_to_bigquery(df_out, dashboard, timestamp)
+        upload_labels_to_bigquery(
+            df_out, dashboard, timestamp, level, replace_tables=first_level
+        )
     except Exception:
         log.exception(
-            "BigQuery upload for %s failed; CSV outputs were still written",
-            level,
+            "BigQuery upload for %s failed; CSV outputs were still written", level
         )
-    return df_out
+    return df_out, dashboard
 
 
-def main(timestamp: str | None = None):
-    """Run taxonomy naming for micro, meso, and macro on one timestamp.
+def resolve_levels(levels=None) -> tuple[str, ...]:
+    """Levels to label: arg, then env CLUSTER_LEVELS, then module default.
+
+    Always ordered coarsest first (macro → meso → micro).
+    """
+    if isinstance(levels, str):
+        levels = [levels]
+    if not levels:
+        env = os.environ.get("CLUSTER_LEVELS", "").strip()
+        levels = [env] if env else None
+    if not levels:
+        levels = list(CLUSTER_LEVELS)
+    # Accept "macro,meso", "macro meso", ("macro", "meso") and "all"
+    parts = [
+        p.strip().lower()
+        for lv in levels
+        for p in str(lv).replace(",", " ").split()
+        if p.strip()
+    ]
+    if "all" in parts:
+        parts = list(ALL_CLUSTER_LEVELS)
+    chosen = {_assert_level(p) for p in parts}
+    if not chosen:
+        raise ValueError("No cluster levels selected")
+    return tuple(lv for lv in ALL_CLUSTER_LEVELS if lv in chosen)
+
+
+def main(timestamp: str | None = None, levels=None, *, resume: bool = True):
+    """Run taxonomy naming for the selected cluster levels on one timestamp.
 
     Args:
         timestamp: Scope-drift run id (e.g. "20260818_090851"). Reads
-            classification_raw_{timestamp} and writes
-            cluster_labels_{level}_{timestamp}. If omitted, uses
+            classification_raw_{timestamp} and writes labels_dashboard_{timestamp},
+            labels_detail_{timestamp}, sample_pubs_{timestamp}. If omitted, uses
             taxonomy_naming.RUN_TIMESTAMP or env RUN_TIMESTAMP.
+        levels: Cluster levels to label, e.g. ("macro", "meso"), "micro", or
+            "all". Defaults to CLUSTER_LEVELS / env CLUSTER_LEVELS. Always run
+            coarsest first, and each level is uploaded before the next starts.
+        resume: Reuse per-cluster LLM checkpoints from an earlier attempt.
     """
     global TBL_CLASSIF, TBL_PUB_META, RUN_TIMESTAMP
 
     timestamp = resolve_timestamp(timestamp)
+    run_levels = resolve_levels(levels)
     RUN_TIMESTAMP = timestamp
     os.environ["RUN_TIMESTAMP"] = timestamp
 
@@ -1154,19 +1508,28 @@ def main(timestamp: str | None = None):
     log.info("=" * 60)
     log.info("Taxonomy Naming Pipeline")
     log.info("Run timestamp: %s", timestamp)
-    log.info("Cluster levels: %s", ", ".join(CLUSTER_LEVELS))
+    log.info("Cluster levels: %s", ", ".join(run_levels))
+    log.info("Resume from checkpoints: %s", resume)
     log.info("=" * 60)
 
     init_clients()
-    df_papers = fetch_classification_papers()
     load_taxonomy()
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    parts = []
-    for level in CLUSTER_LEVELS:
-        df_level = run_one_level(df_papers, level, timestamp)
+    detail_parts = []
+    for i, level in enumerate(run_levels):
+        # Only wipe shared tables on an explicit fresh run; otherwise each level
+        # replaces just its own rows so separate invocations do not clobber.
+        rebuild = (not resume) and i == 0
+        df_level, _dashboard = run_one_level(
+            level,
+            timestamp,
+            replace_sample=rebuild,
+            first_level=rebuild,
+            resume=resume,
+        )
         if df_level is not None and not df_level.empty:
-            parts.append(df_level)
+            detail_parts.append(df_level)
             core = df_level[df_level["tier"] == "core"]
             log.info(
                 "%s: %d clusters labelled",
@@ -1174,7 +1537,7 @@ def main(timestamp: str | None = None):
                 core["community_id"].nunique() if len(core) else 0,
             )
 
-    df_out = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+    df_out = pd.concat(detail_parts, ignore_index=True) if detail_parts else pd.DataFrame()
     combined = OUTPUT_DIR / "cluster_taxonomy_labels.csv"
     df_out.to_csv(combined, index=False)
     log.info("Combined labels saved to %s", combined)
@@ -1193,12 +1556,32 @@ def main(timestamp: str | None = None):
 
 
 if __name__ == "__main__":
-    import sys
+    import argparse
 
-    ts = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("RUN_TIMESTAMP", "")
-    if not ts:
-        print("Usage: python taxonomy_naming.py <timestamp>")
-        print("   or: RUN_TIMESTAMP=... python taxonomy_naming.py")
-        print("Example: python taxonomy_naming.py 20260818_090851")
-        sys.exit(1)
-    main(ts)
+    ap = argparse.ArgumentParser(description="CWTS cluster taxonomy naming")
+    ap.add_argument(
+        "timestamp",
+        nargs="?",
+        default=os.environ.get("RUN_TIMESTAMP", ""),
+        help="Scope-drift run id, e.g. 20260818_090851",
+    )
+    ap.add_argument(
+        "--levels",
+        default=None,
+        help=(
+            "Comma-separated cluster levels, or 'all'. "
+            f"Default: {','.join(CLUSTER_LEVELS)} (always coarsest first)"
+        ),
+    )
+    ap.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Ignore LLM checkpoints and rebuild the shared BigQuery tables",
+    )
+    args = ap.parse_args()
+    if not args.timestamp:
+        ap.error(
+            "Missing timestamp. Example: python taxonomy_naming.py 20260818_090851 "
+            "--levels macro,meso"
+        )
+    main(args.timestamp, levels=args.levels, resume=not args.fresh)

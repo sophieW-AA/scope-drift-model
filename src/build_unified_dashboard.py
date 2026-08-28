@@ -1511,9 +1511,46 @@ def compute_paper_scope_overrides(
     return demotions, meta
 
 
+def write_paper_scope_to_bq(scope: pd.DataFrame) -> None:
+    """Persist per-paper scope flags so downstream jobs do not parse the HTML.
+
+    Written to `{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}`; the opportunity
+    mapper reads this instead of `output/network_maps.html`. Set
+    PAPER_SCOPE_TO_BQ=0 to skip.
+    """
+    if os.environ.get("PAPER_SCOPE_TO_BQ", "1").strip() in ("0", "false", "False", "no"):
+        return
+    if not RUN_TIMESTAMP:
+        log.warning("paper scope not written to BigQuery: RUN_TIMESTAMP is unset")
+        return
+    if scope is None or scope.empty:
+        return
+    try:
+        import pandas_gbq
+
+        dest = f"{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}"
+        pandas_gbq.to_gbq(
+            scope,
+            dest,
+            project_id=BQ_PROJECT,
+            if_exists="replace",
+            location="EU",
+        )
+        log.info(
+            "  → BigQuery: %s.%s (%s papers, %s journals)",
+            BQ_PROJECT,
+            dest,
+            f"{len(scope):,}",
+            scope["journal"].nunique(),
+        )
+    except Exception as exc:
+        log.warning("paper scope BigQuery write failed: %s", exc)
+
+
 def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
     """Compute statistics for each journal."""
     journals_data = []
+    scope_rows = []
     years = sorted(df["pub_year"].unique())
 
     for journal in JOURNALS:
@@ -1584,6 +1621,26 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                 "source": "paper_llm",
                 "community_id": entry.get("community_id"),
             }
+
+        scope_rows.append(
+            pd.DataFrame(
+                {
+                    "int_id": jdf["int_id"].astype(int).to_numpy(),
+                    "journal": journal,
+                    "community_id": jdf[CLUSTER_LEVEL].astype(int).to_numpy(),
+                    "cluster_level": CLUSTER_LEVEL,
+                    "scope_code": np.where(
+                        jdf["is_oos"].to_numpy(),
+                        0,
+                        np.where(jdf["is_borderline"].to_numpy(), 1, 2),
+                    ),
+                    "is_oos": jdf["is_oos"].astype(bool).to_numpy(),
+                    "is_borderline": jdf["is_borderline"].astype(bool).to_numpy(),
+                    "hard_negative": jdf["hard_negative"].astype(bool).to_numpy(),
+                    "paper_demoted": jdf["paper_demoted"].astype(bool).to_numpy(),
+                }
+            )
+        )
 
         n_articles = len(jdf)
         n_oos = int(jdf["is_oos"].sum())
@@ -1688,6 +1745,9 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
             "example_papers": example_papers,
             "scatter": scatter,
         })
+
+    if scope_rows:
+        write_paper_scope_to_bq(pd.concat(scope_rows, ignore_index=True))
 
     return journals_data
 
