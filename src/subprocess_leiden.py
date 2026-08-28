@@ -1,21 +1,32 @@
-import subprocess
-from datetime import datetime
+"""
+CWTS Leiden classification: read pubs/cit_links from BigQuery, run the Java jar,
+upload classification_raw_{timestamp}.
+
+Timestamp resolution (first match wins):
+  1. env RUN_TIMESTAMP  — set by main.py (-t / --export / --leiden)
+  2. DATA_TIMESTAMP below — edit this to cluster a specific existing export
+     when running the script directly
+
+    python src/subprocess_leiden.py
+    python main.py --leiden -t 20260818_090851
+"""
+
+from __future__ import annotations
+
+import logging
 import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
 import pandas as pd
 import pandas_gbq
 from google.cloud import bigquery
-from pathlib import Path
-import logging
-import tempfile
-import shutil
 
-    # python subprocess_leiden.py
-    # OR nohup python subprocess_leiden.py &
-    # OR nohup python subprocess_leiden.py > nohup_out.log 2>&1 & AND tail -f nohup_out.log
-# ps -p <PID>
-
-run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
+# Edit this when running Leiden alone on a specific export (ignored if
+# RUN_TIMESTAMP is set in the environment / by main).
+DATA_TIMESTAMP = "20260818_090851"  # global run 2023-2026
 
 # --- Parameters ---
 params = {
@@ -29,75 +40,87 @@ params = {
     "macro_min_cluster_size": "100000",
 }
 
+run_timestamp = (os.environ.get("RUN_TIMESTAMP") or "").strip() or DATA_TIMESTAMP
+
 # -- logging setup --
-LOG_DIR = Path("../cwts_logs")
+LOG_DIR = Path(
+    r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\logs\subprocess_leiden"
+)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Windows consoles / redirected pipes default to cp1252, which cannot encode the
+# arrows and box characters used in log messages.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(
-            LOG_DIR / f"subprocess_leidgen{run_timestamp}.log",
+            LOG_DIR / f"subprocess_leiden_{run_timestamp}.log",
             mode="w",
+            encoding="utf-8",
         ),
         logging.StreamHandler(),
     ],
 )
 log = logging.getLogger(__name__)
-log.info(f"CWTS Publication Classification Run\n")
-log.info(f"{'='*50}\n")
-log.info(f"Timestamp : {run_timestamp}\n\n")
-log.info(f"\nParameters\n{'-'*30}\n")
+log.info("CWTS Publication Classification Run")
+log.info("=" * 50)
+log.info("Timestamp : %s", run_timestamp)
+log.info("Parameters")
+log.info("-" * 30)
 for k, v in params.items():
-    log.info(f"  {k:<26}: {v}\n")
+    log.info("  %-26s: %s", k, v)
 
 # --- Source: BigQuery tables written by cwts_export.py ---
-BQ_PROJECT = "ocean-tech-adv-analytics-c-tfs"
-BQ_DATASET = "raw_citation_network_data"
+BQ_PROJECT = os.environ.get("BQ_PROJECT", "ocean-tech-adv-analytics-c-tfs")
+BQ_DATASET = os.environ.get("BQ_DATASET", "raw_citation_network_data")
 
-log.info(f"  BQ_PROJECT              : {BQ_PROJECT}")
-log.info(f"  AIRAK_DATASET           : {BQ_DATASET}")
+log.info("  BQ_PROJECT              : %s", BQ_PROJECT)
+log.info("  BQ_DATASET              : %s", BQ_DATASET)
 
 client = bigquery.Client(project=BQ_PROJECT)
 
-data_timestamp = "20260818_090851" #-- this is global run 2023-2026
-
 pubs_df = client.query(
-    f"SELECT int_id, core_pub FROM `{BQ_PROJECT}.{BQ_DATASET}.pubs_raw_{data_timestamp}` "
+    f"SELECT int_id, core_pub FROM `{BQ_PROJECT}.{BQ_DATASET}.pubs_raw_{run_timestamp}` "
     f"ORDER BY int_id"
 ).to_dataframe()
 
 log.info("pubs_df loaded successfully")
 
 cit_links_df = client.query(
-    f"SELECT int_id1, int_id2, weight FROM `{BQ_PROJECT}.{BQ_DATASET}.cit_links_raw_{data_timestamp}` "
+    f"SELECT int_id1, int_id2, weight FROM `{BQ_PROJECT}.{BQ_DATASET}.cit_links_raw_{run_timestamp}` "
     f"ORDER BY int_id1, int_id2"
 ).to_dataframe()
 
 log.info("cit_links_df loaded successfully")
 
-# --- Write back out as the plain text files the CWTS jar reads ---
+# --- Plain text files for the CWTS jar (cleaned up after upload) ---
 os.makedirs("leiden_input", exist_ok=True)
-
-# Everything — pubs.txt, cit_links.txt AND classification.txt — lives inside a
-# TemporaryDirectory now. It's deleted the moment the `with` block exits, so
-# cwts_output/ is never created and nothing survives the run.
 pubs_path = os.path.join("leiden_input", "pubs.txt")
 cit_links_path = os.path.join("leiden_input", "cit_links.txt")
 classification_path = os.path.join("leiden_input", "classification.txt")
 
 pubs_df.to_csv(pubs_path, sep="\t", index=False, header=False)
-cit_links_df.to_csv(cit_links_path, sep="\t", index=False, header=False, float_format="%.6f")
+cit_links_df.to_csv(
+    cit_links_path, sep="\t", index=False, header=False, float_format="%.6f"
+)
 
 log.info("temp files created for leiden")
 
+jar_path = Path(__file__).resolve().parent / "publicationclassification.jar"
+if not jar_path.exists():
+    raise SystemExit(f"Missing CWTS jar: {jar_path}")
 
 result = subprocess.run(
     [
         "java",
         "-Xmx350g",
         "-cp",
-        "publicationclassification.jar",
+        str(jar_path),
         "nl.cwts.publicationclassification.run.PublicationClassificationCreator",
         pubs_path,
         cit_links_path,
@@ -114,39 +137,24 @@ result = subprocess.run(
     capture_output=True,
     text=True,
 )
-log.info("LEIDEN HAS RUN!1")
-    
-if result.stdout:
-    log.info(f"stdout: {result.stdout}")
-if result.stderr:
-    log.error(f"stderr: {result.stderr}")
-if result.returncode != 0:
-    log.error(f"Leiden failed with return code {result.returncode} (signal {-result.returncode if result.returncode < 0 else 'n/a'})")
+log.info("Leiden jar finished (return code %s)", result.returncode)
 
-# Read classification.txt into memory WHILE it still exists in tmp_dir
+if result.stdout:
+    log.info("stdout: %s", result.stdout)
+if result.stderr:
+    log.error("stderr: %s", result.stderr)
+if result.returncode != 0:
+    shutil.rmtree("leiden_input", ignore_errors=True)
+    raise SystemExit(f"Leiden failed with return code {result.returncode}")
+
 classification = pd.read_csv(
     classification_path,
     sep="\t",
     header=None,
     names=["int_id", "micro", "meso", "macro"],
 )
-# <- tmp_dir (pubs.txt, cit_links.txt, classification.txt) is deleted here
-
-
-log.info(f"\nReturn Code: {result.returncode}\n")
-
-log.info(f"\nSTDOUT\n{'-'*30}\n")
-log.info(result.stdout or "(empty)\n")
-
-log.info(f"\nSTDERR\n{'-'*30}\n")
-log.info(result.stderr or "(empty)\n")
 
 print(f"Log written to: {LOG_DIR}")
-log.info(result.stdout)
-if result.stderr:
-    print(result.stderr)
-
-# Upload to BigQuery
 
 pandas_gbq.to_gbq(
     classification,
@@ -156,8 +164,6 @@ pandas_gbq.to_gbq(
 )
 print(f"  → BigQuery: {BQ_DATASET}.classification_raw_{run_timestamp}")
 
-
-shutil.rmtree("leiden_input")
-
-log.info('leiden_input files removed')
-log.info("Script finished success!!")
+shutil.rmtree("leiden_input", ignore_errors=True)
+log.info("leiden_input files removed")
+log.info("Script finished successfully")

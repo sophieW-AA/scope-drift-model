@@ -44,10 +44,10 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-REPO = Path(__file__).resolve().parents[1]
-SCOPE_HTML = REPO / "output" / "scope_dashboard.html"
-DRIFT_HTML = REPO / "output" / "drift_dashboard.html"
-OUT_PDF = REPO / "output" / "Scope_Drift_Report.pdf"
+DASH_DIR = Path(r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\dashboards")
+SCOPE_HTML = DASH_DIR / "scope_dashboard.html"
+DRIFT_HTML = DASH_DIR / "drift_dashboard.html"
+OUT_PDF = DASH_DIR / "Scope_Drift_Report.pdf"
 
 AUTHOR = os.environ.get("REPORT_AUTHOR", "Sophie Wilson")
 
@@ -160,11 +160,7 @@ def community_in_scope(c: dict) -> bool:
 
 
 def top_oos_labels(j: dict, n: int = 2) -> str:
-    oos = [
-        c
-        for c in (j.get("top_communities") or [])
-        if not community_in_scope(c)
-    ]
+    oos = [c for c in (j.get("top_communities") or []) if not community_in_scope(c)]
     oos = sorted(oos, key=lambda c: -int(c.get("papers_in_comm") or 0))
     labels = [c.get("label") or f"Cluster {c.get('comm_id')}" for c in oos[:n]]
     if not labels:
@@ -278,7 +274,11 @@ def example_split(
     examples = j.get("example_papers") or []
 
     def _oos_rank(e: dict) -> tuple:
-        clear = 1 if (e.get("clear_oos") or e.get("hard_negative") or e.get("paper_demoted")) else 0
+        clear = (
+            1
+            if (e.get("clear_oos") or e.get("hard_negative") or e.get("paper_demoted"))
+            else 0
+        )
         # Prefer titles that do NOT still look on-scope for the journal.
         off_topic = 0 if e.get("title_on_scope") else 1
         foreign = 1 if e.get("foreign_community") else 0
@@ -363,7 +363,9 @@ def join_names(names: list[str]) -> str:
 
 
 def executive_summary(kpis: dict, rows: list[dict], start_y: int) -> str:
-    high_names = [bare_journal(r["journal"]["name"]) for r in rows if r["band"] == "High"]
+    high_names = [
+        bare_journal(r["journal"]["name"]) for r in rows if r["band"] == "High"
+    ]
     if kpis["oos_pct"] > 0:
         one_in = max(2, round(100.0 / kpis["oos_pct"]))
         oos_phrase = f"about 1 in {one_in} papers ({fmt_pct(kpis['oos_pct'])})"
@@ -389,12 +391,7 @@ def executive_summary(kpis: dict, rows: list[dict], start_y: int) -> str:
 
 
 def esc(s: str) -> str:
-    return (
-        str(s)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 class Badge(Flowable):
@@ -615,14 +612,24 @@ class AccentRule(Flowable):
 def kpi_table(kpis: dict, end_y: int, styles: dict) -> Table:
     cells = [
         [
-            [Paragraph(fmt_int(kpis["total_papers"]), styles["kpi_v"]),
-             Paragraph("Papers analysed", styles["kpi_l"])],
-            [Paragraph(fmt_pct(kpis["oos_pct"]), styles["kpi_v"]),
-             Paragraph("Overall out-of-scope", styles["kpi_l"])],
-            [Paragraph(f"{kpis['high_drift']} / {kpis['n_journals']}", styles["kpi_v"]),
-             Paragraph("High-drift journals", styles["kpi_l"])],
-            [Paragraph(fmt_jsd(kpis["mean_jsd"]), styles["kpi_v"]),
-             Paragraph(f"Mean JSD {end_y}", styles["kpi_l"])],
+            [
+                Paragraph(fmt_int(kpis["total_papers"]), styles["kpi_v"]),
+                Paragraph("Papers analysed", styles["kpi_l"]),
+            ],
+            [
+                Paragraph(fmt_pct(kpis["oos_pct"]), styles["kpi_v"]),
+                Paragraph("Overall out-of-scope", styles["kpi_l"]),
+            ],
+            [
+                Paragraph(
+                    f"{kpis['high_drift']} / {kpis['n_journals']}", styles["kpi_v"]
+                ),
+                Paragraph("High-drift journals", styles["kpi_l"]),
+            ],
+            [
+                Paragraph(fmt_jsd(kpis["mean_jsd"]), styles["kpi_v"]),
+                Paragraph(f"Mean JSD {end_y}", styles["kpi_l"]),
+            ],
         ]
     ]
     t = Table(cells, colWidths=[42 * mm, 42 * mm, 42 * mm, 42 * mm], hAlign="LEFT")
@@ -665,7 +672,9 @@ def summary_table(rows: list[dict], end_y: int, styles: dict) -> Table:
                 Paragraph(esc(short_journal(j["name"])), styles["td"]),
                 Paragraph(fmt_int(int(j.get("articles") or 0)), styles["td_r"]),
                 Paragraph(fmt_int(int(j.get("out_of_scope") or 0)), styles["td_r"]),
-                Paragraph(fmt_pct(float(j.get("out_of_scope_pct") or 0)), styles["td_r"]),
+                Paragraph(
+                    fmt_pct(float(j.get("out_of_scope_pct") or 0)), styles["td_r"]
+                ),
                 Paragraph(fmt_jsd(r["jsd"]), styles["td_r"]),
                 Paragraph(esc(r["band"]), band_style.get(r["band"], styles["td"])),
             ]
@@ -741,7 +750,9 @@ class ScopeSplitBar(Flowable):
             self.canv.roundRect(0, 0, in_w, self.height, 3, fill=1, stroke=0)
             if oos_w > 1:
                 # square off the right edge of the blue segment
-                self.canv.rect(max(in_w - 3, 0), 0, min(3, in_w), self.height, fill=1, stroke=0)
+                self.canv.rect(
+                    max(in_w - 3, 0), 0, min(3, in_w), self.height, fill=1, stroke=0
+                )
         self.canv.setFillColor(WHITE)
         self.canv.setFont("Helvetica-Bold", 8)
         if in_w > 36:
@@ -773,7 +784,14 @@ def drift_oos_trend_chart(j: dict, jsd_trend: dict | None) -> Image | None:
     jsd_vals = list((jsd_trend or {}).get("jsd") or [])
 
     fig, ax1 = plt.subplots(figsize=(4.2, 2.35))
-    ax1.set_title("Drift & OOS trend", fontsize=10, fontweight="bold", color="#0b1f3a", loc="left", pad=8)
+    ax1.set_title(
+        "Drift & OOS trend",
+        fontsize=10,
+        fontweight="bold",
+        color="#0b1f3a",
+        loc="left",
+        pad=8,
+    )
     ax1.set_xlabel("Year", fontsize=8, color="#5a6478")
     ax1.set_ylabel("JSD vs 2020", fontsize=8, color="#1f4e8c")
     ax1.tick_params(axis="both", labelsize=7, colors="#5a6478")
@@ -835,7 +853,14 @@ def top_communities_chart(j: dict) -> Image | None:
         bar_colors.append("#1f8a4c" if community_in_scope(c) else "#c93030")
 
     fig, ax = plt.subplots(figsize=(4.2, 2.35))
-    ax.set_title("Top communities", fontsize=10, fontweight="bold", color="#0b1f3a", loc="left", pad=8)
+    ax.set_title(
+        "Top communities",
+        fontsize=10,
+        fontweight="bold",
+        color="#0b1f3a",
+        loc="left",
+        pad=8,
+    )
     ax.barh(labels, shares, color=bar_colors, height=0.62)
     ax.set_xlabel("% of journal papers", fontsize=8, color="#5a6478")
     ax.tick_params(axis="both", labelsize=7, colors="#5a6478")
@@ -923,7 +948,9 @@ def community_table(j: dict, styles: dict) -> Table:
                 Paragraph(esc(c.get("label") or ""), styles["td"]),
                 Paragraph("In-scope" if in_scope else "Out-of-scope", status_style),
                 Paragraph(fmt_int(int(c.get("papers_in_comm") or 0)), styles["td_r"]),
-                Paragraph(f"{float(c.get('share_of_journal') or 0):.1f}%", styles["td_r"]),
+                Paragraph(
+                    f"{float(c.get('share_of_journal') or 0):.1f}%", styles["td_r"]
+                ),
             ]
         )
     t = Table(data, colWidths=[78 * mm, 30 * mm, 25 * mm, 35 * mm])
@@ -944,8 +971,12 @@ def community_table(j: dict, styles: dict) -> Table:
 
 
 def examples_table(ins: list[str], outs: list[str], styles: dict) -> Table:
-    in_paras = [Paragraph('<font color="#1f8a4c"><b>In-scope</b></font>', styles["ex_h"])]
-    out_paras = [Paragraph('<font color="#c93030"><b>Out-of-scope</b></font>', styles["ex_h"])]
+    in_paras = [
+        Paragraph('<font color="#1f8a4c"><b>In-scope</b></font>', styles["ex_h"])
+    ]
+    out_paras = [
+        Paragraph('<font color="#c93030"><b>Out-of-scope</b></font>', styles["ex_h"])
+    ]
     for t in ins:
         in_paras.append(Paragraph(f"• {esc(t)}", styles["ex"]))
     for t in outs:
@@ -996,8 +1027,12 @@ def build_pdf(
     styles = make_styles()
     meta = scope.get("run_metadata") or {}
     run_ts = meta.get("run_timestamp") or os.environ.get("RUN_TIMESTAMP") or ""
-    start_y = meta.get("start_year") or (scope.get("meta") or {}).get("year_range", [2020])[0]
-    end_y = meta.get("end_year") or (scope.get("meta") or {}).get("year_range", [2026])[-1]
+    start_y = (
+        meta.get("start_year") or (scope.get("meta") or {}).get("year_range", [2020])[0]
+    )
+    end_y = (
+        meta.get("end_year") or (scope.get("meta") or {}).get("year_range", [2026])[-1]
+    )
     level = (scope.get("meta") or {}).get("primary_cluster_level") or "macro"
     footer_left = f"{author}  ·  {report_date}"
 
@@ -1009,7 +1044,9 @@ def build_pdf(
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(MUTED)
         canvas.drawString(18 * mm, A4[1] - 12 * mm, footer_left)
-        canvas.drawRightString(A4[0] - 18 * mm, A4[1] - 12 * mm, f"Page {page_state['n']}")
+        canvas.drawRightString(
+            A4[0] - 18 * mm, A4[1] - 12 * mm, f"Page {page_state['n']}"
+        )
         canvas.setStrokeColor(RULE)
         canvas.setLineWidth(0.5)
         canvas.line(18 * mm, A4[1] - 14 * mm, A4[0] - 18 * mm, A4[1] - 14 * mm)

@@ -1,95 +1,175 @@
 # Scope Drift Model
 
-Detection of scope drift in Frontiers journals using Leiden community detection on AIRAK citation networks.
+Detect scope drift in Frontiers journals from AIRAK citation networks: CWTS clustering, taxonomy labels, HTML dashboards, and a PDF report.
 
-## Project Structure
+## Project structure
 
 ```
 scope-drift-model/
-├── src/                     # Main source code
-│   └── scope_drift.py       # Primary analysis script
-├── scripts/                 # Utility scripts
-│   ├── test_edge_weight_configs.py
-│   ├── build_drift_dashboard.py
-│   └── build_cluster_dashboard.py
-├── output/                  # Generated outputs
-├── data/                    # Data files
-│   ├── cwts_synthetic_test/ # Test fixtures
-│   └── cwts_work/           # Working data
-├── archive/                 # Old/research code
+├── main.py                      # Pipeline orchestrator (preferred entrypoint)
+├── run_pipeline.ipynb           # Same steps, notebook form (optional)
+├── src/
+│   ├── cwts_export.py           # Fetch network, write CWTS files, upload to BigQuery
+│   ├── taxonomy_naming.py       # Map clusters -> taxonomy labels (macro_labels.csv)
+│   ├── build_unified_dashboard.py
+│   ├── build_scope_drift_report_pdf.py
+│   └── subprocess_leiden.py     # CWTS Java clustering -> classification_raw_*
+├── scripts/
+│   └── build_gt_network_map.py  # Optional ground-truth overlay map
+├── output/                      # HTML dashboards + PDF
+├── cwts_output/                 # Optional caches / legacy artefacts (not required by taxonomy)
+├── .env                         # Secrets (e.g. OPENAI_API_KEY) — not committed
 └── requirements.txt
 ```
 
-## Quick Start
+## Quick start
 
 ```powershell
-# Install dependencies
 pip install -r requirements.txt
 
-# Set credentials
+# GCP auth (ADC or service account)
 $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\path\to\creds.json"
 
-# Run the analysis
-python src/scope_drift.py
+# Reuse an existing BigQuery run (skips cwts_export) — usual path
+python main.py --timestamp 20260721_122750
+
+# Or create a new network, then Leiden + the rest (Leiden is on by default)
+python main.py --export --start-year 2023 --end-year 2026
 ```
 
-## Environment Variables
+`main.py` loads `.env` from the repo root (e.g. `OPENAI_API_KEY` for borderline / paper LLM / taxonomy).
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GOOGLE_APPLICATION_CREDENTIALS` | — | Path to GCP service account JSON |
-| `PRIMARY_CLUSTER_COVERAGE` | `0.80` | Fraction of papers defining "in scope" clusters |
-| `ENABLE_EDGE_WEIGHTS` | `true` | Enable all edge weight features |
-| `ENABLE_BC_EDGES` | `true` | Bibliographic coupling edges |
-| `TEMPORAL_DECAY_TAU` | `5` | Decay half-life in years for citation weighting |
-| `SELF_CITE_JOURNAL_WEIGHT` | `0.5` | Discount factor for within-journal citations |
+## How to run (`main.py`)
 
-## Scripts
+Default path runs **Leiden** (unless `--skip-leiden`). Pass a timestamp to reuse an existing export; add `--export` for a new network.
 
-| Script | Description |
-|--------|-------------|
-| `src/scope_drift.py` | Main analysis with Phase 2 edge weights |
-| `scripts/test_edge_weight_configs.py` | Compare edge weight configurations |
-| `scripts/build_drift_dashboard.py` | Build drift dashboard |
-| `scripts/build_cluster_dashboard.py` | Build cluster dashboard |
+| Mode | Command |
+|------|---------|
+| Reuse export + existing clusters | `python main.py -t 20260721_122750 --skip-leiden` |
+| Re-cluster existing export + pipeline | `python main.py --timestamp 20260721_122750` |
+| + GT overlay map | `python main.py -t 20260721_122750 --skip-leiden --gt` |
+| New export + Leiden + pipeline | `python main.py --export --start-year 2023 --end-year 2026` |
+| Export with fixed timestamp | `python main.py --export -t 20260828_120000 --start-year 2023 --end-year 2026` |
+| Skip some steps | `python main.py -t 20260721_122750 --skip-leiden --skip-taxonomy --skip-pdf` |
+
+```text
+[--export]  ->  [leiden]  ->  taxonomy_naming  ->  build_unified_dashboard  ->  [--gt]  ->  PDF
+```
+
+- **`--export`**: runs `src/cwts_export.py` (network + weights → BigQuery).
+- **Leiden** (default): runs `src/subprocess_leiden.py` → `classification_raw_{timestamp}`. Skip with `--skip-leiden`.
+- **taxonomy**: `src/taxonomy_naming.py` uploads cluster labels to BigQuery (`taxonomy_labelling`).
+- **dashboard**: `src/build_unified_dashboard.py` (scope / drift / network maps; LLM borderline, hard-negatives, paper demotion on by default).
+- **`--gt`**: optional `scripts/build_gt_network_map.py` (needs local truth ODS).
+- **PDF**: `src/build_scope_drift_report_pdf.py` → `scope_drift_outputs/dashboards/Scope_Drift_Report.pdf`.
+
+Useful flags: `--cluster-level {micro,meso,macro}`, `--journals "..."`, `--skip-leiden`, `--skip-taxonomy`, `--skip-dashboard`, `--skip-pdf`. See `python main.py --help`.
+
+### Partial / manual steps
+
+If you prefer running pieces yourself:
+
+1. **Data gather** (`cwts_export` — network + weights → BigQuery only):
+
+   ```powershell
+   $env:START_YEAR="2023"; $env:END_YEAR="2026"; $env:NETWORK_MODE="full"
+   $env:RUN_TIMESTAMP="20260828_120000"
+   python src/cwts_export.py
+   ```
+
+2. **Clusters** — `python main.py -t 20260828_120000 --skip-taxonomy --skip-dashboard --skip-pdf` (or reuse an existing `classification_raw_{timestamp}` with `--skip-leiden`).
+
+3. **Labels + dashboards + PDF** off that timestamp:
+
+   ```powershell
+   python main.py --timestamp 20260828_120000 --skip-leiden
+   ```
 
 ## Outputs
 
-Results are written to `output/`:
+### Local (`output/`)
 
-- `scope_global_dashboard.html` — Interactive dashboard
-- `scope_global_network.json` — Network data for visualization
-- `config_comparison.txt` — Edge weight config comparison
+| File | Description |
+|------|-------------|
+| `combined_dashboard.html` | Combined views |
+| `scope_dashboard.html` | Scope / OOS / borderline |
+| `drift_dashboard.html` | Drift trends |
+| `network_maps.html` | Community maps + year slider |
+| `gt_network_map.html` | Ground-truth overlay (with `--gt`) |
+| `Scope_Drift_Report.pdf` | Journal Scope Drift Report |
 
+### BigQuery uploads
 
-#### 
+Project: `ocean-tech-adv-analytics-c-tfs` (EU).
 
-How to run efficiently
+#### From `cwts_export` (`--export`)
 
-Full run is run_pipeline in the notebook - data gather, cwts cluster, taxonomy naming, pdf/html output
+Uploads to dataset `raw_citation_network_data` (no lasting local network data files):
 
-PARTIAL RUN 
-cwts_export - runs data gathering, cwts export and upload all output to bigquery, 
-run_pipeline - manually change dattime to the same as above for taxonomy naming, pdf/html output 
+| BigQuery table | When |
+|----------------|------|
+| `raw_citation_network_data.pubs_raw_{timestamp}` | Always on export |
+| `raw_citation_network_data.pub_metadata_raw_{timestamp}` | Always on export |
+| `raw_citation_network_data.cit_links_raw_{timestamp}` | Always on export |
+| `raw_citation_network_data.run_metadata_{timestamp}` | Always on export (run config row) |
 
-Individual runs are:
-1. cwts_export run classification = FALSE - this just gets the data and ciation weights
-1. subprocess_leiden - you need to make sure your resolution and timestamp is right
-2. taxonomy_naming.py - names the files
-3. files come from run_pipeline
+Logs only: `C:\Users\sophie.wilson\Documents\scope_drift_outputs\logs\cwts_export*.log`.
 
-## HOW TO RUN IN VM
+#### From `subprocess_leiden`
 
-nohup env START_YEAR=2020 END_YEAR=2026 NETWORK_MODE=full ENABLE_BC_EDGES=false python cwts_export.py > cwts_output.log 2>&1 &
+Reads `pubs_raw_*` + `cit_links_raw_*`, runs the CWTS Java classifier, uploads:
 
-nohup env START_YEAR=2020 END_YEAR=2026 NETWORK_MODE=full ENABLE_BC_EDGES=false python cwts_export.py 2>&1 &
+| BigQuery table |
+|----------------|
+| `raw_citation_network_data.classification_raw_{timestamp}` |
 
-check if its running;
-# Is it still running?
+Dashboards / taxonomy expect this table (or an older run’s equivalent) before labelling.
+
+#### From `taxonomy_naming`
+
+Reads `classification_raw_*` + `pub_metadata_raw_*`, then uploads labels to dataset `taxonomy_labelling` (per level: macro / meso / micro). No local CSV outputs.
+
+| BigQuery table |
+|----------------|
+| `taxonomy_labelling.cluster_labels_{level}_{timestamp}` |
+| `taxonomy_labelling.cluster_taxonomy_labels_{level}_{timestamp}` |
+
+Dashboards load labels from these BigQuery tables.
+
+## Key environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RUN_TIMESTAMP` | — | BigQuery run id (or pass `-t`) |
+| `CLUSTER_LEVEL` | `macro` | Cluster level for dashboards |
+| `JOURNALS` | (8 test journals in `main.py`) | Comma-separated journal names |
+| `START_YEAR` / `END_YEAR` | `2023` / `2026` | Export year window |
+| `NETWORK_MODE` | `full` | `ego` / `full` / `global` |
+| `PRIMARY_COVERAGE` | `0.8` | Share of papers defining primary clusters |
+| `SCOPE_LLM_BORDERLINE_ENABLED` | `1` | LLM borderline communities |
+| `SCOPE_HARD_NEGATIVES_ENABLED` | `1` | Title hard-negative OOS rules |
+| `SCOPE_PAPER_LLM_ENABLED` | `1` | Paper-level demotion in risky primaries |
+| `OPENAI_API_KEY` | — | Taxonomy + scope LLM steps |
+| `GOOGLE_APPLICATION_CREDENTIALS` | — | GCP auth if not using ADC |
+
+## Run on a VM (long export)
+
+```bash
+nohup env START_YEAR=2020 END_YEAR=2026 NETWORK_MODE=full ENABLE_BC_EDGES=false \
+  python src/cwts_export.py > cwts_output.log 2>&1 &
+
+# Still running?
 ps aux | grep cwts_export.py
 
-# Watch live output (raw stdout/stderr redirect)
+# Live stdout
 tail -f cwts_output.log
 
-# Watch the script's own structured log (more useful — has step-by-step progress)
-tail -f cwts_logs/cwts_export_*.log
+# Structured step log
+tail -f /c/Users/sophie.wilson/Documents/scope_drift_outputs/logs/cwts_export*.log
+```
+
+Then on the same timestamp:
+
+```bash
+python main.py --timestamp <that_RUN_TIMESTAMP>
+```

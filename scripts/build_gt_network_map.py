@@ -121,14 +121,38 @@ def norm_journal(val: object) -> str:
 
 
 def load_labels(path: Path | None = None) -> dict[int, str]:
+    """Load short labels from local CSV if present, else BigQuery taxonomy_labelling."""
     labels_file = path or LABELS_CSV
-    if not labels_file.exists():
+    if labels_file.exists():
+        df = pd.read_csv(labels_file)
+        out = {}
+        for _, row in df.iterrows():
+            out[int(row["cluster_id"])] = str(row["short_label"])
+        return out
+
+    _load_dotenv()
+    import os
+
+    from google.cloud import bigquery
+
+    ts = os.environ.get("RUN_TIMESTAMP", RUN_TIMESTAMP).strip()
+    if not ts:
         return {}
-    df = pd.read_csv(labels_file)
-    out = {}
-    for _, row in df.iterrows():
-        out[int(row["cluster_id"])] = str(row["short_label"])
-    return out
+    level = "macro" if labels_file == LABELS_CSV else "meso"
+    table = (
+        f"ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_labels_{level}_{ts}"
+    )
+    try:
+        client = bigquery.Client(
+            project="ocean-tech-adv-analytics-c-tfs", location="EU"
+        )
+        df = client.query(
+            f"SELECT cluster_id, short_label FROM `{table}`"
+        ).to_dataframe()
+    except Exception as e:
+        print(f"Could not load labels from {table}: {e}")
+        return {}
+    return {int(r["cluster_id"]): str(r["short_label"]) for _, r in df.iterrows()}
 
 
 def _load_dotenv() -> None:

@@ -42,6 +42,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import urllib.request
 from collections import Counter, defaultdict
@@ -57,8 +58,11 @@ from scipy.stats import entropy
 # SHARED CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
-CWTS_DIR = BASE_DIR / "cwts_output"  # For GPT labels only
-OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DIR = Path(
+    r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\dashboards"
+)
+# LLM borderline / paper-demotion JSON caches (not taxonomy labels)
+CACHE_DIR = Path(r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\cache")
 RENDER_SCRIPT_PATH = BASE_DIR / "assets" / "render_script.js"
 
 # BigQuery config
@@ -127,6 +131,12 @@ _DEFAULT_JOURNALS = [
 ]
 _JOURNALS_OVERRIDE = os.environ.get("JOURNALS", "").strip()
 JOURNALS = [j.strip() for j in _JOURNALS_OVERRIDE.split(",") if j.strip()] if _JOURNALS_OVERRIDE else _DEFAULT_JOURNALS
+
+# Windows consoles / redirected pipes default to cp1252, which cannot encode the
+# arrows and box characters used in log messages.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S"
@@ -280,47 +290,78 @@ def load_run_metadata() -> dict:
 
 
 def load_gpt_labels_single(level: str) -> dict:
-    """Load GPT labels for a single cluster level."""
-    labels_file = CWTS_DIR / f"{level}_labels.csv"
-    if not labels_file.exists():
+    """Load cluster short labels for one level from BigQuery taxonomy_labelling."""
+    if not RUN_TIMESTAMP:
+        log.warning("No RUN_TIMESTAMP — cannot load taxonomy labels from BigQuery")
         return {}
 
-    df = pd.read_csv(labels_file)
+    table = (
+        f"{BQ_PROJECT}.taxonomy_labelling.cluster_labels_{level}_{RUN_TIMESTAMP}"
+    )
+    try:
+        client = bigquery.Client(project=BQ_PROJECT, location="EU")
+        df = client.query(
+            f"SELECT cluster_id, short_label FROM `{table}`"
+        ).to_dataframe()
+    except Exception as e:
+        log.warning("Could not load labels from %s: %s", table, e)
+        return {}
+
     labels = {}
     for _, row in df.iterrows():
-        cluster_id = int(row["cluster_id"])
-        labels[cluster_id] = row["short_label"]
+        labels[int(row["cluster_id"])] = row["short_label"]
+    log.info("       BigQuery %s: %s labels", table.split(".")[-1], len(labels))
     return labels
 
 
 def load_gpt_labels_all() -> dict:
-    """Load GPT labels for all levels with full info."""
+    """Load taxonomy labels for all levels with full info from BigQuery."""
     labels = {"macro": {}, "meso": {}, "micro": {}}
+    if not RUN_TIMESTAMP:
+        log.warning("No RUN_TIMESTAMP — cannot load taxonomy labels from BigQuery")
+        return labels
 
+    client = bigquery.Client(project=BQ_PROJECT, location="EU")
     for level in ["macro", "meso", "micro"]:
-        labels_file = CWTS_DIR / f"{level}_labels.csv"
-        if labels_file.exists():
-            df = pd.read_csv(labels_file)
-            for _, row in df.iterrows():
-                cluster_id = int(row["cluster_id"])
-                raw_kw = row["keywords"] if "keywords" in row.index else None
-                try:
-                    keywords = eval(raw_kw) if pd.notna(raw_kw) else []
-                except Exception:
-                    keywords = []
-                if not isinstance(keywords, list):
-                    keywords = []
-                labels[level][cluster_id] = {
-                    "short_label": row["short_label"],
-                    "long_label": row.get("long_label", row["short_label"]),
-                    "keywords": keywords,
-                    "summary": (
-                        str(row["summary"])
-                        if "summary" in row.index and pd.notna(row.get("summary"))
-                        else ""
-                    ),
-                }
-            log.info(f"       {level}_labels.csv: {len(labels[level])} labels")
+        table = (
+            f"{BQ_PROJECT}.taxonomy_labelling.cluster_labels_{level}_{RUN_TIMESTAMP}"
+        )
+        try:
+            df = client.query(
+                f"""
+                SELECT cluster_id, short_label, long_label, keywords, summary
+                FROM `{table}`
+                """
+            ).to_dataframe()
+        except Exception as e:
+            log.warning("Could not load labels from %s: %s", table, e)
+            continue
+
+        for _, row in df.iterrows():
+            cluster_id = int(row["cluster_id"])
+            raw_kw = row["keywords"] if "keywords" in row.index else None
+            try:
+                keywords = eval(raw_kw) if pd.notna(raw_kw) else []
+            except Exception:
+                keywords = []
+            if not isinstance(keywords, list):
+                keywords = []
+            labels[level][cluster_id] = {
+                "short_label": row["short_label"],
+                "long_label": row.get("long_label", row["short_label"]),
+                "keywords": keywords,
+                "summary": (
+                    str(row["summary"])
+                    if "summary" in row.index and pd.notna(row.get("summary"))
+                    else ""
+                ),
+            }
+        log.info(
+            "       BigQuery cluster_labels_%s_%s: %s labels",
+            level,
+            RUN_TIMESTAMP,
+            len(labels[level]),
+        )
     return labels
 
 
@@ -947,7 +988,7 @@ def _borderline_cache_path() -> Path:
     name = SCOPE_LLM_BORDERLINE_CACHE
     path = Path(name)
     if not path.is_absolute():
-        path = CWTS_DIR / name
+        path = CACHE_DIR / name
     # Namespace by run + cluster level so caches don't cross runs
     if RUN_TIMESTAMP and "scope_llm_borderline" in path.name:
         stem = path.stem
@@ -1260,7 +1301,7 @@ def _paper_llm_cache_path() -> Path:
     name = SCOPE_PAPER_LLM_CACHE
     path = Path(name)
     if not path.is_absolute():
-        path = CWTS_DIR / name
+        path = CACHE_DIR / name
     if RUN_TIMESTAMP and "scope_paper_llm" in path.name:
         stem = path.stem
         path = path.with_name(f"{stem}_{RUN_TIMESTAMP}_{CLUSTER_LEVEL}{path.suffix}")
