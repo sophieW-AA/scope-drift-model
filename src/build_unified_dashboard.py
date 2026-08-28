@@ -59,7 +59,7 @@ from scipy.stats import entropy
 BASE_DIR = Path(__file__).resolve().parent.parent
 CWTS_DIR = BASE_DIR / "cwts_output"  # For GPT labels only
 OUTPUT_DIR = BASE_DIR / "output"
-RENDER_SCRIPT_PATH = BASE_DIR / "render_script.js"
+RENDER_SCRIPT_PATH = BASE_DIR / "assets" / "render_script.js"
 
 # BigQuery config
 BQ_PROJECT = os.environ.get("BQ_PROJECT", "ocean-tech-adv-analytics-c-tfs")
