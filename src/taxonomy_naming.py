@@ -16,7 +16,7 @@ Pipeline:
 
 Usage:
     python taxonomy_naming.py <timestamp>
-    
+
     Or import and call (same timestamp as classification_raw_{timestamp}):
         import taxonomy_naming
         taxonomy_naming.main(timestamp)  # labels micro, meso, and macro
@@ -24,17 +24,16 @@ Usage:
     CLI also reads env RUN_TIMESTAMP (same as cwts_export / dashboards).
 
 Output:
-    cwts_output/cluster_taxonomy_labels.csv
-    cwts_output/{macro|meso|micro}_labels.csv
-    cwts_output/cluster_taxonomy_labels_{macro|meso|micro}.csv
     BigQuery ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_labels_{level}_{timestamp}
         one row per cluster; cluster_id = classification_raw_{timestamp}.{level}
     BigQuery ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_taxonomy_labels_{level}_{timestamp}
+    Log: C:\\Users\\sophie.wilson\\Documents\\scope_drift_outputs\\logs\\taxonomy_naming_{timestamp}.log
 """
 
 import json
 import logging
 import os
+import sys
 import time
 from datetime import date
 from hashlib import sha256
@@ -43,23 +42,51 @@ from textwrap import dedent
 
 import pandas as pd
 from google.cloud import bigquery
-from openai import OpenAI
+from openai import AuthenticationError, OpenAI
 import pandas_gbq
 
-# Load .env file if present
+# Load .env file if present. override=True so a stale key in the parent shell
+# or a long-lived notebook kernel cannot shadow the current .env value.
 from dotenv import load_dotenv
-load_dotenv()
+
+load_dotenv(override=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(message)s",
-    datefmt="%H:%M:%S",
+LOG_DIR = Path(
+    r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\logs\taxonomy_naming"
 )
 log = logging.getLogger(__name__)
+
+
+def setup_logging(run_timestamp: str) -> Path:
+    """Log to console and scope_drift_outputs/logs/taxonomy_naming_{timestamp}.log."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LOG_DIR / f"taxonomy_naming_{run_timestamp}.log"
+
+    # Windows consoles / redirected pipes default to cp1252, which cannot encode
+    # the arrows and box characters used in log messages.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-8s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    fh.setFormatter(fmt)
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    root.addHandler(fh)
+    root.addHandler(sh)
+    return log_path
+
 
 # BigQuery projects
 PROJECT_BILL = "ocean-tech-adv-analytics-c-esf"
@@ -91,9 +118,6 @@ CLUSTER_LEVEL = "macro"  # current level while a run is in progress
 
 # Sample size per cluster (None = use all papers, set to 300 for memory efficiency)
 SAMPLE_SIZE_PER_CLUSTER = 300
-
-# Output
-OUTPUT_DIR = Path("cwts_output")
 
 # Scope thresholds
 SCOPE_ABS_FLOORS = {"micro": 2, "small": 3, "medium": 5, "large": 10, "mega": 15}
@@ -162,13 +186,15 @@ def init_clients():
 def fetch_classification_papers() -> pd.DataFrame:
     """Load classification + metadata once (all three cluster columns)."""
     log.info("Loading CWTS data from BigQuery...")
-    df = bq_src.query(f"""
+    df = bq_src.query(
+        f"""
         SELECT
             c.int_id, c.micro, c.meso, c.macro,
             m.pub_id, m.is_frontiers, m.journal, m.date, m.title
         FROM `{TBL_CLASSIF}` c
         JOIN `{TBL_PUB_META}` m ON c.int_id = m.int_id
-    """).to_dataframe()
+    """
+    ).to_dataframe()
     log.info("Loaded %d papers from BigQuery", len(df))
     return df
 
@@ -231,41 +257,50 @@ def load_taxonomy():
     """Load L0/L1/L2 taxonomy hierarchy from BigQuery."""
     global df_l2_map, l1_vocab, l1c_members, l1c_meta, l1_to_clusters
     global l0_members, l0_name_to_taxref, l2c_members, l2c_meta, l2_to_clusters
-    
+
     log.info("Loading taxonomy reference data...")
-    
+
     # L2 → L1 → L0 mapping
-    _df_l2_raw = bq.query(f"""
+    _df_l2_raw = bq.query(
+        f"""
         SELECT DISTINCT l2_taxref AS l2_key, l2_name, l1_taxref, l1_name
         FROM `{TBL_L2_CLUS}`
-    """).to_dataframe()
-    
-    _df_l1_l0 = bq.query(f"""
+    """
+    ).to_dataframe()
+
+    _df_l1_l0 = bq.query(
+        f"""
         SELECT DISTINCT l1_taxref, l1_name, l0_taxref, l0_name
         FROM `{TBL_L1_CLUS}`
-    """).to_dataframe()
-    
+    """
+    ).to_dataframe()
+
     df_l2_map = _df_l2_raw.merge(
         _df_l1_l0[["l1_taxref", "l0_taxref", "l0_name"]].drop_duplicates("l1_taxref"),
-        on="l1_taxref", how="left"
+        on="l1_taxref",
+        how="left",
     )
     log.info("L2 map: %d rows", len(df_l2_map))
-    
+
     # L1 vocabulary size
     l1_vocab = df_l2_map.groupby("l1_taxref")["l2_key"].count().astype(int).to_dict()
-    
+
     # L1 cluster membership
-    df_l1c_raw = bq.query(f"""
+    df_l1c_raw = bq.query(
+        f"""
         SELECT l0_taxref, l0_name, l1_taxref, l1_name, cluster_id, cluster_name, level_index
         FROM `{TBL_L1_CLUS}`
         ORDER BY level_index
-    """).to_dataframe()
-    
+    """
+    ).to_dataframe()
+
     seen_fs = set()
-    _canon = (df_l1c_raw.sort_values("level_index")
-              .drop_duplicates(["l0_taxref", "cluster_id"])
-              .set_index(["l0_taxref", "cluster_id"])["cluster_name"])
-    
+    _canon = (
+        df_l1c_raw.sort_values("level_index")
+        .drop_duplicates(["l0_taxref", "cluster_id"])
+        .set_index(["l0_taxref", "cluster_id"])["cluster_name"]
+    )
+
     for (l0_txr, cid), grp in df_l1c_raw.groupby(["l0_taxref", "cluster_id"]):
         members = frozenset(grp["l1_taxref"].tolist())
         if len(members) < 2 or members in seen_fs:
@@ -274,32 +309,41 @@ def load_taxonomy():
         key = f"l1c_{sha256(','.join(sorted(str(x) for x in members)).encode()).hexdigest()[:8]}"
         name = _canon.get((l0_txr, cid), f"cluster_{cid}")
         l1c_members[key] = members
-        l1c_meta[key] = {"key": key, "name": name, "l0_taxref": int(l0_txr), "l0_name": grp["l0_name"].iloc[0]}
-    
+        l1c_meta[key] = {
+            "key": key,
+            "name": name,
+            "l0_taxref": int(l0_txr),
+            "l0_name": grp["l0_name"].iloc[0],
+        }
+
     # L1 to clusters mapping
     for ck, mems in l1c_members.items():
         for t in mems:
             l1_to_clusters.setdefault(int(t), []).append(ck)
-    
+
     # L0 membership
     for _, r in df_l1c_raw.dropna(subset=["l0_taxref", "l1_taxref"]).iterrows():
         txr = int(r["l0_taxref"])
         if txr not in l0_members:
             l0_members[txr] = {"name": r["l0_name"], "l1s": set()}
         l0_members[txr]["l1s"].add(int(r["l1_taxref"]))
-    
+
     l0_name_to_taxref = {v["name"]: k for k, v in l0_members.items()}
-    
+
     # L2 cluster membership
-    df_l2c_raw = bq.query(f"""
+    df_l2c_raw = bq.query(
+        f"""
         SELECT l1_taxref, l1_name, l2_taxref AS l2_key, l2_name, cluster_id, cluster_name
         FROM `{TBL_L2_CLUS}`
         ORDER BY cluster_id
-    """).to_dataframe()
-    
+    """
+    ).to_dataframe()
+
     seen_l2fs = set()
-    _l2c_canon = df_l2c_raw.drop_duplicates(["l1_taxref", "cluster_id"]).set_index(["l1_taxref", "cluster_id"])["cluster_name"]
-    
+    _l2c_canon = df_l2c_raw.drop_duplicates(["l1_taxref", "cluster_id"]).set_index(
+        ["l1_taxref", "cluster_id"]
+    )["cluster_name"]
+
     for (l1_txr, cid), grp in df_l2c_raw.groupby(["l1_taxref", "cluster_id"]):
         members = frozenset(grp["l2_name"].tolist())
         if len(members) < 2 or members in seen_l2fs:
@@ -308,14 +352,23 @@ def load_taxonomy():
         key = f"l2c_{sha256(','.join(sorted(members)).encode()).hexdigest()[:8]}"
         name = _l2c_canon.get((l1_txr, cid), f"cluster_{cid}")
         l2c_members[key] = members
-        l2c_meta[key] = {"key": key, "name": name, "l1_taxref": int(l1_txr), "l1_name": grp["l1_name"].iloc[0]}
-    
+        l2c_meta[key] = {
+            "key": key,
+            "name": name,
+            "l1_taxref": int(l1_txr),
+            "l1_name": grp["l1_name"].iloc[0],
+        }
+
     for ck, mems in l2c_members.items():
         for l2 in mems:
             l2_to_clusters.setdefault(l2, []).append(ck)
-    
-    log.info("L1 clusters: %d unique | L0 domains: %d | L2 clusters: %d", 
-             len(l1c_members), len(l0_members), len(l2c_members))
+
+    log.info(
+        "L1 clusters: %d unique | L0 domains: %d | L2 clusters: %d",
+        len(l1c_members),
+        len(l0_members),
+        len(l2c_members),
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -324,8 +377,9 @@ def load_taxonomy():
 def pull_taxonomy_scores(all_pub_ids: list, pub_to_comm: dict) -> pd.DataFrame:
     """Pull L2 taxonomy scores for all community publications."""
     log.info("Pulling taxonomy scores for %d publications...", len(all_pub_ids))
-    
-    df_scores_raw = bq.query(f"""
+
+    df_scores_raw = bq.query(
+        f"""
         SELECT
             CAST(t.publication_id AS INT64) AS publication_id,
             t.taxref AS l2_key,
@@ -336,31 +390,46 @@ def pull_taxonomy_scores(all_pub_ids: list, pub_to_comm: dict) -> pd.DataFrame:
           AND t.in_top_k = TRUE
           AND t.is_weak_match = FALSE
           AND CAST(t.publication_id AS INT64) IN UNNEST(@pub_ids)
-    """, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)]
-    )).to_dataframe()
-    
-    log.info("Score rows: %d | Unique pubs matched: %d / %d",
-             len(df_scores_raw), df_scores_raw["publication_id"].nunique(), len(all_pub_ids))
-    
+    """,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)
+            ]
+        ),
+    ).to_dataframe()
+
+    log.info(
+        "Score rows: %d | Unique pubs matched: %d / %d",
+        len(df_scores_raw),
+        df_scores_raw["publication_id"].nunique(),
+        len(all_pub_ids),
+    )
+
     # Map to community
     df_scores_raw["community_id"] = df_scores_raw["publication_id"].map(pub_to_comm)
     df_scores_raw = df_scores_raw.dropna(subset=["community_id"])
     df_scores_raw["community_id"] = df_scores_raw["community_id"].astype(int)
-    
+
     # Aggregate to (community, L2)
-    df_l2_counts = (df_scores_raw.groupby(["community_id", "l2_key"])["publication_id"]
-                    .nunique().reset_index().rename(columns={"publication_id": "n_articles"}))
-    
+    df_l2_counts = (
+        df_scores_raw.groupby(["community_id", "l2_key"])["publication_id"]
+        .nunique()
+        .reset_index()
+        .rename(columns={"publication_id": "n_articles"})
+    )
+
     # Merge taxonomy hierarchy
     df_l2_counts = df_l2_counts.merge(
-        df_l2_map[["l2_key", "l2_name", "l1_taxref", "l1_name", "l0_taxref", "l0_name"]],
-        on="l2_key", how="left"
+        df_l2_map[
+            ["l2_key", "l2_name", "l1_taxref", "l1_name", "l0_taxref", "l0_name"]
+        ],
+        on="l2_key",
+        how="left",
     )
     df_l2_counts = df_l2_counts.dropna(subset=["l1_taxref"]).copy()
     df_l2_counts["l1_taxref"] = df_l2_counts["l1_taxref"].astype(int)
     df_l2_counts["l0_taxref"] = df_l2_counts["l0_taxref"].astype(int)
-    
+
     log.info("(community, L2) pairs after taxonomy join: %d", len(df_l2_counts))
     return df_l2_counts
 
@@ -371,61 +440,98 @@ def pull_taxonomy_scores(all_pub_ids: list, pub_to_comm: dict) -> pd.DataFrame:
 def build_profiles(community_ids: list, all_pub_ids: list, pub_to_comm: dict):
     """Build community profiles and compute in-scope L2 filter."""
     global profiles
-    
+
     log.info("Building community profiles...")
     current_year = date.today().year
-    
+
     # Pull publication years
-    df_pub_years = bq.query(f"""
+    df_pub_years = bq.query(
+        f"""
         SELECT CAST(p.PublicationId AS INT64) AS publication_id, p.PublishedYear AS pub_year
         FROM `{TBL_PUB}` p
         WHERE CAST(p.PublicationId AS INT64) IN UNNEST(@pub_ids)
           AND p.PublishedYear IS NOT NULL
-    """, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)]
-    )).to_dataframe()
-    
+    """,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)
+            ]
+        ),
+    ).to_dataframe()
+
     df_pub_years["community_id"] = df_pub_years["publication_id"].map(pub_to_comm)
     df_pub_years = df_pub_years.dropna(subset=["community_id"])
     df_pub_years["community_id"] = df_pub_years["community_id"].astype(int)
-    
+
     for cid in community_ids:
         total = len(community_pubs[cid])
-        
+
         # Size class
-        if total < 50: size_class = "micro"
-        elif total < 300: size_class = "small"
-        elif total < 2000: size_class = "medium"
-        elif total < 10000: size_class = "large"
-        else: size_class = "mega"
-        
+        if total < 50:
+            size_class = "micro"
+        elif total < 300:
+            size_class = "small"
+        elif total < 2000:
+            size_class = "medium"
+        elif total < 10000:
+            size_class = "large"
+        else:
+            size_class = "mega"
+
         # Age and growth
-        yr_grp = (df_pub_years[df_pub_years["community_id"] == cid]
-                  .groupby("pub_year")["publication_id"].count()
-                  .rename("n_articles").reset_index().sort_values("pub_year"))
-        
+        yr_grp = (
+            df_pub_years[df_pub_years["community_id"] == cid]
+            .groupby("pub_year")["publication_id"]
+            .count()
+            .rename("n_articles")
+            .reset_index()
+            .sort_values("pub_year")
+        )
+
         if not yr_grp.empty:
-            yr_grp["cumpct"] = yr_grp["n_articles"].cumsum() / yr_grp["n_articles"].sum()
+            yr_grp["cumpct"] = (
+                yr_grp["n_articles"].cumsum() / yr_grp["n_articles"].sum()
+            )
             start_row = yr_grp[yr_grp["cumpct"] >= 0.10].iloc[0]
             effective_start = int(start_row["pub_year"])
             age = max(1, current_year - effective_start)
-            recent = int(yr_grp[yr_grp["pub_year"] >= current_year - 2]["n_articles"].sum())
-            early = int(yr_grp[yr_grp["pub_year"] <= effective_start + 2]["n_articles"].sum())
+            recent = int(
+                yr_grp[yr_grp["pub_year"] >= current_year - 2]["n_articles"].sum()
+            )
+            early = int(
+                yr_grp[yr_grp["pub_year"] <= effective_start + 2]["n_articles"].sum()
+            )
             growth_ratio = recent / max(early, 1)
-            
-            age_class = "new" if age < 3 else "growing" if age < 7 else "established" if age < 15 else "mature"
-            growth_class = ("accelerating" if growth_ratio > 3.0 else "growing" if growth_ratio > 1.2 
-                           else "stable" if growth_ratio > 0.8 else "declining")
+
+            age_class = (
+                "new"
+                if age < 3
+                else "growing" if age < 7 else "established" if age < 15 else "mature"
+            )
+            growth_class = (
+                "accelerating"
+                if growth_ratio > 3.0
+                else (
+                    "growing"
+                    if growth_ratio > 1.2
+                    else "stable" if growth_ratio > 0.8 else "declining"
+                )
+            )
         else:
             effective_start, age, growth_ratio = current_year, 1, 1
             age_class = growth_class = "unknown"
-        
+
         profiles[cid] = {
-            "community_id": cid, "n_articles": total, "effective_start": effective_start,
-            "age_years": age, "growth_ratio": round(growth_ratio, 2),
-            "size_class": size_class, "age_class": age_class, "growth_class": growth_class,
+            "community_id": cid,
+            "n_articles": total,
+            "effective_start": effective_start,
+            "age_years": age,
+            "growth_ratio": round(growth_ratio, 2),
+            "size_class": size_class,
+            "age_class": age_class,
+            "growth_class": growth_class,
         }
-    
+
     log.info("Profiles built for %d communities", len(profiles))
 
 
@@ -433,8 +539,13 @@ def mark_in_scope(df: pd.DataFrame) -> pd.DataFrame:
     """Apply adaptive in-scope filter."""
     df = df.copy()
     abs_floors = df["community_id"].map(
-        lambda cid: SCOPE_ABS_FLOORS.get(profiles.get(cid, {}).get("size_class", "medium"), 5))
-    total_arts = df["community_id"].map(lambda cid: profiles.get(cid, {}).get("n_articles", 1))
+        lambda cid: SCOPE_ABS_FLOORS.get(
+            profiles.get(cid, {}).get("size_class", "medium"), 5
+        )
+    )
+    total_arts = df["community_id"].map(
+        lambda cid: profiles.get(cid, {}).get("n_articles", 1)
+    )
     df["pct"] = df["n_articles"] / total_arts
     df["in_scope"] = (df["n_articles"] >= abs_floors) | (df["pct"] >= SCOPE_PCT_FLOOR)
     return df[df["in_scope"]].drop(columns=["pct", "in_scope"])
@@ -446,26 +557,32 @@ def mark_in_scope(df: pd.DataFrame) -> pd.DataFrame:
 def aggregate_to_higher_levels(df_l2_counts: pd.DataFrame):
     """Aggregate L2 counts to L1, L1-cluster, and L0 levels."""
     global df_scope, df_l1_sig, df_clusters_agg, df_l0_agg
-    
+
     log.info("Aggregating to higher levels...")
-    
+
     # Apply in-scope filter
     df_scope = mark_in_scope(df_l2_counts)
     df_scope = df_scope.rename(columns={"community_id": "journal_id"})
     log.info("In-scope (community, L2) pairs: %d", len(df_scope))
-    
+
     # L1 aggregation
-    df_l1_agg = (df_scope.groupby(["journal_id", "l1_taxref", "l1_name", "l0_taxref", "l0_name"])
-                 .agg(n_scope_l2=("l2_key", "count"), n_articles_in_l1=("n_articles", "sum"))
-                 .reset_index())
-    df_l1_agg["l1_vocab_size"] = df_l1_agg["l1_taxref"].map(l1_vocab).fillna(1).astype(int)
+    df_l1_agg = (
+        df_scope.groupby(["journal_id", "l1_taxref", "l1_name", "l0_taxref", "l0_name"])
+        .agg(n_scope_l2=("l2_key", "count"), n_articles_in_l1=("n_articles", "sum"))
+        .reset_index()
+    )
+    df_l1_agg["l1_vocab_size"] = (
+        df_l1_agg["l1_taxref"].map(l1_vocab).fillna(1).astype(int)
+    )
     df_l1_agg["depth"] = df_l1_agg["n_scope_l2"] / df_l1_agg["l1_vocab_size"]
-    df_l1_agg["depth_class"] = pd.cut(df_l1_agg["depth"], 
-                                       bins=[-1, L1_DEPTH_PARTIAL, L1_DEPTH_FULL, 2.0],
-                                       labels=["noise", "partial", "full"])
+    df_l1_agg["depth_class"] = pd.cut(
+        df_l1_agg["depth"],
+        bins=[-1, L1_DEPTH_PARTIAL, L1_DEPTH_FULL, 2.0],
+        labels=["noise", "partial", "full"],
+    )
     df_l1_sig = df_l1_agg[df_l1_agg["depth_class"] != "noise"].copy()
     log.info("Significant (journal, L1) pairs: %d", len(df_l1_sig))
-    
+
     # L1-cluster aggregation
     cluster_rows = []
     for jid, jgrp in df_l1_sig.groupby("journal_id"):
@@ -476,26 +593,39 @@ def aggregate_to_higher_levels(df_l2_counts: pd.DataFrame):
             full = mems & full_l1s
             if not active or len(active) / len(mems) < 0.5:
                 continue
-            art_in_cluster = int(jgrp[jgrp["l1_taxref"].isin(active)]["n_articles_in_l1"].sum())
-            cluster_rows.append({
-                "journal_id": int(jid), "cluster_key": ck, "cluster_name": l1c_meta[ck]["name"],
-                "l0_taxref": l1c_meta[ck]["l0_taxref"], "l0_name": l1c_meta[ck]["l0_name"],
-                "n_l1s": len(mems), "n_active_l1s": len(active), "n_full_l1s": len(full),
-                "frac_active": round(len(active) / len(mems), 3),
-                "frac_full": round(len(full) / len(mems), 3),
-                "n_articles": art_in_cluster,
-            })
+            art_in_cluster = int(
+                jgrp[jgrp["l1_taxref"].isin(active)]["n_articles_in_l1"].sum()
+            )
+            cluster_rows.append(
+                {
+                    "journal_id": int(jid),
+                    "cluster_key": ck,
+                    "cluster_name": l1c_meta[ck]["name"],
+                    "l0_taxref": l1c_meta[ck]["l0_taxref"],
+                    "l0_name": l1c_meta[ck]["l0_name"],
+                    "n_l1s": len(mems),
+                    "n_active_l1s": len(active),
+                    "n_full_l1s": len(full),
+                    "frac_active": round(len(active) / len(mems), 3),
+                    "frac_full": round(len(full) / len(mems), 3),
+                    "n_articles": art_in_cluster,
+                }
+            )
     df_clusters_agg = pd.DataFrame(cluster_rows)
     log.info("(journal, L1-cluster) pairs: %d", len(df_clusters_agg))
-    
+
     # L0 aggregation
     l0_rows = []
     for jid, jgrp in df_l1_sig.groupby("journal_id"):
         sig_l1s = set(jgrp["l1_taxref"].astype(int))
         full_l1s = set(jgrp[jgrp["depth_class"] == "full"]["l1_taxref"].astype(int))
         j_total_arts = jgrp["n_articles_in_l1"].sum()
-        concentrated_l1s = set(jgrp[jgrp["n_articles_in_l1"] / j_total_arts >= L1_ARTICLE_SHARE_FLOOR]["l1_taxref"].astype(int))
-        
+        concentrated_l1s = set(
+            jgrp[jgrp["n_articles_in_l1"] / j_total_arts >= L1_ARTICLE_SHARE_FLOOR][
+                "l1_taxref"
+            ].astype(int)
+        )
+
         for l0_txr, l0 in l0_members.items():
             active = l0["l1s"] & concentrated_l1s
             active_any = l0["l1s"] & sig_l1s
@@ -503,12 +633,21 @@ def aggregate_to_higher_levels(df_l2_counts: pd.DataFrame):
             if not active:
                 continue
             frac_active = len(active) / len(l0["l1s"])
-            art_in_l0 = int(jgrp[jgrp["l1_taxref"].isin(active_any)]["n_articles_in_l1"].sum())
-            l0_rows.append({
-                "journal_id": int(jid), "l0_taxref": l0_txr, "l0_name": l0["name"],
-                "n_l1s": len(l0["l1s"]), "n_active_l1s": len(active_any), "n_full_l1s": len(full),
-                "frac_active": round(frac_active, 3), "n_articles": art_in_l0,
-            })
+            art_in_l0 = int(
+                jgrp[jgrp["l1_taxref"].isin(active_any)]["n_articles_in_l1"].sum()
+            )
+            l0_rows.append(
+                {
+                    "journal_id": int(jid),
+                    "l0_taxref": l0_txr,
+                    "l0_name": l0["name"],
+                    "n_l1s": len(l0["l1s"]),
+                    "n_active_l1s": len(active_any),
+                    "n_full_l1s": len(full),
+                    "frac_active": round(frac_active, 3),
+                    "n_articles": art_in_l0,
+                }
+            )
     df_l0_agg = pd.DataFrame(l0_rows)
     log.info("(journal, L0) pairs: %d", len(df_l0_agg))
 
@@ -522,56 +661,97 @@ def build_candidates(journal_id: int) -> dict:
     l1_rows = df_l1_sig[df_l1_sig["journal_id"] == journal_id]
     clus_rows = df_clusters_agg[df_clusters_agg["journal_id"] == journal_id]
     l0_rows_j = df_l0_agg[df_l0_agg["journal_id"] == journal_id]
-    
+
     sig_l1_set = set(l1_rows["l1_taxref"].astype(int))
-    full_l1_set = set(l1_rows[l1_rows["depth_class"] == "full"]["l1_taxref"].astype(int))
+    full_l1_set = set(
+        l1_rows[l1_rows["depth_class"] == "full"]["l1_taxref"].astype(int)
+    )
     covered_by_cluster = set()
-    
+
     # Step A: L1 clusters
     surfaced_clusters = []
     for _, cr in clus_rows[clus_rows["n_full_l1s"] >= 2].iterrows():
         mems = l1c_members[cr["cluster_key"]]
         full_in_cluster = mems & full_l1_set
-        surfaced_clusters.append({
-            "level": "l1_cluster", "key": cr["cluster_key"], "name": cr["cluster_name"],
-            "l0_name": cr["l0_name"], "n_l1s": cr["n_l1s"], "n_full_l1s": cr["n_full_l1s"],
-            "frac_full": cr["frac_full"], "n_articles": cr["n_articles"],
-            "member_l1s": [l1_rows[l1_rows["l1_taxref"] == t]["l1_name"].iloc[0]
-                          for t in full_in_cluster if len(l1_rows[l1_rows["l1_taxref"] == t]) > 0],
-        })
+        surfaced_clusters.append(
+            {
+                "level": "l1_cluster",
+                "key": cr["cluster_key"],
+                "name": cr["cluster_name"],
+                "l0_name": cr["l0_name"],
+                "n_l1s": cr["n_l1s"],
+                "n_full_l1s": cr["n_full_l1s"],
+                "frac_full": cr["frac_full"],
+                "n_articles": cr["n_articles"],
+                "member_l1s": [
+                    l1_rows[l1_rows["l1_taxref"] == t]["l1_name"].iloc[0]
+                    for t in full_in_cluster
+                    if len(l1_rows[l1_rows["l1_taxref"] == t]) > 0
+                ],
+            }
+        )
         covered_by_cluster |= mems
-    
+
     # Step B: L1 singles
     surfaced_l1s = []
     for _, lr in l1_rows[~l1_rows["l1_taxref"].isin(covered_by_cluster)].iterrows():
-        l2s_for_l1 = (df_scope[(df_scope["journal_id"] == journal_id) & (df_scope["l1_taxref"] == lr["l1_taxref"])]
-                      .sort_values("n_articles", ascending=False).head(5)[["l2_key", "l2_name", "n_articles"]].to_dict("records"))
-        surfaced_l1s.append({
-            "level": "l1_single", "key": f"l1_{int(lr['l1_taxref'])}", "name": lr["l1_name"],
-            "l0_name": lr["l0_name"], "depth": round(float(lr["depth"]), 3),
-            "depth_class": str(lr["depth_class"]), "n_scope_l2": int(lr["n_scope_l2"]),
-            "l1_vocab_size": int(lr["l1_vocab_size"]), "n_articles": int(lr["n_articles_in_l1"]),
-            "top_l2s": l2s_for_l1,
-        })
-    
+        l2s_for_l1 = (
+            df_scope[
+                (df_scope["journal_id"] == journal_id)
+                & (df_scope["l1_taxref"] == lr["l1_taxref"])
+            ]
+            .sort_values("n_articles", ascending=False)
+            .head(5)[["l2_key", "l2_name", "n_articles"]]
+            .to_dict("records")
+        )
+        surfaced_l1s.append(
+            {
+                "level": "l1_single",
+                "key": f"l1_{int(lr['l1_taxref'])}",
+                "name": lr["l1_name"],
+                "l0_name": lr["l0_name"],
+                "depth": round(float(lr["depth"]), 3),
+                "depth_class": str(lr["depth_class"]),
+                "n_scope_l2": int(lr["n_scope_l2"]),
+                "l1_vocab_size": int(lr["l1_vocab_size"]),
+                "n_articles": int(lr["n_articles_in_l1"]),
+                "top_l2s": l2s_for_l1,
+            }
+        )
+
     # Step C: L0 domains
     surfaced_l0s = []
     for _, lr in l0_rows_j[l0_rows_j["frac_active"] >= 0.5].iterrows():
         clusters_in_l0 = [c for c in surfaced_clusters if c["l0_name"] == lr["l0_name"]]
         if len(clusters_in_l0) < 2:
             continue
-        surfaced_l0s.append({
-            "level": "l0_domain", "key": f"l0_{int(lr['l0_taxref'])}", "name": lr["l0_name"],
-            "n_l1s_total": lr["n_l1s"], "n_active_l1s": lr["n_active_l1s"],
-            "n_full_l1s": lr["n_full_l1s"], "frac_active": lr["frac_active"],
-            "n_articles": lr["n_articles"], "clusters": [c["name"] for c in clusters_in_l0],
-        })
-    
+        surfaced_l0s.append(
+            {
+                "level": "l0_domain",
+                "key": f"l0_{int(lr['l0_taxref'])}",
+                "name": lr["l0_name"],
+                "n_l1s_total": lr["n_l1s"],
+                "n_active_l1s": lr["n_active_l1s"],
+                "n_full_l1s": lr["n_full_l1s"],
+                "frac_active": lr["frac_active"],
+                "n_articles": lr["n_articles"],
+                "clusters": [c["name"] for c in clusters_in_l0],
+            }
+        )
+
     # Step D: L2 cluster fallback for niche communities
-    is_niche = (not surfaced_l0s and not surfaced_clusters and 
-                (not surfaced_l1s or (profile.get("size_class") in ("micro", "small") 
-                 and all(s["depth_class"] == "partial" for s in surfaced_l1s))))
-    
+    is_niche = (
+        not surfaced_l0s
+        and not surfaced_clusters
+        and (
+            not surfaced_l1s
+            or (
+                profile.get("size_class") in ("micro", "small")
+                and all(s["depth_class"] == "partial" for s in surfaced_l1s)
+            )
+        )
+    )
+
     l2_clusters_out = []
     l2_fallback = False
     if is_niche:
@@ -584,21 +764,36 @@ def build_candidates(journal_id: int) -> dict:
                 overlap = members & jl2_keys
                 if not overlap:
                     continue
-                art_count = int(l2_rows[l2_rows["l2_key"].isin(overlap)]["n_articles"].sum())
+                art_count = int(
+                    l2_rows[l2_rows["l2_key"].isin(overlap)]["n_articles"].sum()
+                )
                 meta = l2c_meta[ck]
-                l2_clusters_out.append({
-                    "level": "l2_cluster", "key": ck, "name": meta["name"],
-                    "l1_name": meta["l1_name"], "n_l2s_total": len(members),
-                    "n_l2s_covered": len(overlap), "frac_covered": round(len(overlap) / len(members), 3),
-                    "n_articles": art_count, "member_l2s": sorted(overlap)[:6],
-                })
+                l2_clusters_out.append(
+                    {
+                        "level": "l2_cluster",
+                        "key": ck,
+                        "name": meta["name"],
+                        "l1_name": meta["l1_name"],
+                        "n_l2s_total": len(members),
+                        "n_l2s_covered": len(overlap),
+                        "frac_covered": round(len(overlap) / len(members), 3),
+                        "n_articles": art_count,
+                        "member_l2s": sorted(overlap)[:6],
+                    }
+                )
             l2_clusters_out.sort(key=lambda x: -x["n_articles"])
-    
+
     return {
-        "journal_id": journal_id, "journal_name": community_names.get(journal_id, str(journal_id)),
-        "profile": profile, "l0_domains": surfaced_l0s, "l1_clusters": surfaced_clusters,
-        "l1_singles": surfaced_l1s, "l2_clusters": l2_clusters_out,
-        "n_scope_l2_total": int(df_scope[df_scope["journal_id"] == journal_id].shape[0]),
+        "journal_id": journal_id,
+        "journal_name": community_names.get(journal_id, str(journal_id)),
+        "profile": profile,
+        "l0_domains": surfaced_l0s,
+        "l1_clusters": surfaced_clusters,
+        "l1_singles": surfaced_l1s,
+        "l2_clusters": l2_clusters_out,
+        "n_scope_l2_total": int(
+            df_scope[df_scope["journal_id"] == journal_id].shape[0]
+        ),
         "_l2_fallback": l2_fallback,
     }
 
@@ -614,7 +809,8 @@ def build_all_briefs(community_ids: list):
 # ══════════════════════════════════════════════════════════════════════════════
 # 8. LLM JUDGMENT
 # ══════════════════════════════════════════════════════════════════════════════
-SYSTEM_PROMPT = dedent("""
+SYSTEM_PROMPT = dedent(
+    """
     You are an expert in academic publishing and research taxonomy.
     Your task: determine the **academic topic position** of a publication community.
     
@@ -631,12 +827,13 @@ SYSTEM_PROMPT = dedent("""
       "overall_reasoning": "..."
     }}
     ```
-""").strip()
+"""
+).strip()
 
 
 def format_brief(brief: dict, journal_name: str, used_labels: set = None) -> str:
     """Convert candidate brief to LLM prompt text.
-    
+
     Args:
         brief: Candidate hierarchy for this community
         journal_name: Name of the community/cluster
@@ -647,51 +844,65 @@ def format_brief(brief: dict, journal_name: str, used_labels: set = None) -> str
         f"## Publication community: {journal_name}",
         f"Profile: {p.get('size_class','?')} ({p.get('n_articles','?')} papers), "
         f"{p.get('age_class','?')} ({p.get('age_years','?')} yrs), growth: {p.get('growth_class','?')}",
-        f"Total in-scope L2 topics: {brief['n_scope_l2_total']}", ""
+        f"Total in-scope L2 topics: {brief['n_scope_l2_total']}",
+        "",
     ]
-    
+
     # Option 1: Add warning about already-used labels
     if used_labels:
         used_names = sorted(set(name for _, name in used_labels))
         if used_names:
-            lines.append("### ⚠️ Labels already assigned to other communities (avoid if possible):")
+            lines.append(
+                "### ⚠️ Labels already assigned to other communities (avoid if possible):"
+            )
             for name in used_names[:15]:  # Show up to 15
                 lines.append(f"  - {name}")
             if len(used_names) > 15:
                 lines.append(f"  ... and {len(used_names) - 15} more")
             lines.append("")
-    
+
     if brief["l0_domains"]:
         lines.append("### L0 Domain candidates")
         for d in sorted(brief["l0_domains"], key=lambda x: -x["n_articles"]):
-            lines.append(f"  key={d['key']}  name='{d['name']}'  articles={d['n_articles']:,}")
+            lines.append(
+                f"  key={d['key']}  name='{d['name']}'  articles={d['n_articles']:,}"
+            )
         lines.append("")
-    
+
     if brief["l1_clusters"]:
         lines.append("### L1 Cluster candidates")
         for c in sorted(brief["l1_clusters"], key=lambda x: -x["n_articles"]):
-            lines.append(f"  key={c['key']}  name='{c['name']}'  articles={c['n_articles']:,}")
+            lines.append(
+                f"  key={c['key']}  name='{c['name']}'  articles={c['n_articles']:,}"
+            )
         lines.append("")
-    
+
     if brief["l1_singles"]:
         lines.append("### L1 Single-discipline candidates")
         for s in sorted(brief["l1_singles"], key=lambda x: -x["n_articles"]):
-            top = ", ".join(t["l2_name"].split(" - ", 1)[-1] for t in s.get("top_l2s", [])[:3])
-            lines.append(f"  key={s['key']}  name='{s['name']}'  articles={s['n_articles']:,}  top: {top}")
+            top = ", ".join(
+                t["l2_name"].split(" - ", 1)[-1] for t in s.get("top_l2s", [])[:3]
+            )
+            lines.append(
+                f"  key={s['key']}  name='{s['name']}'  articles={s['n_articles']:,}  top: {top}"
+            )
         lines.append("")
-    
+
     if brief.get("l2_clusters"):
         lines.append("### L2 Cluster candidates (niche)")
         for c in brief["l2_clusters"][:10]:
-            lines.append(f"  key={c['key']}  name='{c['name']}'  articles={c['n_articles']:,}")
+            lines.append(
+                f"  key={c['key']}  name='{c['name']}'  articles={c['n_articles']:,}"
+            )
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
 def parse_llm_response(text: str) -> dict:
     """Extract JSON from LLM response."""
     import re
+
     match = re.search(r"```json\s*([\s\S]+?)\s*```", text)
     if match:
         return json.loads(match.group(1))
@@ -701,9 +912,15 @@ def parse_llm_response(text: str) -> dict:
     raise ValueError("No JSON found")
 
 
-def call_llm(journal_id: int, journal_name: str, brief: dict, used_labels: set = None, force_unique: bool = False) -> dict:
+def call_llm(
+    journal_id: int,
+    journal_name: str,
+    brief: dict,
+    used_labels: set = None,
+    force_unique: bool = False,
+) -> dict:
     """Call LLM for one community.
-    
+
     Args:
         journal_id: Community ID
         journal_name: Community name
@@ -713,22 +930,39 @@ def call_llm(journal_id: int, journal_name: str, brief: dict, used_labels: set =
     """
     user_text = format_brief(brief, journal_name, used_labels)
     system = SYSTEM_PROMPT.format(max_core=MAX_CORE, max_bleed=MAX_BLEED)
-    
+
     # Option 4: Stronger uniqueness instruction for retry pass
     if force_unique and used_labels:
         used_names = [name for _, name in used_labels]
         system += f"\n\nIMPORTANT: The following labels are ALREADY ASSIGNED to other communities and must NOT be used: {', '.join(used_names[:20])}. Choose more specific alternatives."
-    
+
     try:
         resp = oai.chat.completions.create(
-            model=LLM_MODEL, temperature=LLM_TEMP,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user_text}]
+            model=LLM_MODEL,
+            temperature=LLM_TEMP,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_text},
+            ],
         )
         data = parse_llm_response(resp.choices[0].message.content)
+    except AuthenticationError as e:
+        # Retrying cannot help, and swallowing it leaves every community empty.
+        raise RuntimeError(
+            "OpenAI rejected the API key "
+            "(set OPENAI_API_KEY or GPT4_OPENAI_KEY to a valid key): "
+            f"{e}"
+        ) from e
     except Exception as e:
         log.error("LLM error for %s: %s", journal_name, e)
-        data = {"core": [], "bleed": [], "match_mode": "error", "confidence": "low", "overall_reasoning": str(e)}
-    
+        data = {
+            "core": [],
+            "bleed": [],
+            "match_mode": "error",
+            "confidence": "low",
+            "overall_reasoning": str(e),
+        }
+
     data["_journal_id"] = journal_id
     data["_journal_name"] = journal_name
     return data
@@ -751,80 +985,101 @@ def extract_labels_from_result(result: dict) -> set:
 
 def run_llm_for_all(community_ids: list) -> dict:
     """Run LLM for all communities with duplicate tracking (Option 1)."""
-    log.info("Running LLM for %d communities (Pass 1: with used-label tracking)...", len(community_ids))
+    log.info(
+        "Running LLM for %d communities (Pass 1: with used-label tracking)...",
+        len(community_ids),
+    )
     llm_results = {}
     used_labels = set()  # Track (key, name) tuples already assigned
-    
+
     for i, jid in enumerate(community_ids):
         jname = community_names.get(jid, str(jid))
         brief = briefs[jid]
-        
-        if not (brief["l0_domains"] or brief["l1_clusters"] or brief["l1_singles"] or brief.get("l2_clusters")):
-            log.warning("[%d/%d] %s — no candidates, skipping", i + 1, len(community_ids), jname)
-            llm_results[jid] = {"core": [], "bleed": [], "match_mode": "none", 
-                               "confidence": "low", "overall_reasoning": "no candidates",
-                               "_journal_id": jid, "_journal_name": jname}
+
+        if not (
+            brief["l0_domains"]
+            or brief["l1_clusters"]
+            or brief["l1_singles"]
+            or brief.get("l2_clusters")
+        ):
+            log.warning(
+                "[%d/%d] %s — no candidates, skipping", i + 1, len(community_ids), jname
+            )
+            llm_results[jid] = {
+                "core": [],
+                "bleed": [],
+                "match_mode": "none",
+                "confidence": "low",
+                "overall_reasoning": "no candidates",
+                "_journal_id": jid,
+                "_journal_name": jname,
+            }
             continue
-        
+
         log.info("[%d/%d] %s...", i + 1, len(community_ids), jname)
         # Option 1: Pass used_labels to help LLM avoid duplicates
         llm_results[jid] = call_llm(jid, jname, brief, used_labels=used_labels)
-        
+
         # Track newly assigned labels
         new_labels = extract_labels_from_result(llm_results[jid])
         used_labels.update(new_labels)
-    
+
     log.info("Pass 1 complete for %d communities", len(llm_results))
-    
+
     # Option 4: Detect duplicates and retry
     llm_results = resolve_duplicates(llm_results, community_ids)
-    
+
     return llm_results
 
 
 def filter_brief_candidates(brief: dict, taken_labels: set) -> dict:
     """Create a copy of brief with taken labels removed from candidates."""
     import copy
+
     filtered = copy.deepcopy(brief)
-    
+
     taken_keys = {key for key, name in taken_labels}
     taken_names = {name for key, name in taken_labels}
-    
+
     # Filter L0 domains
     if filtered.get("l0_domains"):
         filtered["l0_domains"] = [
-            d for d in filtered["l0_domains"]
+            d
+            for d in filtered["l0_domains"]
             if d.get("key") not in taken_keys and d.get("name") not in taken_names
         ]
-    
+
     # Filter L1 clusters
     if filtered.get("l1_clusters"):
         filtered["l1_clusters"] = [
-            c for c in filtered["l1_clusters"]
+            c
+            for c in filtered["l1_clusters"]
             if c.get("key") not in taken_keys and c.get("name") not in taken_names
         ]
-    
+
     # Filter L1 singles
     if filtered.get("l1_singles"):
         filtered["l1_singles"] = [
-            s for s in filtered["l1_singles"]
+            s
+            for s in filtered["l1_singles"]
             if s.get("key") not in taken_keys and s.get("name") not in taken_names
         ]
-    
+
     # Filter L2 clusters
     if filtered.get("l2_clusters"):
         filtered["l2_clusters"] = [
-            c for c in filtered["l2_clusters"]
+            c
+            for c in filtered["l2_clusters"]
             if c.get("key") not in taken_keys and c.get("name") not in taken_names
         ]
-    
+
     return filtered
 
 
 def resolve_duplicates(llm_results: dict, community_ids: list) -> dict:
     """Option 4: Detect duplicate labels and re-run LLM for conflicts."""
     log.info("Checking for duplicate labels...")
-    
+
     # Build label -> communities mapping (only for PRIMARY core label, rank 1)
     label_to_communities = {}
     for jid, res in llm_results.items():
@@ -838,36 +1093,46 @@ def resolve_duplicates(llm_results: dict, community_ids: list) -> dict:
                 label_key = (key, name)
                 if label_key not in label_to_communities:
                     label_to_communities[label_key] = []
-                label_to_communities[label_key].append({
-                    "jid": jid,
-                    "jname": res.get("_journal_name", str(jid)),
-                    "confidence": res.get("confidence", "low"),
-                    "n_articles": profiles.get(jid, {}).get("n_articles", 0),
-                })
-    
+                label_to_communities[label_key].append(
+                    {
+                        "jid": jid,
+                        "jname": res.get("_journal_name", str(jid)),
+                        "confidence": res.get("confidence", "low"),
+                        "n_articles": profiles.get(jid, {}).get("n_articles", 0),
+                    }
+                )
+
     # Find duplicates
     duplicates = {k: v for k, v in label_to_communities.items() if len(v) > 1}
-    
+
     if not duplicates:
         log.info("No duplicate labels found.")
         return llm_results
-    
-    log.info("Found %d duplicate labels, starting Pass 2 (retry with filtered candidates)...", len(duplicates))
-    
+
+    log.info(
+        "Found %d duplicate labels, starting Pass 2 (retry with filtered candidates)...",
+        len(duplicates),
+    )
+
     # For each duplicate, keep the best match (most articles) and retry the others
     retry_jids = set()
     for label, communities in duplicates.items():
         # Sort by article count descending - keep the largest
         communities.sort(key=lambda x: -x["n_articles"])
         keeper = communities[0]
-        log.info("  Label '%s': keeping %s (%d articles), will retry %d others",
-                 label[1], keeper["jname"], keeper["n_articles"], len(communities) - 1)
+        log.info(
+            "  Label '%s': keeping %s (%d articles), will retry %d others",
+            label[1],
+            keeper["jname"],
+            keeper["n_articles"],
+            len(communities) - 1,
+        )
         for c in communities[1:]:
             retry_jids.add(c["jid"])
-    
+
     if not retry_jids:
         return llm_results
-    
+
     # Collect PRIMARY labels that are "taken" (not from retry candidates)
     taken_labels = set()
     for jid, res in llm_results.items():
@@ -879,32 +1144,43 @@ def resolve_duplicates(llm_results: dict, community_ids: list) -> dict:
                 name = sel.get("name", "")
                 if key and name:
                     taken_labels.add((key, name))
-    
+
     # Retry with filtered candidates (taken labels physically removed)
     for i, jid in enumerate(sorted(retry_jids)):
         jname = community_names.get(jid, str(jid))
         original_brief = briefs[jid]
-        
+
         # Filter out taken labels from candidates
         filtered_brief = filter_brief_candidates(original_brief, taken_labels)
-        
+
         # Check if any candidates remain
         has_candidates = (
-            filtered_brief.get("l0_domains") or 
-            filtered_brief.get("l1_clusters") or 
-            filtered_brief.get("l1_singles") or 
-            filtered_brief.get("l2_clusters")
+            filtered_brief.get("l0_domains")
+            or filtered_brief.get("l1_clusters")
+            or filtered_brief.get("l1_singles")
+            or filtered_brief.get("l2_clusters")
         )
-        
+
         if not has_candidates:
-            log.warning("  [Retry %d/%d] %s — no candidates left after filtering, keeping original", 
-                       i + 1, len(retry_jids), jname)
+            log.warning(
+                "  [Retry %d/%d] %s — no candidates left after filtering, keeping original",
+                i + 1,
+                len(retry_jids),
+                jname,
+            )
             continue
-        
-        log.info("  [Retry %d/%d] %s (filtered: removed %d taken labels)...", 
-                 i + 1, len(retry_jids), jname, len(taken_labels))
-        llm_results[jid] = call_llm(jid, jname, filtered_brief, used_labels=taken_labels, force_unique=True)
-        
+
+        log.info(
+            "  [Retry %d/%d] %s (filtered: removed %d taken labels)...",
+            i + 1,
+            len(retry_jids),
+            jname,
+            len(taken_labels),
+        )
+        llm_results[jid] = call_llm(
+            jid, jname, filtered_brief, used_labels=taken_labels, force_unique=True
+        )
+
         # Add new PRIMARY label to taken set for subsequent retries
         new_core = llm_results[jid].get("core", [])
         if new_core:
@@ -913,7 +1189,7 @@ def resolve_duplicates(llm_results: dict, community_ids: list) -> dict:
             name = sel.get("name", "")
             if key and name:
                 taken_labels.add((key, name))
-    
+
     log.info("Pass 2 complete. Retried %d communities.", len(retry_jids))
     return llm_results
 
@@ -922,38 +1198,59 @@ def flatten_results(llm_results: dict, community_ids: list) -> pd.DataFrame:
     """Flatten LLM results to output DataFrame."""
     log.info("Flattening results...")
     output_rows = []
-    
+
     for jid, res in llm_results.items():
         jname = community_names.get(jid, str(jid))
         total_arts = profiles.get(jid, {}).get("n_articles", 0)
-        
+
         for tier in ["core", "bleed"]:
             for rank, sel in enumerate(res.get(tier, []), start=1):
-                output_rows.append({
-                    "cluster_id": int(jid),
-                    "community_id": jid,
-                    "community_name": jname,
-                    "cluster_level": CLUSTER_LEVEL,
-                    "n_community_papers": total_arts,
-                    "tier": tier,
-                    "cluster_rank": rank,
-                    "cluster_key": sel.get("key", ""),
-                    "cluster_name": sel.get("name", ""),
-                    "taxonomy_level": sel.get("level", ""),
-                    "match_mode": res.get("match_mode", ""),
-                    "llm_confidence": res.get("confidence", ""),
-                    "llm_rationale": sel.get("rationale", ""),
-                    "llm_reasoning": res.get("overall_reasoning", ""),
-                    "run_date": RUN_DATE,
-                })
-    
+                output_rows.append(
+                    {
+                        "cluster_id": int(jid),
+                        "community_id": jid,
+                        "community_name": jname,
+                        "cluster_level": CLUSTER_LEVEL,
+                        "n_community_papers": total_arts,
+                        "tier": tier,
+                        "cluster_rank": rank,
+                        "cluster_key": sel.get("key", ""),
+                        "cluster_name": sel.get("name", ""),
+                        "taxonomy_level": sel.get("level", ""),
+                        "match_mode": res.get("match_mode", ""),
+                        "llm_confidence": res.get("confidence", ""),
+                        "llm_rationale": sel.get("rationale", ""),
+                        "llm_reasoning": res.get("overall_reasoning", ""),
+                        "run_date": RUN_DATE,
+                    }
+                )
+
+    if not output_rows:
+        n_errors = sum(
+            1 for r in llm_results.values() if r.get("match_mode") == "error"
+        )
+        reasons = {
+            str(r.get("overall_reasoning", ""))[:200]
+            for r in llm_results.values()
+            if r.get("match_mode") == "error"
+        }
+        raise RuntimeError(
+            f"No taxonomy labels produced for {len(community_ids)} {CLUSTER_LEVEL} "
+            f"communities ({n_errors} of {len(llm_results)} LLM calls failed). "
+            f"First failure: {next(iter(reasons), 'no LLM errors — check candidate briefs')}"
+        )
+
     df_out = pd.DataFrame(output_rows)
-    log.info("Output: %d rows (%d communities)", len(df_out), df_out["community_id"].nunique())
+    log.info(
+        "Output: %d rows (%d communities)",
+        len(df_out),
+        df_out["community_id"].nunique(),
+    )
     return df_out
 
 
-def export_dashboard_labels(df_out: pd.DataFrame, cluster_level: str) -> tuple[Path, pd.DataFrame]:
-    """Write {level}_labels.csv so build_unified_dashboard can load taxonomy names.
+def export_dashboard_labels(df_out: pd.DataFrame, cluster_level: str) -> pd.DataFrame:
+    """Build one-row-per-community dashboard labels (uploaded to BigQuery).
 
     Uses the top-ranked core taxonomy name per community as short_label.
     """
@@ -973,8 +1270,7 @@ def export_dashboard_labels(df_out: pd.DataFrame, cluster_level: str) -> tuple[P
             name = f"Cluster {int(r['community_id'])}"
         # Title Case for dashboard consistency with former GPT labels
         short = " ".join(
-            w if w.isupper() else w.capitalize()
-            for w in name.replace("_", " ").split()
+            w if w.isupper() else w.capitalize() for w in name.replace("_", " ").split()
         )
         bleed = df_out[
             (df_out["community_id"] == r["community_id"]) & (df_out["tier"] == "bleed")
@@ -999,11 +1295,8 @@ def export_dashboard_labels(df_out: pd.DataFrame, cluster_level: str) -> tuple[P
         )
 
     out = pd.DataFrame(rows).sort_values("cluster_id")
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    path = OUTPUT_DIR / f"{cluster_level}_labels.csv"
-    out.to_csv(path, index=False)
-    log.info("Dashboard labels saved to %s (%d clusters)", path, len(out))
-    return path, out
+    log.info("Dashboard labels ready for %s (%d clusters)", cluster_level, len(out))
+    return out
 
 
 def ensure_label_dataset() -> None:
@@ -1117,17 +1410,13 @@ def run_one_level(df_papers: pd.DataFrame, level: str, timestamp: str) -> pd.Dat
     llm_results = run_llm_for_all(community_ids)
     df_out = flatten_results(llm_results, community_ids)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    level_path = OUTPUT_DIR / f"cluster_taxonomy_labels_{level}.csv"
-    df_out.to_csv(level_path, index=False)
-    log.info("Saved to %s", level_path)
-    _, dashboard = export_dashboard_labels(df_out, level)
+    dashboard = export_dashboard_labels(df_out, level)
 
     try:
         upload_labels_to_bigquery(df_out, dashboard, timestamp)
     except Exception:
         log.exception(
-            "BigQuery upload for %s failed; CSV outputs were still written",
+            "BigQuery upload for %s failed",
             level,
         )
     return df_out
@@ -1148,12 +1437,15 @@ def main(timestamp: str | None = None):
     RUN_TIMESTAMP = timestamp
     os.environ["RUN_TIMESTAMP"] = timestamp
 
+    log_path = setup_logging(timestamp)
+
     TBL_CLASSIF = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.classification_raw_{timestamp}"
     TBL_PUB_META = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.pub_metadata_raw_{timestamp}"
 
     log.info("=" * 60)
     log.info("Taxonomy Naming Pipeline")
     log.info("Run timestamp: %s", timestamp)
+    log.info("Log file: %s", log_path)
     log.info("Cluster levels: %s", ", ".join(CLUSTER_LEVELS))
     log.info("=" * 60)
 
@@ -1161,7 +1453,6 @@ def main(timestamp: str | None = None):
     df_papers = fetch_classification_papers()
     load_taxonomy()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     parts = []
     for level in CLUSTER_LEVELS:
         df_level = run_one_level(df_papers, level, timestamp)
@@ -1175,9 +1466,6 @@ def main(timestamp: str | None = None):
             )
 
     df_out = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
-    combined = OUTPUT_DIR / "cluster_taxonomy_labels.csv"
-    df_out.to_csv(combined, index=False)
-    log.info("Combined labels saved to %s", combined)
 
     log.info("=" * 60)
     log.info("Summary")

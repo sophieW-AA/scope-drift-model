@@ -44,6 +44,8 @@ DEFAULT_JOURNALS = [
 
 
 def load_dotenv(path: Path) -> None:
+    # .env wins over the launching shell: a stale OPENAI_API_KEY left in a
+    # terminal session used to shadow the real key and 401 every LLM call.
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -51,7 +53,10 @@ def load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export ") :].strip()
+        os.environ[key] = value.strip().strip('"').strip("'")
 
 
 def run_step(name: str, script: Path, env: dict[str, str], extra_args: list[str] | None = None) -> None:
