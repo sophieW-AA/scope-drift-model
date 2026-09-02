@@ -42,12 +42,13 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import urllib.request
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-
+from google.cloud import bigquery
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import jensenshannon
@@ -57,9 +58,10 @@ from scipy.stats import entropy
 # SHARED CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
-CWTS_DIR = BASE_DIR / "cwts_output"  # For GPT labels only
-OUTPUT_DIR = BASE_DIR / "output"
-RENDER_SCRIPT_PATH = BASE_DIR / "render_script.js"
+OUTPUT_DIR = Path(r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\dashboards")
+# LLM borderline / paper-demotion JSON caches (not taxonomy labels)
+CACHE_DIR = Path(r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\cache")
+RENDER_SCRIPT_PATH = BASE_DIR / "assets" / "render_script.js"
 
 # BigQuery config
 BQ_PROJECT = os.environ.get("BQ_PROJECT", "ocean-tech-adv-analytics-c-tfs")
@@ -82,10 +84,20 @@ SCOPE_LLM_BORDERLINE_MODEL = os.environ.get(
 SCOPE_LLM_BORDERLINE_CACHE = os.environ.get(
     "SCOPE_LLM_BORDERLINE_CACHE", "scope_llm_borderline.json"
 ).strip()
-BORDERLINE_PROMPT_VERSION = os.environ.get("SCOPE_LLM_BORDERLINE_PROMPT_VERSION", "v2").strip()
+BORDERLINE_PROMPT_VERSION = os.environ.get(
+    "SCOPE_LLM_BORDERLINE_PROMPT_VERSION", "v2"
+).strip()
+
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip() not in ("0", "false", "False", "no", "NO")
+    return os.environ.get(name, default).strip() not in (
+        "0",
+        "false",
+        "False",
+        "no",
+        "NO",
+    )
+
 
 SCOPE_HARD_NEGATIVES_ENABLED = _env_flag("SCOPE_HARD_NEGATIVES_ENABLED", "1")
 SCOPE_HARD_NEGATIVES_PATH = os.environ.get(
@@ -95,7 +107,9 @@ SCOPE_HARD_NEGATIVES_PATH = os.environ.get(
 SCOPE_PAPER_LLM_ENABLED = _env_flag("SCOPE_PAPER_LLM_ENABLED", "1")
 SCOPE_PAPER_LLM_MODEL = os.environ.get("SCOPE_PAPER_LLM_MODEL", "gpt-4o-mini").strip()
 SCOPE_PAPER_LLM_BATCH = int(os.environ.get("SCOPE_PAPER_LLM_BATCH", "20"))
-SCOPE_PAPER_LLM_MAX_PER_JOURNAL = int(os.environ.get("SCOPE_PAPER_LLM_MAX_PER_JOURNAL", "60"))
+SCOPE_PAPER_LLM_MAX_PER_JOURNAL = int(
+    os.environ.get("SCOPE_PAPER_LLM_MAX_PER_JOURNAL", "60")
+)
 SCOPE_PAPER_LLM_CACHE = os.environ.get(
     "SCOPE_PAPER_LLM_CACHE", "scope_paper_llm.json"
 ).strip()
@@ -126,7 +140,17 @@ _DEFAULT_JOURNALS = [
     "Frontiers in Psychology",
 ]
 _JOURNALS_OVERRIDE = os.environ.get("JOURNALS", "").strip()
-JOURNALS = [j.strip() for j in _JOURNALS_OVERRIDE.split(",") if j.strip()] if _JOURNALS_OVERRIDE else _DEFAULT_JOURNALS
+JOURNALS = (
+    [j.strip() for j in _JOURNALS_OVERRIDE.split(",") if j.strip()]
+    if _JOURNALS_OVERRIDE
+    else _DEFAULT_JOURNALS
+)
+
+# Windows consoles / redirected pipes default to cp1252, which cannot encode the
+# arrows and box characters used in log messages.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S"
@@ -280,47 +304,76 @@ def load_run_metadata() -> dict:
 
 
 def load_gpt_labels_single(level: str) -> dict:
-    """Load GPT labels for a single cluster level."""
-    labels_file = CWTS_DIR / f"{level}_labels.csv"
-    if not labels_file.exists():
+    """Load cluster short labels for one level from BigQuery taxonomy_labelling."""
+    if not RUN_TIMESTAMP:
+        log.warning("No RUN_TIMESTAMP — cannot load taxonomy labels from BigQuery")
         return {}
 
-    df = pd.read_csv(labels_file)
+    table = f"{BQ_PROJECT}.taxonomy_labelling.cluster_labels_{level}_{RUN_TIMESTAMP}"
+    try:
+        client = bigquery.Client(project=BQ_PROJECT, location="EU")
+        df = client.query(
+            f"SELECT cluster_id, short_label FROM `{table}`"
+        ).to_dataframe()
+    except Exception as e:
+        log.warning("Could not load labels from %s: %s", table, e)
+        return {}
+
     labels = {}
     for _, row in df.iterrows():
-        cluster_id = int(row["cluster_id"])
-        labels[cluster_id] = row["short_label"]
+        labels[int(row["cluster_id"])] = row["short_label"]
+    log.info("       BigQuery %s: %s labels", table.split(".")[-1], len(labels))
     return labels
 
 
 def load_gpt_labels_all() -> dict:
-    """Load GPT labels for all levels with full info."""
+    """Load taxonomy labels for all levels with full info from BigQuery."""
     labels = {"macro": {}, "meso": {}, "micro": {}}
+    if not RUN_TIMESTAMP:
+        log.warning("No RUN_TIMESTAMP — cannot load taxonomy labels from BigQuery")
+        return labels
 
+    client = bigquery.Client(project=BQ_PROJECT, location="EU")
     for level in ["macro", "meso", "micro"]:
-        labels_file = CWTS_DIR / f"{level}_labels.csv"
-        if labels_file.exists():
-            df = pd.read_csv(labels_file)
-            for _, row in df.iterrows():
-                cluster_id = int(row["cluster_id"])
-                raw_kw = row["keywords"] if "keywords" in row.index else None
-                try:
-                    keywords = eval(raw_kw) if pd.notna(raw_kw) else []
-                except Exception:
-                    keywords = []
-                if not isinstance(keywords, list):
-                    keywords = []
-                labels[level][cluster_id] = {
-                    "short_label": row["short_label"],
-                    "long_label": row.get("long_label", row["short_label"]),
-                    "keywords": keywords,
-                    "summary": (
-                        str(row["summary"])
-                        if "summary" in row.index and pd.notna(row.get("summary"))
-                        else ""
-                    ),
-                }
-            log.info(f"       {level}_labels.csv: {len(labels[level])} labels")
+        table = (
+            f"{BQ_PROJECT}.taxonomy_labelling.cluster_labels_{level}_{RUN_TIMESTAMP}"
+        )
+        try:
+            df = client.query(
+                f"""
+                SELECT cluster_id, short_label, long_label, keywords, summary
+                FROM `{table}`
+                """
+            ).to_dataframe()
+        except Exception as e:
+            log.warning("Could not load labels from %s: %s", table, e)
+            continue
+
+        for _, row in df.iterrows():
+            cluster_id = int(row["cluster_id"])
+            raw_kw = row["keywords"] if "keywords" in row.index else None
+            try:
+                keywords = eval(raw_kw) if pd.notna(raw_kw) else []
+            except Exception:
+                keywords = []
+            if not isinstance(keywords, list):
+                keywords = []
+            labels[level][cluster_id] = {
+                "short_label": row["short_label"],
+                "long_label": row.get("long_label", row["short_label"]),
+                "keywords": keywords,
+                "summary": (
+                    str(row["summary"])
+                    if "summary" in row.index and pd.notna(row.get("summary"))
+                    else ""
+                ),
+            }
+        log.info(
+            "       BigQuery cluster_labels_%s_%s: %s labels",
+            level,
+            RUN_TIMESTAMP,
+            len(labels[level]),
+        )
     return labels
 
 
@@ -519,12 +572,8 @@ def compute_primary_shift(
         "latest_primary_ids": sorted(full_late),
         "baseline_top": base_top,
         "latest_top": late_top,
-        "gained_labels": [
-            GPT_LABELS.get(cid, f"Cluster {cid}") for cid in gained_ids
-        ],
-        "lost_labels": [
-            GPT_LABELS.get(cid, f"Cluster {cid}") for cid in lost_ids
-        ],
+        "gained_labels": [GPT_LABELS.get(cid, f"Cluster {cid}") for cid in gained_ids],
+        "lost_labels": [GPT_LABELS.get(cid, f"Cluster {cid}") for cid in lost_ids],
         # Convenience for light overlap checks
         "top_overlap": sorted(base_ids & late_ids),
     }
@@ -566,7 +615,9 @@ def _default_on_scope_title_patterns(journal: str) -> list[str]:
             r"(?i)\b(aging|ageing|alzheimer|parkinson|neurodegener\w*|"
             r"dementia|cognitive|brain\s+aging)\b"
         ],
-        "chemistry": [r"(?i)\b(chem(?:istry|ical)|synthesis|catalyst|molecule|polymer)\b"],
+        "chemistry": [
+            r"(?i)\b(chem(?:istry|ical)|synthesis|catalyst|molecule|polymer)\b"
+        ],
         "materials": [r"(?i)\b(material\w*|alloy|ceramic|composite|polymer|nano\w*)\b"],
         "robotics and ai": [
             r"(?i)\b(robot(?:ic|ics)?|reinforcement\s+learning|autonom(?:ous|y)|"
@@ -583,7 +634,9 @@ def _default_on_scope_title_patterns(journal: str) -> list[str]:
 def _on_scope_title_patterns(journal: str) -> list[re.Pattern]:
     cfg = load_hard_negative_config()
     jcfg = (cfg.get("journals") or {}).get(journal) or {}
-    raw = jcfg.get("on_scope_title_patterns") or _default_on_scope_title_patterns(journal)
+    raw = jcfg.get("on_scope_title_patterns") or _default_on_scope_title_patterns(
+        journal
+    )
     compiled = []
     for p in raw:
         try:
@@ -644,7 +697,9 @@ def sample_example_papers(
         if pool.empty or n <= 0:
             return pool.iloc[0:0]
         jname = journal or (
-            str(pool["journal"].iloc[0]) if "journal" in pool.columns and len(pool) else ""
+            str(pool["journal"].iloc[0])
+            if "journal" in pool.columns and len(pool)
+            else ""
         )
         on_scope_re = _on_scope_title_patterns(jname)
         hn = (
@@ -664,8 +719,7 @@ def sample_example_papers(
         # Communities whose labels share tokens with in-scope communities are less
         # persuasive as "really OOS" examples.
         in_scope_ids = set(
-            int(c)
-            for c in jdf.loc[~jdf["is_oos"], CLUSTER_LEVEL].dropna().unique()
+            int(c) for c in jdf.loc[~jdf["is_oos"], CLUSTER_LEVEL].dropna().unique()
         )
         in_tokens: set[str] = set()
         for cid in in_scope_ids:
@@ -799,9 +853,7 @@ def compute_distance_rescued_clusters(
         return set(), meta
 
     centroids = _community_centroids(jdf, positions)
-    primary_centroids = {
-        c: centroids[c] for c in primary_clusters if c in centroids
-    }
+    primary_centroids = {c: centroids[c] for c in primary_clusters if c in centroids}
     if not primary_centroids:
         return set(), meta
 
@@ -821,17 +873,14 @@ def compute_distance_rescued_clusters(
         else:
             # nearest_primary: distance to own / nearest primary community centroid
             dmin = min(
-                float(np.hypot(x - cx, y - cy))
-                for cx, cy in primary_centroids.values()
+                float(np.hypot(x - cx, y - cy)) for cx, cy in primary_centroids.values()
             )
             primary_paper_dists.append(dmin)
 
     if not primary_paper_dists:
         return set(), meta
 
-    base_radius = float(
-        np.percentile(primary_paper_dists, SCOPE_DISTANCE_PERCENTILE)
-    )
+    base_radius = float(np.percentile(primary_paper_dists, SCOPE_DISTANCE_PERCENTILE))
     # Avoid a degenerate zero threshold when all primary papers sit on centroids
     if base_radius < 1e-6:
         base_radius = float(np.max(primary_paper_dists) or 0.05)
@@ -947,7 +996,7 @@ def _borderline_cache_path() -> Path:
     name = SCOPE_LLM_BORDERLINE_CACHE
     path = Path(name)
     if not path.is_absolute():
-        path = CWTS_DIR / name
+        path = CACHE_DIR / name
     # Namespace by run + cluster level so caches don't cross runs
     if RUN_TIMESTAMP and "scope_llm_borderline" in path.name:
         stem = path.stem
@@ -959,7 +1008,9 @@ def _call_openai_borderline(user_prompt: str) -> str:
     _load_dotenv_openai()
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
-        raise RuntimeError("OPENAI_API_KEY is not set (needed for LLM borderline scope)")
+        raise RuntimeError(
+            "OPENAI_API_KEY is not set (needed for LLM borderline scope)"
+        )
 
     body = json.dumps(
         {
@@ -1039,9 +1090,13 @@ def compute_llm_borderline_clusters(
             {
                 "comm_id": cid,
                 "label": label,
-                "long_label": info.get("long_label", label) if isinstance(info, dict) else label,
+                "long_label": (
+                    info.get("long_label", label) if isinstance(info, dict) else label
+                ),
                 "papers_in_journal": int(count),
-                "share_of_journal_pct": round(100.0 * count / n_articles, 2) if n_articles else 0.0,
+                "share_of_journal_pct": (
+                    round(100.0 * count / n_articles, 2) if n_articles else 0.0
+                ),
             }
         )
 
@@ -1050,7 +1105,9 @@ def compute_llm_borderline_clusters(
 
     # Only send communities with a meaningful share (avoid tiny noise)
     candidates_for_llm = [
-        c for c in candidates if c["papers_in_journal"] >= 3 or c["share_of_journal_pct"] >= 0.3
+        c
+        for c in candidates
+        if c["papers_in_journal"] >= 3 or c["share_of_journal_pct"] >= 0.3
     ]
     if not candidates_for_llm:
         candidates_for_llm = candidates[:15]
@@ -1063,11 +1120,11 @@ def compute_llm_borderline_clusters(
                 "comm_id": cid,
                 "label": GPT_LABELS.get(cid, f"Cluster {cid}"),
                 "papers_in_journal": int(counts.get(comm, 0)),
-                "share_of_journal_pct": round(
-                    100.0 * counts.get(comm, 0) / n_articles, 2
-                )
-                if n_articles
-                else 0.0,
+                "share_of_journal_pct": (
+                    round(100.0 * counts.get(comm, 0) / n_articles, 2)
+                    if n_articles
+                    else 0.0
+                ),
             }
         )
 
@@ -1111,7 +1168,9 @@ def compute_llm_borderline_clusters(
         raw = _call_openai_borderline(user_prompt)
         decisions = _parse_borderline_json(raw)
     except Exception as e:
-        log.warning("LLM borderline failed for %s: %s — no borderline applied", journal, e)
+        log.warning(
+            "LLM borderline failed for %s: %s — no borderline applied", journal, e
+        )
         meta["error"] = str(e)
         return set(), meta
 
@@ -1245,7 +1304,11 @@ def apply_hard_negatives(journal: str, jdf: pd.DataFrame) -> tuple[pd.Series, di
 def _risky_primary_ids(journal: str, primary_clusters: set) -> set[int]:
     cfg = load_hard_negative_config()
     jcfg = (cfg.get("journals") or {}).get(journal) or {}
-    labels = jcfg.get("risky_primary_labels") or cfg.get("default_risky_primary_labels") or []
+    labels = (
+        jcfg.get("risky_primary_labels")
+        or cfg.get("default_risky_primary_labels")
+        or []
+    )
     label_set = {str(x).strip().lower() for x in labels}
     risky = set()
     for comm in primary_clusters:
@@ -1260,14 +1323,16 @@ def _paper_llm_cache_path() -> Path:
     name = SCOPE_PAPER_LLM_CACHE
     path = Path(name)
     if not path.is_absolute():
-        path = CWTS_DIR / name
+        path = CACHE_DIR / name
     if RUN_TIMESTAMP and "scope_paper_llm" in path.name:
         stem = path.stem
         path = path.with_name(f"{stem}_{RUN_TIMESTAMP}_{CLUSTER_LEVEL}{path.suffix}")
     return path
 
 
-def _call_openai_chat(system_prompt: str, user_prompt: str, model: str, max_tokens: int = 2000) -> str:
+def _call_openai_chat(
+    system_prompt: str, user_prompt: str, model: str, max_tokens: int = 2000
+) -> str:
     _load_dotenv_openai()
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
@@ -1348,7 +1413,9 @@ def compute_paper_scope_overrides(
 
     candidates = jdf[jdf[CLUSTER_LEVEL].isin(risky)].copy()
     if already_oos_mask is not None:
-        candidates = candidates[~already_oos_mask.reindex(candidates.index).fillna(False)]
+        candidates = candidates[
+            ~already_oos_mask.reindex(candidates.index).fillna(False)
+        ]
     # Only demote papers that would otherwise be treated as in-scope via primary
     candidates = candidates[candidates[CLUSTER_LEVEL].isin(primary_clusters)]
     if candidates.empty:
@@ -1364,8 +1431,11 @@ def compute_paper_scope_overrides(
     )
     cand_re = [re.compile(p) for p in cand_pats]
     if cand_re:
-        sus_mask = candidates["title"].fillna("").astype(str).apply(
-            lambda t: any(r.search(t) for r in cand_re)
+        sus_mask = (
+            candidates["title"]
+            .fillna("")
+            .astype(str)
+            .apply(lambda t: any(r.search(t) for r in cand_re))
         )
         suspicious = candidates[sus_mask]
         if not suspicious.empty:
@@ -1460,7 +1530,9 @@ def compute_paper_scope_overrides(
         for p in batch:
             iid = p["int_id"]
             d = by_id.get(iid, {})
-            verdict = str(d.get("verdict", "in_scope")).strip().lower().replace(" ", "_")
+            verdict = (
+                str(d.get("verdict", "in_scope")).strip().lower().replace(" ", "_")
+            )
             if verdict not in {"in_scope", "out_of_scope"}:
                 verdict = "in_scope"
             reason = str(d.get("reason") or "")[:240]
@@ -1576,7 +1648,10 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                     "enabled": True,
                     "source": "distance",
                     "decisions": dist_meta.get("rescued", []),
-                    **{k: dist_meta.get(k) for k in ("mode", "factor", "percentile", "threshold")},
+                    **{
+                        k: dist_meta.get(k)
+                        for k in ("mode", "factor", "percentile", "threshold")
+                    },
                 }
 
         # Soft in-scope set for OOS%: primary ∪ borderline (borderline is not hard OOS)
@@ -1667,27 +1742,33 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
             ydf = jdf[jdf["pub_year"] == year]
             if len(ydf) >= 10:
                 y_oos = ydf["is_oos"].sum()
-                oos_by_year.append({
-                    "year": int(year),
-                    "articles": int(len(ydf)),
-                    "out_of_scope": int(y_oos),
-                    "out_of_scope_pct": round(y_oos / len(ydf) * 100, 1) if len(ydf) else 0,
-                })
+                oos_by_year.append(
+                    {
+                        "year": int(year),
+                        "articles": int(len(ydf)),
+                        "out_of_scope": int(y_oos),
+                        "out_of_scope_pct": (
+                            round(y_oos / len(ydf) * 100, 1) if len(ydf) else 0
+                        ),
+                    }
+                )
 
         comm_counts = jdf[CLUSTER_LEVEL].value_counts()
         top_comms = []
         for comm, count in comm_counts.head(15).items():
             label = GPT_LABELS.get(int(comm), f"Cluster {comm}")
-            top_comms.append({
-                "comm_id": int(comm),
-                "label": label,
-                "is_primary": comm in primary_clusters,
-                "is_distance_rescued": comm in borderline_clusters,  # legacy alias
-                "is_borderline": comm in borderline_clusters,
-                "is_in_scope": comm in soft_in_scope,
-                "papers_in_comm": int(count),
-                "share_of_journal": round(count / n_articles * 100, 1),
-            })
+            top_comms.append(
+                {
+                    "comm_id": int(comm),
+                    "label": label,
+                    "is_primary": comm in primary_clusters,
+                    "is_distance_rescued": comm in borderline_clusters,  # legacy alias
+                    "is_borderline": comm in borderline_clusters,
+                    "is_in_scope": comm in soft_in_scope,
+                    "papers_in_comm": int(count),
+                    "share_of_journal": round(count / n_articles * 100, 1),
+                }
+            )
 
         scatter = []
         for _, row in jdf.iterrows():
@@ -1700,15 +1781,19 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                     s = 1
                 else:
                     s = 2
-                scatter.append({
-                    "x": round(x, 4),
-                    "y": round(y, 4),
-                    "c": int(row[CLUSTER_LEVEL]),
-                    "t": str(row["title"] or "")[:50],
-                    "i": int(row["int_id"]),
-                    "s": s,
-                    "yr": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
-                })
+                scatter.append(
+                    {
+                        "x": round(x, 4),
+                        "y": round(y, 4),
+                        "c": int(row[CLUSTER_LEVEL]),
+                        "t": str(row["title"] or "")[:50],
+                        "i": int(row["int_id"]),
+                        "s": s,
+                        "yr": (
+                            int(row["pub_year"]) if pd.notna(row["pub_year"]) else None
+                        ),
+                    }
+                )
 
         # Prefer 2026 titles when available; fall back to more recent years.
         # OOS examples prefer clear/hard-negative demotions, then off-topic titles.
@@ -1718,33 +1803,37 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
         primary_shift = compute_primary_shift(jdf, baseline_year=2020)
 
         borderline_ids = [int(c) for c in sorted(borderline_clusters, key=int)]
-        journals_data.append({
-            "name": journal,
-            "articles": n_articles,
-            "out_of_scope": int(n_oos),
-            "out_of_scope_pct": round(oos_pct, 1),
-            "n_primary_clusters": len(primary_clusters),
-            "n_borderline_clusters": len(borderline_clusters),
-            "n_borderline_papers": n_borderline_papers,
-            "n_hard_negative_papers": n_hard_neg,
-            "n_paper_demoted": n_paper_demoted,
-            "n_distance_rescued_clusters": len(borderline_clusters),  # legacy
-            "n_distance_rescued_papers": n_borderline_papers,  # legacy
-            "primary_coverage_pct": round(PRIMARY_COVERAGE * 100, 1),
-            "in_scope_cluster_ids": [int(c) for c in sorted(soft_in_scope, key=int)],
-            "borderline_cluster_ids": borderline_ids,
-            "distance_rescued_cluster_ids": borderline_ids,  # legacy alias for GT map
-            "scope_borderline": border_meta,
-            "scope_distance": dist_meta,
-            "scope_hard_negatives": hn_meta,
-            "scope_paper_llm": paper_meta,
-            "paper_scope_overrides": paper_overrides,
-            "top_communities": top_comms,
-            "oos_by_year": oos_by_year,
-            "primary_shift": primary_shift,
-            "example_papers": example_papers,
-            "scatter": scatter,
-        })
+        journals_data.append(
+            {
+                "name": journal,
+                "articles": n_articles,
+                "out_of_scope": int(n_oos),
+                "out_of_scope_pct": round(oos_pct, 1),
+                "n_primary_clusters": len(primary_clusters),
+                "n_borderline_clusters": len(borderline_clusters),
+                "n_borderline_papers": n_borderline_papers,
+                "n_hard_negative_papers": n_hard_neg,
+                "n_paper_demoted": n_paper_demoted,
+                "n_distance_rescued_clusters": len(borderline_clusters),  # legacy
+                "n_distance_rescued_papers": n_borderline_papers,  # legacy
+                "primary_coverage_pct": round(PRIMARY_COVERAGE * 100, 1),
+                "in_scope_cluster_ids": [
+                    int(c) for c in sorted(soft_in_scope, key=int)
+                ],
+                "borderline_cluster_ids": borderline_ids,
+                "distance_rescued_cluster_ids": borderline_ids,  # legacy alias for GT map
+                "scope_borderline": border_meta,
+                "scope_distance": dist_meta,
+                "scope_hard_negatives": hn_meta,
+                "scope_paper_llm": paper_meta,
+                "paper_scope_overrides": paper_overrides,
+                "top_communities": top_comms,
+                "oos_by_year": oos_by_year,
+                "primary_shift": primary_shift,
+                "example_papers": example_papers,
+                "scatter": scatter,
+            }
+        )
 
     if scope_rows:
         write_paper_scope_to_bq(pd.concat(scope_rows, ignore_index=True))
@@ -1752,31 +1841,40 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
     return journals_data
 
 
-def compute_community_stats_scope(df: pd.DataFrame, df_all: pd.DataFrame = None) -> list:
+def compute_community_stats_scope(
+    df: pd.DataFrame, df_all: pd.DataFrame = None
+) -> list:
     """Compute statistics for each community (scope dashboard version).
-    
+
     Args:
         df: DataFrame with only target Frontiers journals
         df_all: DataFrame with ALL papers (including external) for true cluster sizes
     """
     communities = []
-    
+
     # Get clusters that have papers from our target journals
     target_clusters = df[CLUSTER_LEVEL].unique()
-    
+
     # Use all papers if available, otherwise just use df
     if df_all is not None:
         # Get total size of each cluster (all papers)
-        all_comm_counts = df_all.groupby(CLUSTER_LEVEL).agg(
-            total_size=("int_id", "count"),
-            frontiers_count=("is_frontiers", "sum")
-        ).reset_index()
-        all_comm_counts = all_comm_counts[all_comm_counts[CLUSTER_LEVEL].isin(target_clusters)]
+        all_comm_counts = (
+            df_all.groupby(CLUSTER_LEVEL)
+            .agg(
+                total_size=("int_id", "count"), frontiers_count=("is_frontiers", "sum")
+            )
+            .reset_index()
+        )
+        all_comm_counts = all_comm_counts[
+            all_comm_counts[CLUSTER_LEVEL].isin(target_clusters)
+        ]
     else:
         all_comm_counts = None
 
     # Get Frontiers journal breakdown per cluster
-    frontiers_comm_counts = df.groupby(CLUSTER_LEVEL).agg(size=("int_id", "count")).reset_index()
+    frontiers_comm_counts = (
+        df.groupby(CLUSTER_LEVEL).agg(size=("int_id", "count")).reset_index()
+    )
 
     for _, row in frontiers_comm_counts.nlargest(100, "size").iterrows():
         comm_id = row[CLUSTER_LEVEL]
@@ -1803,14 +1901,28 @@ def compute_community_stats_scope(df: pd.DataFrame, df_all: pd.DataFrame = None)
             cluster_all = df_all[df_all[CLUSTER_LEVEL] == comm_id]
             if len(cluster_all) > 0:
                 all_journal_counts = cluster_all["journal"].value_counts()
-                true_dominant_journal = all_journal_counts.index[0] if len(all_journal_counts) else "Unknown"
-                true_dominant_pct = round(all_journal_counts.iloc[0] / total_size * 100, 1) if len(all_journal_counts) else 0
+                true_dominant_journal = (
+                    all_journal_counts.index[0]
+                    if len(all_journal_counts)
+                    else "Unknown"
+                )
+                true_dominant_pct = (
+                    round(all_journal_counts.iloc[0] / total_size * 100, 1)
+                    if len(all_journal_counts)
+                    else 0
+                )
 
         # Top Frontiers journal (among our target journals)
         journal_counts = cdf["journal"].value_counts()
-        top_frontiers_journal = journal_counts.index[0] if len(journal_counts) else "Unknown"
+        top_frontiers_journal = (
+            journal_counts.index[0] if len(journal_counts) else "Unknown"
+        )
         # Calculate percentages relative to TOTAL cluster size, not just Frontiers subset
-        top_frontiers_pct = round(journal_counts.iloc[0] / total_size * 100, 2) if len(journal_counts) else 0
+        top_frontiers_pct = (
+            round(journal_counts.iloc[0] / total_size * 100, 2)
+            if len(journal_counts)
+            else 0
+        )
 
         top_journals = [
             {"name": j, "count": int(c), "pct": round(c / total_size * 100, 2)}
@@ -1824,22 +1936,24 @@ def compute_community_stats_scope(df: pd.DataFrame, df_all: pd.DataFrame = None)
         if not isinstance(keywords, list):
             keywords = []
         summary = str(info.get("summary") or "").strip()
-        communities.append({
-            "id": int(comm_id),
-            "label": label,
-            "long_label": long_label,
-            "keywords": [str(k) for k in keywords],
-            "summary": summary,
-            "description": summary or long_label,
-            "size": int(total_size),  # Total cluster size
-            "frontiers_size": frontiers_size,  # Just our target journals
-            "frontiers_pct": frontiers_pct,
-            "true_dominant_journal": true_dominant_journal,
-            "true_dominant_pct": true_dominant_pct,
-            "top_frontiers_journal": top_frontiers_journal,
-            "top_frontiers_pct": top_frontiers_pct,
-            "top_journals": top_journals,
-        })
+        communities.append(
+            {
+                "id": int(comm_id),
+                "label": label,
+                "long_label": long_label,
+                "keywords": [str(k) for k in keywords],
+                "summary": summary,
+                "description": summary or long_label,
+                "size": int(total_size),  # Total cluster size
+                "frontiers_size": frontiers_size,  # Just our target journals
+                "frontiers_pct": frontiers_pct,
+                "true_dominant_journal": true_dominant_journal,
+                "true_dominant_pct": true_dominant_pct,
+                "top_frontiers_journal": top_frontiers_journal,
+                "top_frontiers_pct": top_frontiers_pct,
+                "top_journals": top_journals,
+            }
+        )
 
     # Sort by total size descending
     communities.sort(key=lambda x: x["size"], reverse=True)
@@ -1987,7 +2101,12 @@ __RENDER_SCRIPT__
 """
 
 
-def build_scope_dashboard(df: pd.DataFrame, df_cit: pd.DataFrame, run_metadata: dict = None, df_all: pd.DataFrame = None) -> dict:
+def build_scope_dashboard(
+    df: pd.DataFrame,
+    df_cit: pd.DataFrame,
+    run_metadata: dict = None,
+    df_all: pd.DataFrame = None,
+) -> dict:
     """Build scope_dashboard.html. Returns scope data for Network Maps / Paper Examples."""
     log.info("=" * 60)
     log.info("Building Scope Dashboard")
@@ -2000,7 +2119,9 @@ def build_scope_dashboard(df: pd.DataFrame, df_cit: pd.DataFrame, run_metadata: 
     log.info("[2/4] Computing journal statistics …")
     journals = compute_journal_stats(df, positions)
     for j in journals:
-        log.info(f"       {j['name']}: {j['articles']:,} papers, {j['out_of_scope_pct']:.1f}% OOS")
+        log.info(
+            f"       {j['name']}: {j['articles']:,} papers, {j['out_of_scope_pct']:.1f}% OOS"
+        )
 
     log.info("[3/4] Computing community statistics …")
     communities = compute_community_stats_scope(df, df_all)
@@ -2061,7 +2182,9 @@ def compute_entropy_val(dist: pd.Series) -> float:
     return float(entropy(dist.values, base=2))
 
 
-def compute_new_community_fraction(current_dist: pd.Series, baseline_clusters: set) -> float:
+def compute_new_community_fraction(
+    current_dist: pd.Series, baseline_clusters: set
+) -> float:
     """Fraction of papers in clusters not present in baseline."""
     new_clusters = set(current_dist.index) - baseline_clusters
     return float(sum(current_dist.get(c, 0) for c in new_clusters))
@@ -2126,7 +2249,9 @@ def compute_drift_metrics(df: pd.DataFrame) -> dict:
             yearly_entropy_delta.append(round(entropy_delta, 4))
             yearly_articles.append(int(len(ydf)))
 
-            heatmap.append({"Journal": journal, "Year": int(year), "JSD": round(jsd, 4)})
+            heatmap.append(
+                {"Journal": journal, "Year": int(year), "JSD": round(jsd, 4)}
+            )
 
         if not yearly_years:
             continue
@@ -2144,16 +2269,20 @@ def compute_drift_metrics(df: pd.DataFrame) -> dict:
         latest_df = jdf[jdf["pub_year"] == latest_year]
         latest_dist = get_cluster_distribution(latest_df)
 
-        summary.append({
-            "Journal": journal,
-            "Year": latest_year,
-            "JSD": yearly_jsd[latest_idx],
-            "NewCommunityFrac": round(yearly_new_comm[latest_idx] / 100, 4),
-            "Top5Jaccard": round(compute_top5_jaccard(baseline_dist, latest_dist), 4),
-            "Entropy": round(compute_entropy_val(latest_dist), 4),
-            "EntropyDelta": yearly_entropy_delta[latest_idx],
-            "ArticleCount": yearly_articles[latest_idx],
-        })
+        summary.append(
+            {
+                "Journal": journal,
+                "Year": latest_year,
+                "JSD": yearly_jsd[latest_idx],
+                "NewCommunityFrac": round(yearly_new_comm[latest_idx] / 100, 4),
+                "Top5Jaccard": round(
+                    compute_top5_jaccard(baseline_dist, latest_dist), 4
+                ),
+                "Entropy": round(compute_entropy_val(latest_dist), 4),
+                "EntropyDelta": yearly_entropy_delta[latest_idx],
+                "ArticleCount": yearly_articles[latest_idx],
+            }
+        )
 
         log.info(f"       {journal}: JSD={yearly_jsd[-1]:.3f}")
 
@@ -2185,13 +2314,15 @@ def compute_community_stats_drift(df: pd.DataFrame) -> list:
             journals_dict[j] = float(journal_pcts[j])
 
         label = GPT_LABELS.get(int(cluster_id), f"Cluster {cluster_id}")
-        communities.append({
-            "id": int(cluster_id),
-            "label": label,
-            "size": int(size),
-            "journals": journals_dict,
-            "dominant": journal_counts.index[0] if len(journal_counts) > 0 else "",
-        })
+        communities.append(
+            {
+                "id": int(cluster_id),
+                "label": label,
+                "size": int(size),
+                "journals": journals_dict,
+                "dominant": journal_counts.index[0] if len(journal_counts) > 0 else "",
+            }
+        )
 
     return communities
 
@@ -2227,7 +2358,9 @@ def build_drift_dashboard(df: pd.DataFrame, run_metadata: dict = None) -> None:
             "n_journals": len(JOURNALS),
             "n_nodes": int(len(df)),
             "n_edges": 0,
-            "year_range": f"{min(heatmap_years)}–{max(heatmap_years)}" if heatmap_years else "",
+            "year_range": (
+                f"{min(heatmap_years)}–{max(heatmap_years)}" if heatmap_years else ""
+            ),
         },
     }
 
@@ -2391,7 +2524,11 @@ def build_cluster_profiles(df: pd.DataFrame) -> dict:
 
             journal_counts = cdf["journal"].value_counts()
             dominant = journal_counts.index[0] if len(journal_counts) > 0 else "Unknown"
-            dominant_pct = round(journal_counts.iloc[0] / size * 100, 1) if len(journal_counts) > 0 else 0
+            dominant_pct = (
+                round(journal_counts.iloc[0] / size * 100, 1)
+                if len(journal_counts) > 0
+                else 0
+            )
 
             journals_dict = {}
             for j, c in journal_counts.items():
@@ -2406,14 +2543,24 @@ def build_cluster_profiles(df: pd.DataFrame) -> dict:
 
             # Sample example papers for this cluster
             sample_size = min(5, len(cdf))
-            sample_df = cdf.sample(n=sample_size, random_state=42) if sample_size > 0 else cdf.head(0)
+            sample_df = (
+                cdf.sample(n=sample_size, random_state=42)
+                if sample_size > 0
+                else cdf.head(0)
+            )
             example_papers = []
             for _, paper in sample_df.iterrows():
-                example_papers.append({
-                    "title": str(paper["title"] or "Untitled")[:150],
-                    "year": int(paper["pub_year"]) if pd.notna(paper["pub_year"]) else None,
-                    "journal": str(paper["journal"]).replace("Frontiers in ", ""),
-                })
+                example_papers.append(
+                    {
+                        "title": str(paper["title"] or "Untitled")[:150],
+                        "year": (
+                            int(paper["pub_year"])
+                            if pd.notna(paper["pub_year"])
+                            else None
+                        ),
+                        "journal": str(paper["journal"]).replace("Frontiers in ", ""),
+                    }
+                )
 
             profile = {
                 "id": int(cluster_id),
@@ -3780,15 +3927,19 @@ def combine_dashboards() -> None:
     for i, (filename, label, path) in enumerate(existing):
         active = "active" if i == 0 else ""
         relative_path = f"{filename}.html"
-        tab_contents.append(f'''
+        tab_contents.append(
+            f"""
 <div id="tab-{filename}" class="tab-content {active}">
   <iframe data-src="{relative_path}" title="{label}"></iframe>
-</div>''')
+</div>"""
+        )
 
     meta_parts = []
     if RUN_TIMESTAMP:
         meta_parts.append(f"Run: {RUN_TIMESTAMP}")
-    meta_parts.append(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    meta_parts.append(
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+    )
     meta_parts.append(f"{len(existing)} dashboards")
     meta_info = " · ".join(meta_parts)
 
@@ -3852,7 +4003,9 @@ def main():
     log.info("\n[LOAD] Loading ALL papers for community composition …")
     df_all = load_all_papers()
     log.info(f"       {len(df_all):,} total papers in network")
-    log.info(f"       {df_all['is_frontiers'].sum():,} Frontiers papers ({df_all['is_frontiers'].mean()*100:.1f}%)")
+    log.info(
+        f"       {df_all['is_frontiers'].sum():,} Frontiers papers ({df_all['is_frontiers'].mean()*100:.1f}%)"
+    )
 
     log.info("\n[LOAD] Loading citations from BigQuery …")
     df_cit = load_citations()
