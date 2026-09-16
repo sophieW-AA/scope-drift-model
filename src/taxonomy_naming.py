@@ -116,8 +116,15 @@ pandas_gbq.context.location = BQ_LOCATION
 CLUSTER_LEVELS = ("micro", "meso", "macro")
 CLUSTER_LEVEL = "macro"  # current level while a run is in progress
 
-# Sample size per cluster (None = use all papers, set to 300 for memory efficiency)
-SAMPLE_SIZE_PER_CLUSTER = 300
+# Per-cluster sample for the taxonomy join, applied inside BigQuery so it bounds
+# the join rather than local memory. The sample scales with the cluster: a flat
+# cap gave a 208k-paper meso community the same 300 papers of evidence as a 2k
+# one, so the largest units — the ones proposed as journals — were named from the
+# thinnest sample. The floor still applies to small clusters, where a fraction
+# would leave too few papers to rank topics at all.
+SAMPLE_MIN_PER_CLUSTER = 300
+SAMPLE_MAX_PER_CLUSTER = 5_000
+SAMPLE_FRACTION = 0.02
 
 # Scope thresholds
 SCOPE_ABS_FLOORS = {"micro": 2, "small": 3, "medium": 5, "large": 10, "mega": 15}
@@ -127,6 +134,13 @@ SCOPE_PCT_FLOOR = 0.005
 L1_DEPTH_FULL = 0.35
 L1_DEPTH_PARTIAL = 0.10
 L1_ARTICLE_SHARE_FLOOR = 0.010
+
+# L2 topics kept per community. The taxonomy has ~27.5k L2 terms under 987 L1
+# terms, so the L1 name alone is reused across many clusters ("Cardiology"
+# lands on 25 separate micro clusters). L2 is the level at which a topic is
+# specific enough to launch against, so it is retained rather than aggregated
+# away.
+TOP_L2_TOPICS = 8
 
 # LLM settings
 LLM_MODEL = "gpt-4o"
@@ -140,7 +154,6 @@ RUN_DATE = date.today().isoformat()
 # GLOBAL STATE (populated by load functions)
 # ══════════════════════════════════════════════════════════════════════════════
 bq = None
-bq_src = None
 oai = None
 
 df_l2_map = None
@@ -155,9 +168,9 @@ l2c_meta = {}
 l2_to_clusters = {}
 
 community_names = {}
-community_pubs = {}
 profiles = {}
 df_scope = None
+df_l2_raw = None
 df_l1_sig = None
 df_clusters_agg = None
 df_l0_agg = None
@@ -169,10 +182,9 @@ briefs = {}
 # ══════════════════════════════════════════════════════════════════════════════
 def init_clients():
     """Initialize BigQuery and OpenAI clients."""
-    global bq, bq_src, oai
+    global bq, oai
     log.info("Initializing clients...")
     bq = bigquery.Client(project=PROJECT_BILL)
-    bq_src = bigquery.Client(project=BQ_SRC_PROJECT)
     api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GPT4_OPENAI_KEY")
     if not api_key:
         raise RuntimeError("Set OPENAI_API_KEY environment variable")
@@ -183,71 +195,93 @@ def init_clients():
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. LOAD CWTS COMMUNITIES
 # ══════════════════════════════════════════════════════════════════════════════
-def fetch_classification_papers() -> pd.DataFrame:
-    """Load classification + metadata once (all three cluster columns)."""
-    log.info("Loading CWTS data from BigQuery...")
-    df = bq_src.query(
-        f"""
+def _check_level(level: str) -> str:
+    """Guard the level name: it is interpolated into SQL as a column identifier."""
+    if level not in CLUSTER_LEVELS:
+        raise ValueError(f"Unknown cluster level {level!r}; expected {CLUSTER_LEVELS}")
+    return level
+
+
+def _sample_cap_sql() -> str:
+    """Per-cluster sample size, as SQL evaluated against `ranked.n_cluster`."""
+    if not SAMPLE_FRACTION:
+        return str(int(SAMPLE_MAX_PER_CLUSTER))
+    return (
+        f"GREATEST({int(SAMPLE_MIN_PER_CLUSTER)}, "
+        f"LEAST({int(SAMPLE_MAX_PER_CLUSTER)}, "
+        f"CAST(CEIL(n_cluster * {float(SAMPLE_FRACTION)}) AS INT64)))"
+    )
+
+
+def _ranked_cte(level: str) -> str:
+    """Rank every paper within its cluster by a stable hash, so the sample below
+    is reproducible across runs without ordering the whole table."""
+    _check_level(level)
+    return f"""
+    ranked AS (
         SELECT
-            c.int_id, c.micro, c.meso, c.macro,
-            m.pub_id, m.is_frontiers, m.journal, m.date, m.title
+            CAST(c.{level} AS INT64) AS community_id,
+            CAST(m.pub_id AS INT64) AS pub_id,
+            ROW_NUMBER() OVER (
+                PARTITION BY c.{level}
+                ORDER BY FARM_FINGERPRINT(CAST(m.pub_id AS STRING))
+            ) AS rn,
+            COUNT(*) OVER (PARTITION BY c.{level}) AS n_cluster
         FROM `{TBL_CLASSIF}` c
         JOIN `{TBL_PUB_META}` m ON c.int_id = m.int_id
+        WHERE c.{level} IS NOT NULL
+    )"""
+
+
+def _sampled_cte(level: str) -> str:
+    """`ranked`, plus the capped per-cluster sample the taxonomy joins run against."""
+    return f"""{_ranked_cte(level)},
+    sampled AS (
+        SELECT community_id, pub_id FROM ranked WHERE rn <= {_sample_cap_sql()}
+    )"""
+
+
+def load_level_communities(level: str) -> dict:
+    """Cluster ids and paper counts for one CWTS level.
+
+    n_articles_total is the real cluster size; n_sampled is how many of those
+    papers the taxonomy and publication-year joins actually see.
+    """
+    global community_names, CLUSTER_LEVEL
+
+    CLUSTER_LEVEL = _check_level(level)
+    log.info("Loading %s cluster sizes from BigQuery...", level)
+
+    n_sampled = f"COUNTIF(rn <= {_sample_cap_sql()})"
+    df = bq.query(
+        f"""
+        WITH {_ranked_cte(level)}
+        SELECT
+            community_id,
+            COUNT(*) AS n_articles_total,
+            {n_sampled} AS n_sampled
+        FROM ranked
+        GROUP BY community_id
+        ORDER BY community_id
     """
     ).to_dataframe()
-    log.info("Loaded %d papers from BigQuery", len(df))
-    return df
 
-
-def group_communities(df: pd.DataFrame, level: str) -> dict:
-    """Group papers by CWTS cluster id at this level. cluster_id == classification.{level}."""
-    global community_names, community_pubs, CLUSTER_LEVEL
-    import random
-
-    CLUSTER_LEVEL = level
-    if level not in df.columns:
-        raise ValueError(f"No column {level!r} in classification papers")
-
-    g = df.dropna(subset=[level]).groupby(level)["pub_id"].apply(list)
-    communities_full = {int(k): list(v) for k, v in g.items()}
-    if SAMPLE_SIZE_PER_CLUSTER:
-        log.info(
-            "Sampling up to %d papers per %s cluster...",
-            SAMPLE_SIZE_PER_CLUSTER,
-            level,
-        )
-        random.seed(42)
-        communities = {}
-        for k, pubs in communities_full.items():
-            if len(pubs) > SAMPLE_SIZE_PER_CLUSTER:
-                communities[k] = random.sample(pubs, SAMPLE_SIZE_PER_CLUSTER)
-            else:
-                communities[k] = pubs
-    else:
-        communities = communities_full
-
-    community_ids = sorted(communities)
+    community_ids = [int(c) for c in df["community_id"]]
     community_names = {cid: f"Cluster {cid}" for cid in community_ids}
-    community_pubs = {cid: communities[cid] for cid in community_ids}
-    all_pub_ids = [int(pid) for pubs in community_pubs.values() for pid in pubs]
-    pub_to_comm = {pid: cid for cid, pubs in community_pubs.items() for pid in pubs}
-
-    log.info(
-        "%s communities: %d | publications (sampled): %d",
-        level,
-        len(community_ids),
-        len(all_pub_ids),
-    )
-    return {
-        "community_ids": community_ids,
-        "all_pub_ids": all_pub_ids,
-        "pub_to_comm": pub_to_comm,
+    totals = {
+        int(r.community_id): (int(r.n_articles_total), int(r.n_sampled))
+        for r in df.itertuples()
     }
 
-
-def load_communities() -> dict:
-    """Back-compat: load papers and group by the current CLUSTER_LEVEL."""
-    return group_communities(fetch_classification_papers(), CLUSTER_LEVEL)
+    log.info(
+        "%s communities: %d | papers: %d | sampled: %d (largest cluster sample %d)",
+        level,
+        len(community_ids),
+        int(df["n_articles_total"].sum()) if len(df) else 0,
+        int(df["n_sampled"].sum()) if len(df) else 0,
+        int(df["n_sampled"].max()) if len(df) else 0,
+    )
+    return {"community_ids": community_ids, "totals": totals}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -374,48 +408,37 @@ def load_taxonomy():
 # ══════════════════════════════════════════════════════════════════════════════
 # 4. PULL TAXONOMY SCORES
 # ══════════════════════════════════════════════════════════════════════════════
-def pull_taxonomy_scores(all_pub_ids: list, pub_to_comm: dict) -> pd.DataFrame:
-    """Pull L2 taxonomy scores for all community publications."""
-    log.info("Pulling taxonomy scores for %d publications...", len(all_pub_ids))
+def pull_taxonomy_scores(level: str) -> pd.DataFrame:
+    """Aggregate distinct papers per (cluster, L2) in BigQuery.
 
-    df_scores_raw = bq.query(
+    The sample, the score join and the count all happen server-side, so only the
+    aggregate comes back rather than one row per paper.
+    """
+    log.info("Aggregating %s taxonomy scores in BigQuery...", level)
+
+    df_l2_counts = bq.query(
         f"""
+        WITH {_sampled_cte(level)}
         SELECT
-            CAST(t.publication_id AS INT64) AS publication_id,
+            s.community_id,
             t.taxref AS l2_key,
-            l2.l2_name
-        FROM `{TBL_SCORES}` t
-        JOIN `{TBL_L2_CLUS}` l2 ON t.taxref = l2.l2_taxref
+            COUNT(DISTINCT s.pub_id) AS n_articles
+        FROM sampled s
+        JOIN `{TBL_SCORES}` t
+            ON CAST(t.publication_id AS INT64) = s.pub_id
+        JOIN `{TBL_L2_CLUS}` l2
+            ON t.taxref = l2.l2_taxref
         WHERE t.level = 2
           AND t.in_top_k = TRUE
           AND t.is_weak_match = FALSE
-          AND CAST(t.publication_id AS INT64) IN UNNEST(@pub_ids)
-    """,
-        job_config=bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)
-            ]
-        ),
+        GROUP BY community_id, l2_key
+    """
     ).to_dataframe()
 
     log.info(
-        "Score rows: %d | Unique pubs matched: %d / %d",
-        len(df_scores_raw),
-        df_scores_raw["publication_id"].nunique(),
-        len(all_pub_ids),
-    )
-
-    # Map to community
-    df_scores_raw["community_id"] = df_scores_raw["publication_id"].map(pub_to_comm)
-    df_scores_raw = df_scores_raw.dropna(subset=["community_id"])
-    df_scores_raw["community_id"] = df_scores_raw["community_id"].astype(int)
-
-    # Aggregate to (community, L2)
-    df_l2_counts = (
-        df_scores_raw.groupby(["community_id", "l2_key"])["publication_id"]
-        .nunique()
-        .reset_index()
-        .rename(columns={"publication_id": "n_articles"})
+        "(community, L2) pairs: %d | clusters with scores: %d",
+        len(df_l2_counts),
+        df_l2_counts["community_id"].nunique() if len(df_l2_counts) else 0,
     )
 
     # Merge taxonomy hierarchy
@@ -437,34 +460,43 @@ def pull_taxonomy_scores(all_pub_ids: list, pub_to_comm: dict) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════
 # 5. BUILD PROFILES AND SCOPE FILTER
 # ══════════════════════════════════════════════════════════════════════════════
-def build_profiles(community_ids: list, all_pub_ids: list, pub_to_comm: dict):
+def fetch_pub_year_counts(level: str) -> pd.DataFrame:
+    """Papers per (cluster, publication year), aggregated in BigQuery."""
+    log.info("Aggregating %s publication years in BigQuery...", level)
+
+    df = bq.query(
+        f"""
+        WITH {_sampled_cte(level)}
+        SELECT
+            s.community_id,
+            p.PublishedYear AS pub_year,
+            COUNT(DISTINCT s.pub_id) AS n_articles
+        FROM sampled s
+        JOIN `{TBL_PUB}` p
+            ON CAST(p.PublicationId AS INT64) = s.pub_id
+        WHERE p.PublishedYear IS NOT NULL
+        GROUP BY community_id, pub_year
+    """
+    ).to_dataframe()
+
+    log.info("(community, year) pairs: %d", len(df))
+    return df
+
+
+def build_profiles(community_ids: list, df_pub_years: pd.DataFrame, totals: dict):
     """Build community profiles and compute in-scope L2 filter."""
     global profiles
 
     log.info("Building community profiles...")
     current_year = date.today().year
 
-    # Pull publication years
-    df_pub_years = bq.query(
-        f"""
-        SELECT CAST(p.PublicationId AS INT64) AS publication_id, p.PublishedYear AS pub_year
-        FROM `{TBL_PUB}` p
-        WHERE CAST(p.PublicationId AS INT64) IN UNNEST(@pub_ids)
-          AND p.PublishedYear IS NOT NULL
-    """,
-        job_config=bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ArrayQueryParameter("pub_ids", "INT64", all_pub_ids)
-            ]
-        ),
-    ).to_dataframe()
-
-    df_pub_years["community_id"] = df_pub_years["publication_id"].map(pub_to_comm)
-    df_pub_years = df_pub_years.dropna(subset=["community_id"])
-    df_pub_years["community_id"] = df_pub_years["community_id"].astype(int)
+    years_by_comm = {
+        int(cid): grp.sort_values("pub_year")
+        for cid, grp in df_pub_years.groupby("community_id")
+    }
 
     for cid in community_ids:
-        total = len(community_pubs[cid])
+        total, n_sampled = totals.get(cid, (0, 0))
 
         # Size class
         if total < 50:
@@ -479,16 +511,10 @@ def build_profiles(community_ids: list, all_pub_ids: list, pub_to_comm: dict):
             size_class = "mega"
 
         # Age and growth
-        yr_grp = (
-            df_pub_years[df_pub_years["community_id"] == cid]
-            .groupby("pub_year")["publication_id"]
-            .count()
-            .rename("n_articles")
-            .reset_index()
-            .sort_values("pub_year")
-        )
+        yr_grp = years_by_comm.get(cid)
 
-        if not yr_grp.empty:
+        if yr_grp is not None and not yr_grp.empty:
+            yr_grp = yr_grp.copy()
             yr_grp["cumpct"] = (
                 yr_grp["n_articles"].cumsum() / yr_grp["n_articles"].sum()
             )
@@ -524,6 +550,7 @@ def build_profiles(community_ids: list, all_pub_ids: list, pub_to_comm: dict):
         profiles[cid] = {
             "community_id": cid,
             "n_articles": total,
+            "n_sampled": n_sampled,
             "effective_start": effective_start,
             "age_years": age,
             "growth_ratio": round(growth_ratio, 2),
@@ -543,8 +570,9 @@ def mark_in_scope(df: pd.DataFrame) -> pd.DataFrame:
             profiles.get(cid, {}).get("size_class", "medium"), 5
         )
     )
+    # Denominator is the sampled count, matching the numerator's population.
     total_arts = df["community_id"].map(
-        lambda cid: profiles.get(cid, {}).get("n_articles", 1)
+        lambda cid: profiles.get(cid, {}).get("n_sampled") or 1
     )
     df["pct"] = df["n_articles"] / total_arts
     df["in_scope"] = (df["n_articles"] >= abs_floors) | (df["pct"] >= SCOPE_PCT_FLOOR)
@@ -556,9 +584,14 @@ def mark_in_scope(df: pd.DataFrame) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════
 def aggregate_to_higher_levels(df_l2_counts: pd.DataFrame):
     """Aggregate L2 counts to L1, L1-cluster, and L0 levels."""
-    global df_scope, df_l1_sig, df_clusters_agg, df_l0_agg
+    global df_scope, df_l1_sig, df_clusters_agg, df_l0_agg, df_l2_raw
 
     log.info("Aggregating to higher levels...")
+
+    # Kept unfiltered for the naming rollup: the in-scope filter drops the long
+    # tail of small L2 terms, which is exactly the mass a unit name should be
+    # aggregating rather than discarding.
+    df_l2_raw = df_l2_counts.copy()
 
     # Apply in-scope filter
     df_scope = mark_in_scope(df_l2_counts)
@@ -1299,6 +1332,202 @@ def export_dashboard_labels(df_out: pd.DataFrame, cluster_level: str) -> pd.Data
     return out
 
 
+def build_l1_rollup(cluster_level: str) -> pd.DataFrame:
+    """Each community's leading L1 parent, aggregated over every L2 row it has.
+
+    A community's leading L2 terms are a poor name for it: at meso the top three
+    cover a median 12% of the cluster, and rank 1 typically beats rank 4 by a
+    handful of articles, so the name is an argmax over a long tail and moves if
+    the sample moves. Rolling the same evidence up to the L1 parent aggregates
+    that tail instead of picking from it, which is both broader and far more
+    stable — the name stops claiming a specificity the counts do not support.
+
+    Returns one row per community with the top L1 (and its L0 parent), the share
+    of the community's L2 mass it accounts for, and how far clear of the runner
+    up it sits.
+    """
+    if df_l2_raw is None or df_l2_raw.empty:
+        log.warning("No L2 counts for %s — skipping L1 rollup", cluster_level)
+        return pd.DataFrame()
+
+    cols = ["community_id", "l1_taxref", "l1_name", "l0_taxref", "l0_name"]
+    agg = (
+        df_l2_raw.groupby(cols, dropna=False)["n_articles"].sum().reset_index()
+    )
+    totals = agg.groupby("community_id")["n_articles"].transform("sum")
+    agg["l1_roll_share"] = (agg["n_articles"] / totals.where(totals > 0, 1)).round(4)
+    # l1_taxref breaks ties so repeated runs resolve identically
+    agg = agg.sort_values(
+        ["community_id", "n_articles", "l1_taxref"], ascending=[True, False, True]
+    )
+    agg["rank"] = agg.groupby("community_id").cumcount() + 1
+
+    top = agg[agg["rank"] == 1].set_index("community_id")
+    second = agg[agg["rank"] == 2].set_index("community_id")["l1_roll_share"]
+    out = top.reset_index()[
+        ["community_id", "l1_taxref", "l1_name", "l0_taxref", "l0_name", "l1_roll_share"]
+    ].rename(
+        columns={
+            "l1_taxref": "l1_roll_taxref",
+            "l1_name": "l1_roll_name",
+            "l0_taxref": "l0_roll_taxref",
+            "l0_name": "l0_roll_name",
+        }
+    )
+    out["l1_roll_margin"] = (
+        out["l1_roll_share"]
+        - out["community_id"].map(second).fillna(0.0)
+    ).round(4)
+    out["l1_roll_n_terms"] = out["community_id"].map(
+        agg.groupby("community_id")["l1_taxref"].nunique()
+    )
+
+    log.info(
+        "L1 rollup for %s: top parent covers a median %.0f%% of the cluster "
+        "(vs %.0f%% for the leading L2 term), across %d communities",
+        cluster_level,
+        out["l1_roll_share"].median() * 100,
+        (
+            df_l2_raw.assign(
+                share=df_l2_raw["n_articles"]
+                / df_l2_raw.groupby("community_id")["n_articles"].transform("sum")
+            )
+            .groupby("community_id")["share"]
+            .max()
+            .median()
+            * 100
+        ),
+        len(out),
+    )
+    return out
+
+
+def _disambiguate(names: pd.Series, qualifiers: pd.Series) -> pd.Series:
+    """Append a qualifier only where the base name repeats across communities.
+
+    L1 names are reused heavily — the taxonomy has 987 L1 terms against ~3k micro
+    communities, so "Cardiology" alone lands on many of them. Where a name is
+    already unique it is left clean; where it collides the leading L2 term is
+    added to say which part of the parent this unit occupies.
+    """
+    base = names.astype(str).str.strip()
+    qual = qualifiers.astype(str).str.strip()
+    duped = base.duplicated(keep=False) & (base != "")
+    out = base.copy()
+    add = duped & (qual != "") & (qual.str.lower() != base.str.lower())
+    out.loc[add] = base[add] + " — " + qual[add]
+    return out
+
+
+def export_l2_topics(cluster_level: str, top_n: int = TOP_L2_TOPICS) -> pd.DataFrame:
+    """Top L2 topics per community, ranked by in-scope article count.
+
+    `df_scope` is the in-scope (community, L2) table that
+    `aggregate_to_higher_levels` rolls up to L1 and then discards. These are the
+    only rows that name a community at launch granularity, so they are kept.
+
+    Each row also carries the community's L1 rollup and the `unit_name` built
+    from it, so downstream consumers get a name backed by the whole cluster
+    rather than by whichever leaf terms happened to top a sample.
+    """
+    if df_scope is None or df_scope.empty:
+        log.warning("No in-scope L2 rows for %s — skipping L2 export", cluster_level)
+        return pd.DataFrame()
+
+    scope = df_scope.rename(columns={"journal_id": "community_id"}).copy()
+    totals = scope.groupby("community_id")["n_articles"].transform("sum")
+    scope["l2_share"] = (scope["n_articles"] / totals.where(totals > 0, 1)).round(4)
+    # l2_key breaks count ties so repeated runs order identically
+    scope = scope.sort_values(
+        ["community_id", "n_articles", "l2_key"], ascending=[True, False, True]
+    )
+    scope["l2_rank"] = scope.groupby("community_id").cumcount() + 1
+
+    out = scope[scope["l2_rank"] <= top_n].copy()
+    out["level"] = cluster_level
+
+    rollup = build_l1_rollup(cluster_level)
+    if not rollup.empty:
+        lead_l2 = (
+            out[out["l2_rank"] == 1].set_index("community_id")["l2_name"].astype(str)
+        )
+        rollup["unit_name"] = _disambiguate(
+            rollup["l1_roll_name"],
+            rollup["community_id"].map(lead_l2).fillna(""),
+        )
+        out = out.merge(rollup, on="community_id", how="left")
+    for col, default in (
+        ("l1_roll_name", ""),
+        ("l0_roll_name", ""),
+        ("unit_name", ""),
+        ("l1_roll_share", 0.0),
+        ("l1_roll_margin", 0.0),
+        ("l1_roll_n_terms", 0),
+    ):
+        if col not in out.columns:
+            out[col] = default
+        out[col] = out[col].fillna(default)
+
+    keep = [
+        "community_id",
+        "level",
+        "unit_name",
+        "l1_roll_name",
+        "l1_roll_share",
+        "l1_roll_margin",
+        "l1_roll_n_terms",
+        "l0_roll_name",
+        "l2_rank",
+        "l2_key",
+        "l2_name",
+        "l2_share",
+        "n_articles",
+        "l1_taxref",
+        "l1_name",
+        "l0_taxref",
+        "l0_name",
+    ]
+    out = out[[c for c in keep if c in out.columns]]
+    log.info(
+        "L2 topics for %s: %d rows across %d communities (top %d each)",
+        cluster_level,
+        len(out),
+        out["community_id"].nunique(),
+        top_n,
+    )
+    return out
+
+
+def attach_l2_to_dashboard(
+    dashboard: pd.DataFrame, l2_topics: pd.DataFrame
+) -> pd.DataFrame:
+    """Carry the leading L2 topics onto the one-row-per-cluster labels."""
+    out = dashboard.copy()
+    out["l2_top_name"] = ""
+    out["l2_top_share"] = 0.0
+    out["l2_topics"] = ""
+    if l2_topics is None or l2_topics.empty:
+        return out
+
+    ranked = l2_topics.sort_values(["community_id", "l2_rank"])
+    joined = ranked.groupby("community_id")["l2_name"].apply(
+        lambda s: "; ".join(str(x) for x in s if str(x).strip())
+    )
+    first = ranked.groupby("community_id").first()
+    cid = out["cluster_id"]
+    out["l2_top_name"] = cid.map(first["l2_name"]).fillna("")
+    out["l2_top_share"] = cid.map(first["l2_share"]).fillna(0.0)
+    out["l2_topics"] = cid.map(joined).fillna("")
+    n_named = int((out["l2_top_name"].astype(str).str.strip() != "").sum())
+    log.info(
+        "L2 topic attached to %d / %d %s clusters",
+        n_named,
+        len(out),
+        dashboard["level"].iloc[0] if "level" in dashboard.columns and len(dashboard) else "",
+    )
+    return out
+
+
 def ensure_label_dataset() -> None:
     """Create taxonomy_labelling in EU if it does not exist."""
     from google.cloud.exceptions import NotFound
@@ -1316,47 +1545,75 @@ def ensure_label_dataset() -> None:
 
 
 def upload_labels_to_bigquery(
-    df_out: pd.DataFrame, dashboard: pd.DataFrame, run_timestamp: str
+    df_out: pd.DataFrame,
+    dashboard: pd.DataFrame,
+    run_timestamp: str,
+    l2_topics: pd.DataFrame | None = None,
 ) -> None:
     """Write labels to taxonomy_labelling; cluster_id joins classification_raw_{ts}.{level}."""
     pandas_gbq.context.location = BQ_LOCATION
     ensure_label_dataset()
 
     join_col = CLUSTER_LEVEL  # classification_raw has micro / meso / macro
-    dash = dashboard.copy()
-    dash["cluster_id"] = dash["cluster_id"].astype("int64")
-    dash["run_timestamp"] = run_timestamp
-    dash["classification_join_column"] = join_col
-    front = ["cluster_id", "run_timestamp", "classification_join_column"]
-    dash = dash[front + [c for c in dash.columns if c not in front]]
 
-    long = df_out.copy()
-    if "cluster_id" not in long.columns:
-        long["cluster_id"] = long["community_id"]
-    long["cluster_id"] = long["cluster_id"].astype("int64")
-    long["run_timestamp"] = run_timestamp
-    long["classification_join_column"] = join_col
-    long_front = ["cluster_id", "run_timestamp", "classification_join_column"]
-    long = long[long_front + [c for c in long.columns if c not in long_front]]
+    # The L2 layer can be published on its own for a level the LLM naming step
+    # has not been run for, so empty label frames must not replace existing
+    # tables with an empty one.
+    if dashboard is not None and not dashboard.empty:
+        dash = dashboard.copy()
+        dash["cluster_id"] = dash["cluster_id"].astype("int64")
+        dash["run_timestamp"] = run_timestamp
+        dash["classification_join_column"] = join_col
+        front = ["cluster_id", "run_timestamp", "classification_join_column"]
+        dash = dash[front + [c for c in dash.columns if c not in front]]
+        dest_labels = f"{BQ_LABEL_DATASET}.cluster_labels_{join_col}_{run_timestamp}"
+        pandas_gbq.to_gbq(
+            dash,
+            dest_labels,
+            project_id=BQ_DEST_PROJECT,
+            if_exists="replace",
+            location=BQ_LOCATION,
+        )
+        log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_labels)
 
-    dest_labels = f"{BQ_LABEL_DATASET}.cluster_labels_{join_col}_{run_timestamp}"
-    dest_long = f"{BQ_LABEL_DATASET}.cluster_taxonomy_labels_{join_col}_{run_timestamp}"
-    pandas_gbq.to_gbq(
-        dash,
-        dest_labels,
-        project_id=BQ_DEST_PROJECT,
-        if_exists="replace",
-        location=BQ_LOCATION,
-    )
-    log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_labels)
-    pandas_gbq.to_gbq(
-        long,
-        dest_long,
-        project_id=BQ_DEST_PROJECT,
-        if_exists="replace",
-        location=BQ_LOCATION,
-    )
-    log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_long)
+    if df_out is not None and not df_out.empty:
+        long = df_out.copy()
+        if "cluster_id" not in long.columns:
+            long["cluster_id"] = long["community_id"]
+        long["cluster_id"] = long["cluster_id"].astype("int64")
+        long["run_timestamp"] = run_timestamp
+        long["classification_join_column"] = join_col
+        long_front = ["cluster_id", "run_timestamp", "classification_join_column"]
+        long = long[long_front + [c for c in long.columns if c not in long_front]]
+        dest_long = (
+            f"{BQ_LABEL_DATASET}.cluster_taxonomy_labels_{join_col}_{run_timestamp}"
+        )
+        pandas_gbq.to_gbq(
+            long,
+            dest_long,
+            project_id=BQ_DEST_PROJECT,
+            if_exists="replace",
+            location=BQ_LOCATION,
+        )
+        log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_long)
+
+    if l2_topics is not None and not l2_topics.empty:
+        l2 = l2_topics.copy()
+        l2["cluster_id"] = l2["community_id"].astype("int64")
+        l2["run_timestamp"] = run_timestamp
+        l2["classification_join_column"] = join_col
+        l2_front = ["cluster_id", "run_timestamp", "classification_join_column"]
+        l2 = l2[l2_front + [c for c in l2.columns if c not in l2_front]]
+        dest_l2 = f"{BQ_LABEL_DATASET}.cluster_l2_topics_{join_col}_{run_timestamp}"
+        pandas_gbq.to_gbq(
+            l2,
+            dest_l2,
+            project_id=BQ_DEST_PROJECT,
+            if_exists="replace",
+            location=BQ_LOCATION,
+        )
+        log.info("  → BigQuery: %s.%s", BQ_DEST_PROJECT, dest_l2)
+
     log.info(
         "Join to scope-drift classification: "
         "classification_raw_%s.%s = cluster_labels_%s_%s.cluster_id",
@@ -1379,14 +1636,16 @@ def resolve_timestamp(timestamp: str | None = None) -> str:
     return ts
 
 
-def run_one_level(df_papers: pd.DataFrame, level: str, timestamp: str) -> pd.DataFrame:
+def run_one_level(level: str, timestamp: str) -> pd.DataFrame:
     """Label all clusters at one CWTS level (micro / meso / macro)."""
-    global CLUSTER_LEVEL, profiles, briefs, df_scope, df_l1_sig, df_clusters_agg, df_l0_agg
+    global CLUSTER_LEVEL, profiles, briefs, df_scope, df_l2_raw, df_l1_sig
+    global df_clusters_agg, df_l0_agg
 
     CLUSTER_LEVEL = level
     profiles = {}
     briefs = {}
     df_scope = None
+    df_l2_raw = None
     df_l1_sig = None
     df_clusters_agg = None
     df_l0_agg = None
@@ -1395,25 +1654,26 @@ def run_one_level(df_papers: pd.DataFrame, level: str, timestamp: str) -> pd.Dat
     log.info("Level: %s", level)
     log.info("=" * 60)
 
-    comm_data = group_communities(df_papers, level)
+    comm_data = load_level_communities(level)
     community_ids = comm_data["community_ids"]
-    all_pub_ids = comm_data["all_pub_ids"]
-    pub_to_comm = comm_data["pub_to_comm"]
+    totals = comm_data["totals"]
     if not community_ids:
         log.warning("No %s clusters — skipping", level)
         return pd.DataFrame()
 
-    df_l2_counts = pull_taxonomy_scores(all_pub_ids, pub_to_comm)
-    build_profiles(community_ids, all_pub_ids, pub_to_comm)
+    df_l2_counts = pull_taxonomy_scores(level)
+    build_profiles(community_ids, fetch_pub_year_counts(level), totals)
     aggregate_to_higher_levels(df_l2_counts)
     build_all_briefs(community_ids)
     llm_results = run_llm_for_all(community_ids)
     df_out = flatten_results(llm_results, community_ids)
 
     dashboard = export_dashboard_labels(df_out, level)
+    l2_topics = export_l2_topics(level)
+    dashboard = attach_l2_to_dashboard(dashboard, l2_topics)
 
     try:
-        upload_labels_to_bigquery(df_out, dashboard, timestamp)
+        upload_labels_to_bigquery(df_out, dashboard, timestamp, l2_topics)
     except Exception:
         log.exception(
             "BigQuery upload for %s failed",
@@ -1450,12 +1710,11 @@ def main(timestamp: str | None = None):
     log.info("=" * 60)
 
     init_clients()
-    df_papers = fetch_classification_papers()
     load_taxonomy()
 
     parts = []
     for level in CLUSTER_LEVELS:
-        df_level = run_one_level(df_papers, level, timestamp)
+        df_level = run_one_level(level, timestamp)
         if df_level is not None and not df_level.empty:
             parts.append(df_level)
             core = df_level[df_level["tier"] == "core"]
