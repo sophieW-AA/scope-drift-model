@@ -108,7 +108,11 @@ def build_home(papers: pd.DataFrame, candidates: pd.DataFrame) -> pd.DataFrame:
             macro_share = (jc_n.get((k, cid)) or 0) / kn
             homes.append((k, jac, macro_share))
         homes.sort(key=lambda x: -x[1])
-        best = homes[0] if homes else ("", 0.0, 0.0)
+        top = homes[0] if homes else ("", 0.0, 0.0)
+        # Only name a home once the overlap clears the gate. Reporting the raw
+        # argmax puts a journal name against a 2% token overlap, which then
+        # reads downstream as a finding rather than as "no home found".
+        best = top if top[1] >= C.TOPIC_JACCARD_HOME else ("", top[1], top[2])
 
         on_brand = (not methods and bool(cand["in_baseline_primary"])) or (
             methods and hit >= C.DOMAIN_HIT_ON_BRAND

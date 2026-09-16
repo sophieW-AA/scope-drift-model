@@ -1,4 +1,9 @@
-"""P3 — two-field market overlay from the JD opportunities table in BigQuery."""
+"""P3 — independent AIRAK market overlay for Leiden candidate scopes.
+
+The complete world market attached in P0 is authoritative for size, growth and
+qualification. The curated JD table remains optional context (funding/tier);
+its 98 rows cannot define the opportunity universe.
+"""
 
 from __future__ import annotations
 
@@ -26,15 +31,19 @@ def jd_profiles(jd: pd.DataFrame) -> list[tuple[set[str], dict]]:
 
 
 def match_subfields(
-    label: str, profiles: list[tuple[set[str], dict]], top_n: int = 2
+    label: str,
+    profiles: list[tuple[set[str], dict]],
+    top_n: int = 2,
+    min_jaccard: float | None = None,
 ) -> list[dict]:
     if not profiles:
         return []
+    floor = C.FIELD_MATCH_MIN_JACCARD if min_jaccard is None else float(min_jaccard)
     lab = T.token_profile([label], k=20)
     scored = []
     for prof, row in profiles:
         jac = T.jaccard(lab, prof)
-        if jac <= 0:
+        if jac < floor:
             continue
         scored.append((jac, row))
     scored.sort(key=lambda x: -x[0])
@@ -57,20 +66,41 @@ def match_subfields(
     return out
 
 
-def build_market(candidates: pd.DataFrame, home: pd.DataFrame, jd: pd.DataFrame) -> pd.DataFrame:
+def build_market(
+    candidates: pd.DataFrame,
+    home: pd.DataFrame,
+    jd: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     h = home.set_index(["journal", "community_id"])
-    profiles = jd_profiles(jd)
+    profiles = jd_profiles(jd) if jd is not None else []
     rows = []
     for _, cand in candidates.iterrows():
         key = (cand["journal"], int(cand["community_id"]))
-        matches = match_subfields(str(cand["community_label"]), profiles)
+        # Match on the L2 topic when one was resolved: the L1 community label is
+        # reused across many clusters, so it matches whichever subfield happens
+        # to share a token with it.
+        match_on = str(
+            cand.get("mkt_primary_world_field")
+            or cand.get("topic_label")
+            or cand["community_label"]
+        )
+        matches = match_subfields(match_on, profiles)
         f1 = matches[0] if matches else {}
         f2 = matches[1] if len(matches) > 1 and matches[1]["jaccard"] >= C.SECOND_FIELD_MIN else {}
         parent_owns = False
         if key in h.index:
             parent_owns = bool(h.loc[key, "parent_owns_gated"])
-        mkt = f1.get("mkt_2025")
-        cagr = f1.get("cagr")
+        # World figures come from all AIRAK publishers. They were allocated to
+        # this Leiden scope in P0 without any Frontiers term in the opportunity
+        # test. JD is enrichment only.
+        mkt = cand.get("mkt_n_global_late")
+        if pd.isna(mkt):
+            mkt = (
+                float(cand.get("mkt_n_global_3y") or 0) / C.WINDOW_YEARS
+                if pd.notna(cand.get("mkt_n_global_3y"))
+                else None
+            )
+        cagr = cand.get("mkt_cagr")
         market_gate = (
             mkt is not None
             and cagr is not None
@@ -81,15 +111,19 @@ def build_market(candidates: pd.DataFrame, home: pd.DataFrame, jd: pd.DataFrame)
             {
                 "journal": cand["journal"],
                 "community_id": int(cand["community_id"]),
-                "field1": f1.get("subfield"),
-                "field1_jaccard": f1.get("jaccard"),
+                "matched_on": match_on,
+                "market_source": "AIRAK all-publisher level-1 fields",
+                "field1": cand.get("mkt_primary_world_field") or None,
+                "field1_jaccard": None,
                 "field1_mkt_2025": mkt,
                 "field1_cagr": cagr,
                 "field1_funding": f1.get("funding"),
                 "field1_tier": f1.get("tier"),
                 "field1_pattern": f1.get("pattern"),
-                "field1_fi_articles": f1.get("fi_articles"),
-                "field1_fi_share": f1.get("fi_share"),
+                "field1_fi_articles": (
+                    float(cand.get("mkt_n_fi_3y") or 0) / C.WINDOW_YEARS
+                ),
+                "field1_fi_share": cand.get("mkt_fi_share"),
                 "field1_anchor": f1.get("anchor_journal"),
                 "field2": f2.get("subfield"),
                 "field2_jaccard": f2.get("jaccard"),
@@ -111,6 +145,8 @@ def run_p3(
         candidates = bqmod.read_table("candidates", run_timestamp)
     if home is None:
         home = bqmod.read_table("home", run_timestamp)
+    # Optional contextual enrichment only. The run remains complete when a
+    # field has no row in the curated JD table.
     jd = bqmod.fetch_jd_opportunities()
     market = build_market(candidates, home, jd)
     bqmod.write_table(market, "market", run_timestamp)

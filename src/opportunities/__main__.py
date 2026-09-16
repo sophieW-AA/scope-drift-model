@@ -1,4 +1,4 @@
-"""python -m opportunities  →  opportunities.run"""
+"""python src/opportunities/run.py  →  opportunities.run"""
 
 from .run import main
 

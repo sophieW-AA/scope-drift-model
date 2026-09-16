@@ -13,7 +13,8 @@ scope-drift-model/
 │   ├── taxonomy_naming.py       # Map clusters -> taxonomy labels (macro_labels.csv)
 │   ├── build_unified_dashboard.py
 │   ├── build_scope_drift_report_pdf.py
-│   └── subprocess_leiden.py     # CWTS Java clustering -> classification_raw_*
+│   ├── subprocess_leiden.py     # CWTS Java clustering -> classification_raw_*
+│   └── opportunities/           # Market-first journal-opportunity pipeline
 ├── scripts/
 │   └── build_gt_network_map.py  # Optional ground-truth overlay map
 ├── output/                      # HTML dashboards + PDF
@@ -84,6 +85,32 @@ If you prefer running pieces yourself:
    ```powershell
    python main.py --timestamp 20260828_120000 --skip-leiden
    ```
+
+## Journal opportunities
+
+The opportunity mapper is downstream of the citation-network pipeline. Its
+supported default combines all-publisher OpenAlex market sizing with Leiden
+scope validation and Frontiers portfolio routing:
+
+```powershell
+# Discover the latest complete scope-drift run and create the readable Excel
+python src/opportunities/run.py
+
+# Or pin the Leiden run
+python src/opportunities/run.py --run 20260827_081311
+```
+
+Opportunity artifacts are deliberately outside the repository:
+
+```text
+C:\Users\sophie.wilson\Documents\scope_drift_outputs\opportunities\
+├── output\   # final JSON, manifest, readable Excel
+└── logs\     # timestamped run logs
+```
+
+Set `OPPORTUNITIES_OUTPUT_ROOT` to override that directory. See
+`src/opportunities/README.md` for the method, thresholds, output columns, legacy
+phases and re-export commands.
 
 ## Outputs
 

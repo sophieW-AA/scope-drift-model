@@ -3,9 +3,9 @@
 The mapper itself never reads local files. This admin script is the only place
 that touches the repo markdown, and you re-run it when the JD table changes:
 
-    python -m opportunities.seed_jd
-    python -m opportunities.seed_jd --path .\\some\\other\\opportunities.md
-    python -m opportunities.seed_jd --dry-run
+    python src/opportunities/seed_jd.py
+    python src/opportunities/seed_jd.py --path .\\some\\other\\opportunities.md
+    python src/opportunities/seed_jd.py --dry-run
 
 It writes `ocean-tech-adv-analytics-c-tfs.opportunity_mapping.jd_opportunities`,
 which is un-versioned and shared by every run.
@@ -21,9 +21,9 @@ from pathlib import Path
 
 import pandas as pd
 
-_ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_SRC = Path(__file__).resolve().parents[1]
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 from opportunities import config as C  # noqa: E402
 
@@ -74,6 +74,9 @@ def parse_markdown(path: Path) -> pd.DataFrame:
         else:
             fi_share = fi_share_raw
 
+        top3_share = _num(parts[11]) if len(parts) > 11 else None
+        if top3_share is not None and str(parts[11]).endswith("%"):
+            top3_share = top3_share / 100.0
         cagr = _num(parts[6])
         if cagr is not None and parts[6].endswith("%"):
             cagr = cagr / 100.0
@@ -91,7 +94,12 @@ def parse_markdown(path: Path) -> pd.DataFrame:
                 "fi_share": fi_share,
                 "pattern": _clean(parts[9]) if len(parts) > 9 else "",
                 "funding": _clean(parts[10]) if len(parts) > 10 else "",
+                "top3_share": top3_share,
                 "anchor_journal": _clean(parts[12]) if len(parts) > 12 else "",
+                "competitor_1": _clean(parts[13]) if len(parts) > 13 else "",
+                "competitor_2": _clean(parts[14]) if len(parts) > 14 else "",
+                "competitor_3": _clean(parts[15]) if len(parts) > 15 else "",
+                "source_action": _clean(parts[16]) if len(parts) > 16 else "",
             }
         )
     df = pd.DataFrame(rows)

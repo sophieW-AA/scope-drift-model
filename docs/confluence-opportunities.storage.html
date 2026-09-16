@@ -1,0 +1,265 @@
+<p>This page explains how the opportunity mapper turns the scope-drift citation network into a graded, defensible list of journal launch candidates &mdash; what it reads, what each step decides, and how to read the output.</p>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>The one rule the whole design rests on.</strong> A market is an opportunity because of how big it is and how fast it is growing across <em>every</em> publisher &mdash; never because of how much Frontiers publishes there. Frontiers volume is attached only <em>after</em> a market has qualified, and it does one job: it chooses the action. Launch something new, grow the title that already owns the space, or leave it alone.</p>
+    <p>Earlier versions broke this rule, and the symptom was predictable: fields where Frontiers already published a lot looked like opportunities, and genuine whitespace disappeared because nobody was publishing there yet.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<hr />
+
+<h2>The output</h2>
+
+<p>Every evaluated market, one row per OpenAlex subfield, 252 rows:</p>
+
+<p><ac:structured-macro ac:name="view-file">
+  <ac:parameter ac:name="name"><ri:attachment ri:filename="leiden_journal_opportunities_readable_20260909.csv.xlsx" /></ac:parameter>
+</ac:structured-macro></p>
+
+<p>Repo path: <code>logs/leiden_journal_opportunities_readable_20260909.csv.xlsx</code>. The machine-readable versions of the same run are <code>logs/final_opportunities_dryrun_20260909_v8.json</code> and the BigQuery table <code>opportunity_mapping.final_journal_opportunities_20260827_081311</code>, with thresholds and source-table timestamps recorded in <code>logs/final_journal_opportunities_20260909.manifest.json</code>.</p>
+
+<h3>Column reference</h3>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>What it is</th></tr>
+    <tr><td><strong>Proposed journal</strong></td><td>The title implied by the market scope. A naming convention, not a branding decision.</td></tr>
+    <tr><td><strong>Subfield</strong> / <strong>Domain</strong></td><td>The OpenAlex subfield that defines the market, and the domain it sits in.</td></tr>
+    <tr><td><strong>Grade</strong> / <strong>Score</strong></td><td>0&ndash;12 evidence score and its A/B/C band. Built from funding intensity, gold-OA rate, growth, market size, absence of an existing Frontiers home, and how unconcentrated the competitor set is.</td></tr>
+    <tr><td><strong>World 2025</strong></td><td>Articles published in that subfield in 2025 by all publishers.</td></tr>
+    <tr><td><strong>CAGR</strong></td><td>Compound annual growth of world output, 2022 to 2025.</td></tr>
+    <tr><td><strong>FI 2025</strong></td><td>Frontiers articles in that subfield in 2025. Diagnostic only &mdash; it never affects Grade or Score.</td></tr>
+    <tr><td><strong>Share vs parity</strong></td><td>Frontiers&rsquo; share of the subfield divided by Frontiers&rsquo; share of world output (1.24% in 2025). 1.00x is parity; below 0.50x is whitespace.</td></tr>
+    <tr><td><strong>Lead title</strong></td><td>The Frontiers journal publishing the most in that subfield over three years.</td></tr>
+    <tr><td><strong>Ownership</strong></td><td><code>dedicated_home</code>, <code>adjacent_core_owner</code>, <code>concentrated_drift</code> or <code>scattered</code> &mdash; whether any single title actually owns the space.</td></tr>
+    <tr><td><strong>Coverage</strong></td><td><code>whitespace</code>, <code>under_indexed</code>, <code>fragmented_existing</code> or <code>served</code>.</td></tr>
+    <tr><td><strong>Scope confidence</strong></td><td>How cleanly the market maps onto a coherent neighbourhood of the citation graph. <code>low</code> blocks a launch recommendation outright.</td></tr>
+    <tr><td><strong>Action</strong></td><td>The recommendation: launch, expand an existing journal, validate the scope, or pass.</td></tr>
+    <tr><td><strong>Warning</strong></td><td>Honest caveats attached to the row &mdash; missing funding evidence, cannibalisation risk, concentrated competitors.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Where the numbers come from</h2>
+
+<p>Three independent sources, each answering exactly one question. Keeping them separate is what makes the output auditable.</p>
+
+<table>
+  <tbody>
+    <tr><th>Source</th><th>Answers</th><th>Tables</th></tr>
+    <tr>
+      <td><strong>OpenAlex</strong> (all publishers)</td>
+      <td>Is this market big enough and growing fast enough to be worth a journal?</td>
+      <td><code>ocean-breeze-tier-3.openalex.works</code>, <code>.subfields</code></td>
+    </tr>
+    <tr>
+      <td><strong>Scope-drift citation network</strong> (Leiden)</td>
+      <td>Does this market correspond to a real, coherent scope in the citation graph &mdash; or is it a taxonomy label scattered across the literature?</td>
+      <td><code>classification_raw_{run}</code>, <code>pub_metadata_raw_{run}</code>, <code>paper_scope_{run}</code>, <code>taxonomy_labelling.cluster_labels_{level}_{run}</code></td>
+    </tr>
+    <tr>
+      <td><strong>Governed JD reference</strong></td>
+      <td>What did Journal Development already conclude about funding, anchor journals and competitors?</td>
+      <td><code>opportunity_mapping.jd_opportunities</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Frontiers volume is read from OpenAlex too (<code>host_organization_name = 'Frontiers Media'</code>), so the market and the portfolio are counted on the same ruler.</p>
+
+<hr />
+
+<h2>How this links into the citation network</h2>
+
+<p>The mapper is <strong>not</strong> part of <code>main.py</code>. It sits downstream of the scope-drift pipeline and consumes its outputs. The chain runs:</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[AIRAK Publication + PublicationCitation
+        |
+        v  src/cwts_export.py
+Weighted citation graph, 2023-2026, 17.1M papers
+  - temporal decay on edges (tau = 5y)
+  - self-citation discount (0.5)
+        |
+        v  src/subprocess_leiden.py  (CWTS Java jar)
+Leiden communities at three resolutions
+  macro  19       resolution 2e-7   min size 100,000
+  meso   406      resolution 2e-6   min size 5,000     <- journal-shaped
+  micro  3,031    resolution 1e-5   min size 500       <- section-shaped
+        |
+        v  src/taxonomy_naming.py  (GPT over a 300-paper sample per cluster)
+Human-readable community names
+        |
+        v  src/build_unified_dashboard.py
+paper_scope: per-paper is_oos / is_borderline flags
+        |
+        v  opportunities/final_opportunities.py
+Scope validation for the opportunity slate]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<p>Two things about the graph matter for how you read the results.</p>
+
+<p><strong>The communities are built from citation structure alone.</strong> Journal is not an input to Leiden. Papers cluster because they cite each other, not because a publisher filed them together. That independence is the whole point &mdash; it means a Leiden community is external evidence about whether a scope hangs together, rather than a restatement of our own taxonomy.</p>
+
+<p><strong>The export is Frontiers-seeded, so the graph is not a market.</strong> <code>cwts_export.py</code> builds the neighbourhood around Frontiers output because Leiden needs a relevant, connected citation region to cluster well. That makes counts inside the graph structurally biased toward areas we already publish in. Those counts are therefore <em>never</em> used as market size. The graph tells you about <strong>shape</strong>; OpenAlex tells you about <strong>size</strong>.</p>
+
+<p>The join between the two worlds is the DOI. Papers in the citation network carry an AIRAK <code>PublicationId</code>; OpenAlex works carry a DOI. Both sides are normalised (lower-cased, <code>https://doi.org/</code> prefix stripped) before matching, which is what makes the overlap counts trustworthy &mdash; an unnormalised join silently dropped whole subfields in an earlier run.</p>
+
+<hr />
+
+<h2>Step by step</h2>
+
+<h3>Step 1 &mdash; Pick the run</h3>
+
+<p><code>discover_latest_complete_run()</code> finds the most recent scope-drift run that has <em>all</em> of: <code>classification_raw</code>, <code>pub_metadata_raw</code>, <code>paper_scope</code>, plus meso <em>and</em> micro taxonomy labels. It then rejects anything that is not portfolio-scale (fewer than 100 meso or 500 micro labelled clusters), which filters out single-journal probe runs that would otherwise look like valid candidates.</p>
+
+<p>The run used here is <strong>20260827_081311</strong>: 17,136,717 exported papers (283,291 of them Frontiers), 16,683,447 of which survived into clusters, covering 2023&ndash;2026.</p>
+
+<h3>Step 2 &mdash; Size every market, blind to Frontiers</h3>
+
+<p><code>fetch_live_market()</code> runs one query over OpenAlex covering all 252 subfields. It counts English-language journal articles published 2022&ndash;2025 and derives, per subfield: world output per year, 2022&rarr;2025 CAGR, funded share, gold-OA share, the top three competing journals and their combined share, and &mdash; separately &mdash; Frontiers volume and lead title.</p>
+
+<p>The Frontiers columns are computed in the same query purely for convenience. Nothing downstream lets them touch qualification.</p>
+
+<h3>Step 3 &mdash; Apply the market gate</h3>
+
+<p>A subfield qualifies when it clears <strong>both</strong>: at least 10,000 world articles in 2025, and at least 5% CAGR. 113 of 252 subfields pass. The other 139 are marked <code>pass_market</code> and are still published in the output with their full numbers, so a rejection is visible and arguable rather than filtered away.</p>
+
+<h3>Step 4 &mdash; Attach governed context</h3>
+
+<p><code>enrich_governed_reference()</code> joins the JD opportunities reference table on the normalised domain/field/subfield path, bringing in funding classification, anchor journal, named competitors and any prior JD recommendation. Where JD already carries a governed score, that score is used rather than recomputed &mdash; the pipeline defers to the human judgement instead of overwriting it.</p>
+
+<h3>Step 5 &mdash; Map qualified markets onto the citation graph</h3>
+
+<p>This is where Leiden enters. For each of the 113 qualified subfields, <code>fetch_leiden_overlap()</code> takes every OpenAlex paper in that subfield, resolves it to a citation-network paper by normalised DOI, and reports which meso and micro communities those papers landed in &mdash; split into non-Frontiers and Frontiers counts, and carrying the <code>is_oos</code> / <code>is_borderline</code> scope flags from the dashboard step.</p>
+
+<p>Only the <strong>non-Frontiers</strong> papers define the scope. Using Frontiers papers to draw the boundary would reintroduce exactly the bias the design exists to remove.</p>
+
+<h3>Step 6 &mdash; Assemble the scope and score its confidence</h3>
+
+<p><code>assemble_scope()</code> ranks meso communities by non-Frontiers paper count and takes the smallest set that covers 80% of them. That set <em>is</em> the proposed journal scope. The eight largest micro communities inside it become the candidate section themes.</p>
+
+<table>
+  <tbody>
+    <tr><th>Confidence</th><th>Requires</th><th>Consequence</th></tr>
+    <tr><td><strong>high</strong></td><td>&ge; 300 mapped papers, &ge; 80% coverage, &le; 30 communities</td><td>Eligible for the launch shortlist</td></tr>
+    <tr><td><strong>medium</strong></td><td>&ge; 100 mapped papers, &ge; 70% coverage, &le; 45 communities</td><td>Eligible, flagged for editorial validation</td></tr>
+    <tr><td><strong>low</strong></td><td>Anything else, or fewer than 80% of scope communities carrying a taxonomy label</td><td>Cannot be recommended for launch &mdash; routed to <code>validate_scope</code></td></tr>
+  </tbody>
+</table>
+
+<p>A market needing 60 scattered communities to reach 80% coverage is not a journal. It is a methodology that shows up everywhere, and the confidence rule is what stops it being proposed as a title.</p>
+
+<h3>Step 7 &mdash; Work out what Frontiers already has</h3>
+
+<p>Two independent questions, deliberately not collapsed into one.</p>
+
+<p><strong>Ownership &mdash; does a title own this space?</strong> <code>find_dedicated_home()</code> tests whether any active Frontiers title explicitly names the market, requiring at least half the meaningful subfield tokens to appear in the journal name. It is conservative on purpose: <em>Frontiers in Medicine</em> must not count as a dedicated home for <em>Pulmonary and Respiratory Medicine</em>, while <em>Frontiers in Endocrinology</em> legitimately covers <em>Endocrinology, Diabetes and Metabolism</em>. Failing that test, ownership falls back to concentration &mdash; a title holding &ge; 40% of Frontiers output in the space is an <code>adjacent_core_owner</code> if that work is core to it, <code>concentrated_drift</code> if it arrived by drift. Below 40%, nobody owns it: <code>scattered</code>.</p>
+
+<p><strong>Coverage &mdash; how much do we publish, relative to our own baseline?</strong> Measured as Frontiers&rsquo; share of the subfield over Frontiers&rsquo; share of world output. Below 0.50x is <code>whitespace</code>; 0.50&ndash;1.00x is <code>under_indexed</code>; at or above parity without a dedicated title is <code>fragmented_existing</code>.</p>
+
+<h3>Step 8 &mdash; Route the action</h3>
+
+<p>The decision tree is short, ordered, and reads top to bottom &mdash; the first matching rule wins.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[market did not qualify        -> pass_market
+scope confidence is low       -> validate_scope
+a title already names it      -> grow_existing
+< 30 Frontiers papers in 3y   -> launch_greenfield
+otherwise                     -> launch_consolidation]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<p>A <strong>consolidation launch</strong> is a market where Frontiers already publishes meaningfully but the volume is spread across many titles with none holding it &mdash; a new journal gathers scattered output under one scope rather than creating demand from nothing. A <strong>greenfield launch</strong> is a qualifying market we are effectively absent from.</p>
+
+<h3>Step 9 &mdash; Score, rank and record</h3>
+
+<p>Each row gets a launch confidence figure: the evidence score, plus points for scope confidence, plus one for whitespace, minus a cannibalisation penalty of up to three where a single existing title would be undercut. The top 20 launch candidates with high or medium scope confidence get a <code>shortlist_rank</code>.</p>
+
+<p>The run then writes the full 252-row table and a manifest to BigQuery. The manifest pins the scope-drift run id, the modification timestamps of the OpenAlex source tables, and every threshold used &mdash; so a result can always be reproduced or challenged on its inputs.</p>
+
+<hr />
+
+<h2>Thresholds</h2>
+
+<table>
+  <tbody>
+    <tr><th>Threshold</th><th>Value</th><th>Where it applies</th></tr>
+    <tr><td>Market window</td><td>2022&ndash;2025</td><td>Size and growth endpoints</td></tr>
+    <tr><td>Minimum world output</td><td>10,000 articles in 2025</td><td>Market gate</td></tr>
+    <tr><td>Minimum growth</td><td>5% CAGR</td><td>Market gate</td></tr>
+    <tr><td>Scope coverage target</td><td>80% of non-Frontiers papers</td><td>Scope assembly</td></tr>
+    <tr><td>Ownership threshold</td><td>40% of Frontiers output in the space</td><td>Ownership classification</td></tr>
+    <tr><td>Greenfield ceiling</td><td>30 Frontiers papers over 3 years</td><td>Greenfield vs consolidation</td></tr>
+    <tr><td>Whitespace / covered ratio</td><td>0.50x / 1.00x of portfolio share</td><td>Coverage classification</td></tr>
+    <tr><td>Frontiers portfolio share</td><td>1.24% of 2025 world output</td><td>Parity baseline</td></tr>
+    <tr><td>Shortlist size</td><td>20</td><td>Final ranking</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>What the current run found</h2>
+
+<p>Across 252 subfields covering 5.46M world articles in 2025:</p>
+
+<table>
+  <tbody>
+    <tr><th>Outcome</th><th>Count</th><th>Reading</th></tr>
+    <tr><td><code>pass_market</code></td><td>139</td><td>Too small, or not growing fast enough</td></tr>
+    <tr><td><code>grow_existing</code></td><td>56</td><td>Qualifying market, but a Frontiers title already names it</td></tr>
+    <tr><td><code>validate_scope</code></td><td>34</td><td>Market qualifies, citation footprint too scattered to define a journal</td></tr>
+    <tr><td><code>launch_consolidation</code></td><td>23</td><td>Launch candidates, 20 of them shortlisted</td></tr>
+    <tr><td><code>launch_greenfield</code></td><td>0</td><td>See below</td></tr>
+  </tbody>
+</table>
+
+<p>By coverage: 100 served, 87 whitespace, 41 fragmented across existing titles, 24 under-indexed.</p>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>Why zero greenfield launches?</strong> Greenfield requires fewer than 30 Frontiers papers in three years in a market publishing 10,000+ articles a year and growing 5%+. Frontiers is broad enough that no market of that size is genuinely untouched &mdash; every qualifying market already has some Frontiers output arriving through adjacent titles. The realistic launch case at this scale is consolidation, not creation.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<hr />
+
+<h2>Reproducing the run</h2>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# Full run against the latest complete scope-drift run, writing to BigQuery
+python src/opportunities/run.py --run 20260827_081311
+
+# Dry run with a pinned scope-drift run and a local JSON export
+python src/opportunities/final_opportunities.py \
+  --run 20260827_081311 \
+  --no-write \
+  --json logs/final_opportunities_dryrun.json
+
+# Routing, scope-assembly and title-matching unit tests
+pytest tests/test_final_opportunities.py tests/test_market_independence.py]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<p>The tests are the guardrail on the core rule. <code>test_frontiers_volume_changes_action_not_market_qualification</code> asserts that changing Frontiers volume alters only the action, never the qualification or the score; <code>test_broad_medicine_title_does_not_hide_respiratory_whitespace</code> asserts that a broad title cannot mask a specific whitespace market.</p>
+
+<hr />
+
+<h2>Known limits</h2>
+
+<ul>
+  <li><strong>Growth rests on four years.</strong> The market window is 2022&ndash;2025, so CAGR is a three-step ratio. It is directionally sound and fragile at the margin; a subfield sitting just over the 5% line deserves a second look before anyone commits to it.</li>
+  <li><strong>Scope confidence is structural, not editorial.</strong> It says the citation neighbourhood hangs together. It does not say the scope is coherent to a researcher, or that editors can be recruited into it. Every <code>medium</code> row carries that warning explicitly.</li>
+  <li><strong>Taxonomy labels come from a 300-paper sample per cluster.</strong> Broad, heterogeneous communities spread thin and can end up unlabelled, which is why <code>label_strength</code> below 80% forces scope confidence to <code>low</code>.</li>
+  <li><strong>OpenAlex subfields are a fixed 252-way partition.</strong> A genuine opportunity that straddles two subfields will be split and may fail the size gate on both halves. The Leiden scope view partially compensates, but the candidate universe is still the subfield list.</li>
+  <li><strong>2026 is partial.</strong> The citation network covers 2023&ndash;2026, but market sizing deliberately stops at 2025 so no endpoint is a part-year.</li>
+  <li><strong><code>paper_scope</code> covers only the journals passed to the dashboard step.</strong> The <code>is_oos</code> signal that separates core ownership from drift is therefore richer for those titles than for the rest of the portfolio.</li>
+</ul>
+
+<hr />
+
+<p><em>Disclaimer: This page was created with AI assistance.</em></p>

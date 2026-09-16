@@ -23,44 +23,61 @@ def _fi_share(mkt) -> float | None:
 
 
 def classify_presence(cand, home, vol, mkt, call: str) -> tuple[str, str]:
-    """already_publish = Frontiers already has this demand; whitespace = thin FI vs market."""
-    n3 = int(cand.get("n_3y") or 0)
-    inside = bool(cand.get("in_baseline_primary"))
-    home_else = bool(home.get("home_elsewhere"))
-    section_scale = bool(vol.get("section_scale"))
-    journal_scale = bool(vol.get("journal_scale"))
-    fi_share = _fi_share(mkt)
-    pattern = str(mkt.get("field1_pattern") or "")
-    market_gate = bool(mkt.get("market_journal_gate"))
-    jd_gap = any(p in pattern for p in C.WHITESPACE_JD_PATTERNS)
-    thin_fi = fi_share is not None and fi_share < C.FI_SHARE_WHITESPACE
-    existing_sec = (
-        bool(home.get("existing_section"))
-        and float(home.get("existing_section_jaccard") or 0) >= 0.45
-    )
+    """Presence from Frontiers' share of the *global* community, not our volume.
 
-    if call in {"expand_rename", "redirect_crosslist", "gate_intake"}:
-        return "already_publish", "Frontiers already publishes this community"
-    if inside or home_else or existing_sec or section_scale or journal_scale:
-        return "already_publish", "material Frontiers volume or a better home already exists"
-    if n3 >= C.PAPER_FLOOR_SECTION:
-        return "already_publish", f"{n3} papers in 3y at this title"
-    if n3 < C.PAPER_FLOOR_SECTION and (
-        thin_fi or (market_gate and fi_share is None)
-    ):
-        why = []
-        if thin_fi:
-            why.append(f"FI share {fi_share:.1%} of OpenAlex subfield")
-        if jd_gap:
-            why.append(pattern.strip() or "JD gap pattern")
-        if not why:
-            why.append("market gate with little mapped Frontiers volume")
-        return "whitespace", "; ".join(why)
-    if n3 >= C.MIN_COMMUNITY_PAPERS:
-        return "already_publish", "community present in the Frontiers citation network"
-    if market_gate and (thin_fi or fi_share is None):
-        return "whitespace", "market without much Frontiers volume"
-    return "already_publish", "seeded from Frontiers papers"
+    Counting Frontiers papers cannot answer "do we already publish this": 200
+    papers in a 50,000-paper field is thin, and 30 in a 400-paper field is not.
+    Share is measured against Frontiers' own share of world output, so a
+    community where we sit below the portfolio average is under-indexed
+    whatever the raw count. Missing world data is reported as unknown; it must
+    never fall back to a Frontiers-volume proxy.
+    """
+    ratio = cand.get("mkt_fi_share_vs_portfolio")
+    fi_share = cand.get("mkt_fi_share")
+    n_global = cand.get("mkt_n_global_3y")
+
+    if pd.isna(ratio) or pd.isna(n_global):
+        return "unknown", "no independent AIRAK market figure for this community"
+
+    ratio = float(ratio)
+    detail = (
+        f"Frontiers {float(fi_share):.2%} of {int(n_global):,} global papers, "
+        f"{ratio:.2f}x portfolio share"
+    )
+    if ratio < C.MARKET_WHITESPACE_RATIO:
+        return "whitespace", f"thin presence — {detail}"
+    if ratio < C.MARKET_COVERED_RATIO:
+        return "whitespace", f"under-indexed — {detail}"
+    return "already_publish", f"already published at scale — {detail}"
+
+
+def classify_ownership(cand) -> tuple[str, str]:
+    """Does the title that surfaced this own it, or did the work drift in?
+
+    `presence` above is a coverage measure: it says whether Frontiers is
+    under-weight in the global community. It cannot say whether the papers we
+    already print there belong to the title printing them — 200 oncology
+    papers in a cancer-imaging community are core scope, 200 machine-learning
+    papers in Neurorobotics are drift, and both look identical as a share of
+    world output. Only `in_baseline_primary` and the scope classifier separate
+    them, so ownership is reported as its own axis instead of being folded
+    into presence, where it used to disappear.
+    """
+    n3 = int(cand.get("n_3y") or 0)
+    if n3 < C.UNIT_MIN_FI_PAPERS:
+        return "negligible", f"only {n3} papers in 3y under this title"
+    inside = bool(cand.get("in_baseline_primary"))
+    oos = float(cand.get("oos_pct") or 0)
+    if inside and oos < C.DRIFT_OOS_PCT:
+        return "core", f"inside the title's baseline output, {oos:.0f}% out of scope"
+    if inside:
+        return "drift", (
+            f"inside baseline output but {oos:.0f}% of it is out of scope"
+        )
+    return "drift", (
+        f"{n3} papers in 3y outside the title's baseline output"
+        + (f", {oos:.0f}% out of scope" if oos else "")
+    )
 
 
 def _internal_score(cand: pd.Series, vol: pd.Series) -> int:
@@ -132,6 +149,13 @@ def decide_row(cand, home, vol, mkt) -> dict:
     n_off = int(vol.get("n_offbrand_rts") or 0)
     offbrand_titles = float(home.get("offbrand_title_share") or 0) >= 0.35
 
+    # Global market position of the community (from P0). Presence and the
+    # new-journal call are judged on these, not on Frontiers volume.
+    mkt_opportunity = bool(cand.get("mkt_is_opportunity"))
+    mkt_launchable = bool(cand.get("mkt_is_launchable_size"))
+    mkt_kind = str(cand.get("mkt_opportunity_kind") or "").replace("_", " ")
+    mkt_global = cand.get("mkt_n_global_3y")
+    mkt_ratio = cand.get("mkt_fi_share_vs_portfolio")
     reasons = []
     call = "emerging_watch"
 
@@ -182,12 +206,24 @@ def decide_row(cand, home, vol, mkt) -> dict:
     elif (
         not parent_owns
         and not blocks_journal
-        and journal_scale
-        and market_gate
+        and mkt_opportunity
+        and mkt_launchable
         and persist
     ):
         call = "new_journal"
-        reasons.append("no topic-level home, journal-scale, market gate")
+        # Journal-scale Frontiers volume and the JD market gate used to decide
+        # this, which meant a new journal could only be proposed where we
+        # already published heavily. The test is now the global community:
+        # large or growing, journal-sized, and we are under-indexed in it.
+        reasons.append(
+            f"no topic-level home; {mkt_kind or 'opportunity'} independent world market "
+            f"of {int(mkt_global or 0):,} papers where Frontiers is "
+            f"{float(mkt_ratio or 0):.2f}x portfolio share"
+        )
+        reasons.append(
+            f"{int(cand.get('n_3y') or 0)} Frontiers papers in 3y here — "
+            "the case rests on the global community, not on this count"
+        )
     else:
         call = "emerging_watch"
         reasons.append("below share/home/market gates")
@@ -199,10 +235,13 @@ def decide_row(cand, home, vol, mkt) -> dict:
     h = _home_score(home)
     m = _market_score(mkt)
     presence, presence_reason = classify_presence(cand, home, vol, mkt, call)
+    ownership, ownership_reason = classify_ownership(cand)
     return {
         "call": call,
         "presence": presence,
         "presence_reason": presence_reason,
+        "ownership": ownership,
+        "ownership_reason": ownership_reason,
         "score": i + h + m,
         "score_internal": i,
         "score_home": h,
@@ -213,10 +252,47 @@ def decide_row(cand, home, vol, mkt) -> dict:
     }
 
 
+def dedupe_new_journal(decisions: pd.DataFrame) -> pd.DataFrame:
+    """One new-journal proposal per community, whichever title surfaced it.
+
+    A new journal is a property of the community and its global market, not of
+    the Frontiers title whose drift happened to surface it. Keyed on
+    (journal, community) the same community is proposed once per title that
+    touches it — "Herbal medicine" arrived seven times, under Public Health,
+    Microbiology, Medicine, Chemistry, Plant Science, Forests and Sustainable
+    Food Systems. The titles are kept as `sibling_titles` so the spread is
+    visible; it is a signal in itself that no single journal owns the topic.
+    """
+    out = decisions.copy()
+    out["sibling_titles"] = ""
+    out["sibling_n_3y"] = 0
+    for cid, g in out[out["call"].eq("new_journal")].groupby("community_id"):
+        ranked = g.sort_values(["n_3y", "score"], ascending=[False, False])
+        winner = ranked.index[0]
+        titles = "; ".join(
+            f"{r['journal']} ({int(r['n_3y'] or 0)})" for _, r in ranked.iterrows()
+        )
+        out.at[winner, "sibling_titles"] = titles
+        out.at[winner, "sibling_n_3y"] = int(ranked["n_3y"].fillna(0).sum())
+        for idx in ranked.index[1:]:
+            out.at[idx, "call"] = "emerging_watch"
+            out.at[idx, "pending_persist"] = False
+            out.at[idx, "uniqueness_note"] = (
+                f"same community {cid} as the proposal under "
+                f"{out.at[winner, 'journal']}"
+            )
+            out.at[idx, "reasons"] = (
+                str(out.at[idx, "reasons"])
+                + "; consolidated into one proposal for this community"
+            )
+    return out
+
+
 def uniqueness_pass(decisions: pd.DataFrame) -> pd.DataFrame:
     """One expand/section per community_id; better parent keeps it."""
     out = decisions.copy()
-    out["uniqueness_note"] = ""
+    if "uniqueness_note" not in out.columns:
+        out["uniqueness_note"] = ""
     launch_like = out["call"].isin(["expand_rename", "new_gated_section"])
     for cid, g in out[launch_like].groupby("community_id"):
         if len(g) < 2:
@@ -229,10 +305,8 @@ def uniqueness_pass(decisions: pd.DataFrame) -> pd.DataFrame:
         for idx in ranked.index[1:]:
             out.at[idx, "call"] = "redirect_crosslist"
             out.at[idx, "pending_persist"] = False
-            out.at[idx, "presence"] = "already_publish"
-            out.at[idx, "presence_reason"] = (
-                f"already published; uniqueness winner={out.at[winner, 'journal']}"
-            )
+            # Presence is a market fact about the community, so losing a
+            # uniqueness contest between two titles must not rewrite it.
             out.at[idx, "uniqueness_note"] = (
                 f"duplicate of community {cid}; winner={out.at[winner, 'journal']}"
             )
@@ -243,27 +317,16 @@ def uniqueness_pass(decisions: pd.DataFrame) -> pd.DataFrame:
 
 
 def apply_portfolio_presence(decisions: pd.DataFrame) -> pd.DataFrame:
-    """If any title already publishes the community or matched subfield at scale, it is not whitespace."""
-    out = decisions.copy()
-    if "presence" not in out.columns or out.empty:
-        return out
-    scaled = out["n_3y"].fillna(0) >= C.PAPER_FLOOR_SECTION
-    if "section_scale" in out.columns:
-        scaled = scaled | out["section_scale"].fillna(False).astype(bool)
-    if "journal_scale" in out.columns:
-        scaled = scaled | out["journal_scale"].fillna(False).astype(bool)
-    owned = out["presence"].eq("already_publish") & scaled
-    covered_fields = set(out.loc[owned, "field1"].dropna().astype(str))
-    covered_cids = set(
-        pd.to_numeric(out.loc[owned, "community_id"], errors="coerce").dropna().astype(int)
-    )
-    cid = pd.to_numeric(out["community_id"], errors="coerce")
-    flip = out["presence"].eq("whitespace") & (
-        cid.isin(covered_cids) | out["field1"].fillna("").astype(str).isin(covered_fields)
-    )
-    out.loc[flip, "presence"] = "already_publish"
-    out.loc[flip, "presence_reason"] = "already published elsewhere in the portfolio"
-    return out
+    """No-op retained for callers.
+
+    This used to flip whitespace back to already-publish when any title had
+    scale in the community. That is now redundant and wrong: `mkt_fi_share` is
+    Frontiers' share of the global community across every Frontiers title, so
+    portfolio-wide coverage is already in the denominator. Re-applying a
+    Frontiers-volume test on top reintroduced exactly the bias that made
+    whitespace unreachable.
+    """
+    return decisions
 
 
 def apply_two_quarter(decisions: pd.DataFrame, previous: pd.DataFrame | None) -> pd.DataFrame:
@@ -344,6 +407,8 @@ def build_decisions(
                 "offbrand_rts": vol_s.get("offbrand_rts"),
                 "existing_section": home_s.get("existing_section"),
                 "existing_section_journal": home_s.get("existing_section_journal"),
+                "matched_on": mkt_s.get("matched_on"),
+                "market_source": mkt_s.get("market_source"),
                 "field1": mkt_s.get("field1"),
                 "field1_mkt_2025": mkt_s.get("field1_mkt_2025"),
                 "field1_cagr": mkt_s.get("field1_cagr"),
@@ -354,6 +419,7 @@ def build_decisions(
             }
         )
     dec = pd.DataFrame(rows)
+    dec = dedupe_new_journal(dec)
     dec = uniqueness_pass(dec)
     dec = apply_portfolio_presence(dec)
     dec = apply_two_quarter(dec, previous)

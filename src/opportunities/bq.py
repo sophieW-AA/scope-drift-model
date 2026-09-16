@@ -54,10 +54,11 @@ def fetch_frontiers_run_papers(
       EXTRACT(YEAR FROM SAFE.PARSE_DATE('%Y-%m-%d', SUBSTR(CAST(m.date AS STRING), 1, 10))) AS year
     FROM `{tbl_c}` c
     JOIN `{tbl_m}` m ON c.int_id = m.int_id
-    WHERE (
-        CAST(m.is_frontiers AS STRING) IN ('1', 'true', 'True')
-        OR LOWER(CAST(m.journal AS STRING)) LIKE 'frontiers%'
-      )
+    -- is_frontiers only: a `journal LIKE 'frontiers%'` fallback also matches 144
+    -- other publishers' titles (IOS Press, IMR Press, Elsevier, BMC), while the
+    -- flag correctly keeps partnership titles such as Dystonia that are not
+    -- named "Frontiers in ...".
+    WHERE CAST(m.is_frontiers AS STRING) IN ('1', 'true', 'True')
       AND m.journal IS NOT NULL
       AND m.journal != ''
     """
@@ -122,6 +123,111 @@ def fetch_cluster_labels(run_timestamp: str, level: str | None = None) -> pd.Dat
     return pd.DataFrame(columns=["community_id", "community_label", "community_summary"])
 
 
+def fetch_l2_topics(
+    run_timestamp: str,
+    level: str | None = None,
+    share_floor: float | None = None,
+) -> pd.DataFrame:
+    """Per-cluster naming evidence: the L1 rollup, plus the L2 detail under it.
+
+    `unit_name` is what a unit should be called. It comes from the cluster's
+    leading L1 parent aggregated over every L2 row, so it is backed by the whole
+    cluster rather than by the handful of leaf terms that topped a sample. The
+    L2 fields stay as supporting detail — they say what sits inside the unit,
+    not what the unit is.
+
+    Returns one row per cluster with:
+
+      `unit_name`             L1 rollup, qualified by the leading L2 term where
+                              the L1 name repeats across clusters
+      `l1_roll_share`         share of the cluster the rollup accounts for
+      `l2_name` / `l2_share`  top topic, only when it clears the share floor
+      `topic_list`            gated topics in rank order
+      `topic_compound`        leading terms regardless of share
+
+    Older tables predate the rollup; those clusters fall back to the compound
+    label and `l1_roll_share` stays at zero.
+    """
+    level = _assert_level(level or C.DRILLDOWN_LEVEL)
+    floor = C.L2_SHARE_FLOOR if share_floor is None else float(share_floor)
+    fq = (
+        f"{C.BQ_PROJECT}.{C.BQ_LABEL_DATASET}."
+        f"{C.L2_TOPICS_PREFIX}_{level}_{run_timestamp}"
+    )
+    cols = [
+        "cluster_id",
+        "unit_name",
+        "l1_roll_name",
+        "l1_roll_share",
+        "l2_key",
+        "l2_name",
+        "l2_share",
+        "l1_name",
+        "topic_list",
+        "topic_compound",
+    ]
+    q = f"SELECT * FROM `{fq}`"
+    try:
+        df = client().query(q).to_dataframe()
+    except Exception as exc:
+        log.warning(
+            "No L2 topics table %s (%s) — rows will fall back to the L1 "
+            "community label. Run taxonomy_naming for this timestamp.",
+            fq,
+            str(exc)[:120],
+        )
+        return pd.DataFrame(columns=cols)
+    if df.empty:
+        log.warning("L2 topics table %s is empty", fq)
+        return pd.DataFrame(columns=cols)
+
+    df["cluster_id"] = df["cluster_id"].astype("int64")
+    df["l2_rank"] = df["l2_rank"].astype("int64")
+    df = df.sort_values(["cluster_id", "l2_rank", "l2_key"])
+    compound = df[df["l2_rank"] <= C.L2_COMPOUND_TERMS].groupby("cluster_id")[
+        "l2_name"
+    ].apply(lambda s: " / ".join(str(x) for x in s if str(x).strip()))
+
+    gated = df[df["l2_share"] >= floor]
+    topic_list = gated.groupby("cluster_id")["l2_name"].apply(
+        lambda s: "; ".join(str(x) for x in s)
+    )
+    gated_top = gated.groupby("cluster_id", as_index=False).first()
+
+    first = df.groupby("cluster_id", as_index=False).first()
+    out = first[["cluster_id", "l1_name"]].copy()
+    for col, default in (
+        ("unit_name", ""),
+        ("l1_roll_name", ""),
+        ("l1_roll_share", 0.0),
+    ):
+        out[col] = (
+            first[col].fillna(default) if col in first.columns else default
+        )
+    lookup = gated_top.set_index("cluster_id")
+    out["l2_key"] = (
+        out["cluster_id"].map(lookup["l2_key"]).astype("string").fillna("")
+    )
+    out["l2_name"] = out["cluster_id"].map(lookup["l2_name"]).fillna("")
+    out["l2_share"] = out["cluster_id"].map(lookup["l2_share"]).fillna(0.0)
+    out["topic_list"] = out["cluster_id"].map(topic_list).fillna("")
+    out["topic_compound"] = out["cluster_id"].map(compound).fillna("")
+    out = out[cols]
+    n_roll = int((out["unit_name"].astype(str).str.strip() != "").sum())
+    log.info(
+        "naming %s clusters: %s named from the L1 rollup (median %.0f%% of the "
+        "cluster), %s fall back to a compound of leading L2 terms ← %s",
+        f"{len(out):,}",
+        f"{n_roll:,}",
+        out.loc[out["l1_roll_share"] > 0, "l1_roll_share"].median() * 100
+        if n_roll
+        else 0.0,
+        f"{len(out) - n_roll:,}",
+        fq,
+    )
+    return out
+
+
 def fetch_paper_scope(run_timestamp: str) -> pd.DataFrame:
     """Per-paper scope flags from BigQuery, if build_unified_dashboard wrote them.
 
@@ -161,7 +267,7 @@ def fetch_paper_scope(run_timestamp: str) -> pd.DataFrame:
 def fetch_jd_opportunities() -> pd.DataFrame:
     """JD-strategy market reference table (not per-run).
 
-    Loaded once by `python -m opportunities.seed_jd`. Read-only here.
+    Loaded once by `python src/opportunities/seed_jd.py`. Read-only here.
     """
     fq = f"{C.BQ_PROJECT}.{C.BQ_OUT_DATASET}.{C.JD_TABLE}"
     try:
@@ -169,7 +275,7 @@ def fetch_jd_opportunities() -> pd.DataFrame:
     except Exception as exc:
         log.warning(
             "JD market table %s unavailable (%s) — market overlay will be empty. "
-            "Load it with: python -m opportunities.seed_jd",
+            "Load it with: python src/opportunities/seed_jd.py",
             fq,
             str(exc)[:120],
         )

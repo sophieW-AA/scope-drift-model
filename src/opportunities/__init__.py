@@ -1,7 +1,7 @@
-"""Scope-drift opportunity mapper — demand-first section vs journal shortlist.
+"""Scope-drift opportunity mapper.
 
-All inputs and outputs are BigQuery. The only local-file reader in the package
-is `seed_jd.py`, a one-off admin loader for the JD market reference table.
+Analytical tables live in BigQuery. Local JSON, Excel and log artifacts live
+under ``scope_drift_outputs/opportunities``.
 """
 
 from .config import (
