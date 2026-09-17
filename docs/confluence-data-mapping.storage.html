@@ -1,0 +1,1239 @@
+<p>BigQuery reference for the scope-drift opportunity pipeline. For every table: its columns, the script that writes it, the scripts that read it, and its join keys. How the citation graph is built lives on <ac:link><ri:page ri:content-title="Citation Network" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Citation Network]]></ac:plain-text-link-body></ac:link>. How we judge in-scope vs out-of-scope for a journal lives on <ac:link><ri:page ri:content-title="Journal Scope Drift" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Journal Scope Drift]]></ac:plain-text-link-body></ac:link>.</p>
+
+<p>Table names are written as <code>&lt;run&gt;</code> throughout, because the pipeline writes a fresh set of tables on every citation run. <strong>The V1 tables</strong> section below resolves <code>&lt;run&gt;</code> to the actual names behind the current V1 slate.</p>
+
+<h2>Conventions</h2>
+
+<table>
+  <tbody>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Project</td><td><code>ocean-tech-adv-analytics-c-tfs</code></td></tr>
+    <tr><td>Location</td><td><code>EU</code></td></tr>
+    <tr><td>Run suffix</td><td>Written <code>&lt;run&gt;</code> on this page. The real value is <code>_YYYYMMDD_HHMMSS</code> identifying the scope-drift citation run, not the write date. Tables sharing a suffix join to each other; tables with different suffixes do not. See <strong>The V1 tables</strong>.</td></tr>
+    <tr><td><code>run_timestamp</code> column</td><td>Added to every <code>opportunity_mapping</code> table by <code>bq._prepare_df</code>.</td></tr>
+    <tr><td>Write mode</td><td><code>if_exists="replace"</code>. No append, no incremental.</td></tr>
+    <tr><td>Empty results</td><td><code>bq.write_table</code> deletes the table instead of writing zero rows.</td></tr>
+    <tr><td>Nested values</td><td>dict/list serialised to JSON <code>STRING</code>. Read with <code>JSON_VALUE</code> / <code>JSON_VALUE_ARRAY</code>.</td></tr>
+    <tr><td>Unversioned tables</td><td><code>jd_opportunities</code>, <code>world_market_fields</code>.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>The pipeline</h2>
+
+<p>Five stages. Graph construction and Leiden defaults are documented on <ac:link><ri:page ri:content-title="Citation Network" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Citation Network]]></ac:plain-text-link-body></ac:link>; this page is the table dictionary. Each stage writes its tables and the next stage reads them &mdash; nothing is passed outside BigQuery.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="title">Stages</ac:parameter>
+  <ac:plain-text-body><![CDATA[AIRAK  (ocean-breeze-tier-1.airak)
+  |
+  v
+1. cwts_export.py            -> pubs_raw, cit_links_raw, pub_metadata_raw, run_metadata
+  |                                                        [raw_citation_network_data]
+  v
+2. subprocess_leiden.py      -> classification_raw
+  |
+  v
+3. taxonomy_naming.py        -> cluster_labels_*, cluster_taxonomy_labels_*, cluster_l2_topics_*
+  |                                                               [taxonomy_labelling]
+  v
+4. build_unified_dashboard.py -> paper_scope
+  |
+  v
+5. src/opportunities/        -> everything in [opportunity_mapping]]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<table>
+  <tbody>
+    <tr><th>Stage</th><th>Script</th><th>Reads</th><th>Writes</th><th>What it does</th></tr>
+    <tr><td>1. Export</td><td><code>cwts_export.py</code></td><td>AIRAK</td><td><code>pubs_raw</code>, <code>cit_links_raw</code>, <code>pub_metadata_raw</code>, <code>run_metadata</code></td><td>Pulls every paper citing or cited by the Frontiers seed set and turns them into a weighted node-and-edge list.</td></tr>
+    <tr><td>2. Cluster</td><td><code>subprocess_leiden.py</code></td><td><code>pubs_raw</code>, <code>cit_links_raw</code></td><td><code>classification_raw</code></td><td>Runs Leiden at three resolutions, giving every paper a micro, meso and macro community.</td></tr>
+    <tr><td>3. Name</td><td><code>taxonomy_naming.py</code></td><td><code>classification_raw</code>, <code>pub_metadata_raw</code></td><td><code>cluster_labels_*</code>, <code>cluster_taxonomy_labels_*</code>, <code>cluster_l2_topics_*</code></td><td>Gives each numbered community a human name and a subject-topic profile.</td></tr>
+    <tr><td>4. Scope</td><td><code>build_unified_dashboard.py</code></td><td><code>classification_raw</code>, <code>pub_metadata_raw</code>, <code>run_metadata</code></td><td><code>paper_scope</code></td><td>Judges, per journal, which communities are in scope and flags individual papers that drifted out.</td></tr>
+    <tr><td>5. Opportunity</td><td><code>src/opportunities/</code></td><td>all of the above</td><td><code>opportunity_mapping.*</code></td><td>Sizes markets, works out who owns what, and produces the launch slate.</td></tr>
+  </tbody>
+</table>
+
+<h3>Inside stage 5</h3>
+
+<p>The phases run in this order. Each one reads the previous phase's table, so a partial run needs its predecessors to exist for the same run suffix.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="title">python src/opportunities/run.py --phase all</ac:parameter>
+  <ac:plain-text-body><![CDATA[world  world_market.py    -> world_opportunities, world_field_scopes
+p0     p0_inventory.py    -> papers, candidates, topics, journal_meta, p0_meta
+p1     p1_home.py         -> home
+p2     p2_volume.py       -> volume
+p3     p3_market.py       -> market
+p4     p4_engine.py       -> decisions, pack
+        portfolio.py      -> launches, whitespace_jd, portfolio
+p5     p5_persist.py      -> community_matches
+units  launch_units.py    -> launch_units, launch_shortlist, launch_units_meta
+final  final_opportunities.py -> final_journal_opportunities, ..._manifest   <-- default phase
+
+separate commands, not part of --phase all:
+       market_map.py      -> market_opportunities_<level>, ..._meta
+       seed_jd.py         -> jd_opportunities  (reference table, no run suffix)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<table>
+  <tbody>
+    <tr><th>Phase</th><th>Question it answers</th></tr>
+    <tr><td><code>world</code></td><td>Which research fields are big and growing, independently of Frontiers and of Leiden?</td></tr>
+    <tr><td><code>p0</code></td><td>What does each Frontiers journal actually publish, by community, and is that mix moving?</td></tr>
+    <tr><td><code>p1</code></td><td>Does this community belong to this journal, or does another journal already own it?</td></tr>
+    <tr><td><code>p2</code></td><td>Is the community big enough and persistent enough to matter, and is it driven by Research Topics or by spontaneous submissions?</td></tr>
+    <tr><td><code>p3</code></td><td>What does the governed JD market reference say about this community?</td></tr>
+    <tr><td><code>p4</code></td><td>Given all of the above, what should we do &mdash; gate, expand, redirect, launch a section, launch a journal, or watch?</td></tr>
+    <tr><td><code>p5</code></td><td>Which communities in this run are the same as the ones in the previous run?</td></tr>
+    <tr><td><code>units</code></td><td>Sized against real journals and sections, what would a launchable unit look like and who owns it today?</td></tr>
+    <tr><td><code>final</code></td><td>Across OpenAlex subfields, which markets justify a new journal, and does the citation network support that scope?</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Table index</h2>
+
+<p><strong>Read by</strong> lists repo code that reads the table. &ldquo;&mdash;&rdquo; means nothing in the repo reads it: it is a terminal output for reporting or audit.</p>
+
+<h3><code>raw_citation_network_data</code></h3>
+
+<table>
+  <tbody>
+    <tr><th>Table</th><th>What it shows</th><th>Rows</th><th>Written by</th><th>Read by</th></tr>
+    <tr><td><code>pubs_raw_&lt;run&gt;</code></td><td>One row per node in the citation network. The node list Leiden partitions, and nothing else.</td><td>17,136,717</td><td><code>cwts_export.py</code></td><td><code>subprocess_leiden.py</code></td></tr>
+    <tr><td><code>cit_links_raw_&lt;run&gt;</code></td><td>One row per directed citation edge, with the weight Leiden optimises against. The largest table in the project.</td><td>190,644,060</td><td><code>cwts_export.py</code></td><td><code>subprocess_leiden.py</code></td></tr>
+    <tr><td><code>pub_metadata_raw_&lt;run&gt;</code></td><td>One row per node giving its real-world identity: AIRAK publication ID, journal, date, title and whether it is a Frontiers paper. The bridge from network IDs to actual papers, and the table that makes everything else joinable.</td><td>17,136,717</td><td><code>cwts_export.py</code></td><td><code>taxonomy_naming.py</code>, <code>build_unified_dashboard.py</code>, <code>bq.fetch_frontiers_run_papers</code>, <code>final_opportunities.fetch_leiden_overlap</code>, <code>launch_units.fetch_frontiers_placement</code>, <code>world_market.py</code></td></tr>
+    <tr><td><code>classification_raw_&lt;run&gt;</code></td><td>One row per classified paper with its community at all three Leiden resolutions. This is the community assignment every downstream table joins to.</td><td>16,683,447</td><td><code>subprocess_leiden.py</code></td><td>same as <code>pub_metadata_raw</code>, plus <code>launch_units.fetch_hierarchy</code></td></tr>
+    <tr><td><code>run_metadata_&lt;run&gt;</code></td><td>One row holding the export's own parameters: year range, journal selection, edge weighting, decay, node and edge totals. Read it when two runs disagree.</td><td>1</td><td><code>cwts_export.py</code></td><td><code>build_unified_dashboard.load_run_metadata</code></td></tr>
+    <tr><td><code>paper_scope_&lt;run&gt;</code></td><td>One row per paper per journal it was assessed against, carrying the drift dashboard's in-scope, borderline or out-of-scope verdict. Covers only the journals the dashboard is configured for, so it is far smaller than the paper count.</td><td>17,768</td><td><code>build_unified_dashboard.py</code></td><td><code>bq.fetch_paper_scope</code>, <code>final_opportunities.fetch_leiden_overlap</code></td></tr>
+  </tbody>
+</table>
+
+<h3><code>taxonomy_labelling</code></h3>
+
+<p>All written by <code>taxonomy_naming.py</code>. <code>&lt;level&gt;</code> is <code>macro</code>, <code>meso</code> or <code>micro</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Table</th><th>What it shows</th><th>Rows (macro / meso / micro)</th><th>Read by</th></tr>
+    <tr><td><code>cluster_labels_&lt;level&gt;_&lt;run&gt;</code></td><td>One row per community with its chosen name, keywords, summary and supporting coverage. This is the name every downstream table and report displays.</td><td>19 / 402 / 2,988</td><td><code>bq.fetch_cluster_labels</code>, <code>final_opportunities.discover_latest_complete_run</code></td></tr>
+    <tr><td><code>cluster_taxonomy_labels_&lt;level&gt;_&lt;run&gt;</code></td><td>Several rows per community: the ranked candidate names and the LLM's confidence and reasoning behind the one that won. Audit trail for the labels above.</td><td>102 / 1,901 / 13,438</td><td>&mdash;</td></tr>
+    <tr><td><code>cluster_l2_topics_&lt;level&gt;_&lt;run&gt;</code></td><td>One row per community per L2 taxonomy topic, with that topic's share of the community. How a community gets described by subject rather than by number.</td><td>&mdash; / 3,248 / 24,248</td><td><code>bq.fetch_l2_topics</code></td></tr>
+  </tbody>
+</table>
+
+<h3><code>opportunity_mapping</code></h3>
+
+<table>
+  <tbody>
+    <tr><th>Table</th><th>What it shows</th><th>Rows</th><th>Written by</th><th>Read by</th></tr>
+    <tr><td><code>world_market_fields</code></td><td>One row per field &times; year &times; month of world and Frontiers article counts. The monthly grain exists so growth can compare like-for-like calendar months rather than a complete year against a partial one.</td><td>23,771</td><td><code>world_market.materialize_world_market</code></td><td><code>world_market.py</code>, <code>market_map.py</code></td></tr>
+    <tr><td><code>jd_opportunities</code></td><td>One row per governed JD subfield &mdash; the hand-maintained market reference seeded from the Journal Development strategy work. Not derived from the citation network, and the only table here a human edits.</td><td>98</td><td><code>seed_jd.py:128</code></td><td><code>bq.fetch_jd_opportunities</code> &rarr; <code>final_opportunities.py:391</code>, <code>p3_market.py:150</code>, <code>portfolio.py:148</code></td></tr>
+    <tr><td><code>world_opportunities_&lt;run&gt;</code></td><td>One row per AIRAK level-1 field: world volume, growth, Frontiers share, lead title and an action. The market view that owes nothing to Leiden, used to sanity-check community-level claims.</td><td>284</td><td><code>world_market.py:395</code></td><td><code>market_map.py:374</code></td></tr>
+    <tr><td><code>world_field_scopes_&lt;run&gt;</code></td><td>One row per field &times; meso community. Shows which Leiden scopes make up each world field, so a field-level number can be traced back to communities.</td><td>406</td><td><code>world_market.py:396</code></td><td>&mdash;</td></tr>
+    <tr><td><code>papers_&lt;run&gt;</code></td><td>One row per Frontiers paper in the run, joined to its community, its label, its leading topic and its scope verdict. The fact table the whole P0&ndash;P5 mapper is built on.</td><td>282,689</td><td><code>p0_inventory.py:551</code></td><td><code>p1_home.py:160</code>, <code>p2_volume.py:172</code>, <code>p5_persist.py:73,90</code></td></tr>
+    <tr><td><code>candidates_&lt;run&gt;</code></td><td>One row per journal &times; community: how much that journal publishes there, whether the share is moving, and how large and fast-growing the world market for that community is. The feature table the decision tree scores.</td><td>3,021</td><td><code>p0_inventory.py:552</code></td><td><code>p1_home.py:162</code>, <code>p2_volume.py:174</code>, <code>p3_market.py:145</code>, <code>p4_engine.py:439</code></td></tr>
+    <tr><td><code>topics_&lt;run&gt;</code></td><td>One row per journal &times; community &times; L2 topic. The subject-level detail sitting behind each candidate row; use it to see what a community is actually about for a given journal.</td><td>856</td><td><code>p0_inventory.py:553</code></td><td>&mdash;</td></tr>
+    <tr><td><code>journal_meta_&lt;run&gt;</code></td><td>One row per journal: its window, its paper counts, and the community sets that define its baseline and its current scope.</td><td>209</td><td><code>p0_inventory.py:555</code></td><td>&mdash;</td></tr>
+    <tr><td><code>p0_meta_&lt;run&gt;</code></td><td>One row describing the P0 run: resolved years, row counts, community levels and the corpus-wide constants every later phase reuses.</td><td>1</td><td><code>p0_inventory.py:557</code></td><td>&mdash;</td></tr>
+    <tr><td><code>home_&lt;run&gt;</code></td><td>One row per journal &times; community answering whether the community belongs to this journal or has a better home elsewhere. Title-token similarity against every other journal and every live specialty section.</td><td>3,021</td><td><code>p1_home.py:173</code></td><td><code>p3_market.py:147</code>, <code>p4_engine.py:441</code></td></tr>
+    <tr><td><code>volume_&lt;run&gt;</code></td><td>One row per journal &times; community measuring whether the community is big enough and persistent enough to act on, and separating Research Topic output from spontaneous submissions.</td><td>3,021</td><td><code>p2_volume.py:186</code></td><td><code>p4_engine.py:443</code></td></tr>
+    <tr><td><code>market_&lt;run&gt;</code></td><td>One row per journal &times; community carrying the governed JD market reference matched to that community, plus the gate that decides whether the market is big enough for a journal.</td><td>3,021</td><td><code>p3_market.py:152</code></td><td><code>p4_engine.py:445</code></td></tr>
+    <tr><td><code>decisions_&lt;run&gt;</code></td><td>One row per journal &times; community with the recommendation. Everything from <code>candidates</code>, <code>home</code>, <code>volume</code> and <code>market</code> in one place, plus the call, the three-part score and the run-over-run persistence check. The main P0&ndash;P5 output.</td><td>3,021</td><td><code>p4_engine.py:450</code></td><td><code>p5_persist.py:84</code>, <code>bq.previous_decisions</code>, <code>portfolio.py</code></td></tr>
+    <tr><td><code>pack_&lt;run&gt;</code></td><td>One row summarising the decision run: counts per call, counts per presence, and how many launches are still awaiting confirmation.</td><td>1</td><td><code>p4_engine.py:464</code></td><td>&mdash;</td></tr>
+    <tr><td><code>launches_&lt;run&gt;</code></td><td>The subset of <code>decisions</code> that received a launch call, with a section-or-journal tag added. The shortlist a reader would actually review.</td><td>320</td><td><code>portfolio.py:180</code></td><td>&mdash;</td></tr>
+    <tr><td><code>whitespace_jd_&lt;run&gt;</code></td><td>One row per governed JD subfield that is large, growing, has almost no Frontiers presence, and that the community mapper never surfaced. The gap between the two methods.</td><td>6</td><td><code>portfolio.py:181</code></td><td>&mdash;</td></tr>
+    <tr><td><code>portfolio_&lt;run&gt;</code></td><td>One row summarising the portfolio view, including a fully rendered markdown report in <code>portfolio_markdown</code>.</td><td>1</td><td><code>portfolio.py:182</code></td><td>&mdash;</td></tr>
+    <tr><td><code>community_matches_&lt;run&gt;</code></td><td>One row per journal &times; community linking this run's community IDs to the previous run's. Leiden IDs are not stable, so this is the only safe way to compare two runs.</td><td>12,926</td><td><code>p5_persist.py:92</code></td><td>&mdash;</td></tr>
+    <tr><td><code>launch_units_&lt;run&gt;</code></td><td>One row per candidate launch unit &mdash; a meso community, a micro community, or a bundle of micros &mdash; sized against bands calibrated from real Frontiers journals and sections, with an ownership verdict and an action.</td><td>3,405</td><td><code>launch_units.py:1175</code></td><td>&mdash;</td></tr>
+    <tr><td><code>launch_shortlist_&lt;run&gt;</code></td><td><code>launch_units</code> filtered to rows carrying an actionable launch. Nothing is recomputed, so columns mean exactly what they mean above.</td><td>768</td><td><code>launch_units.py:1178</code></td><td>&mdash;</td></tr>
+    <tr><td><code>launch_units_meta_&lt;run&gt;</code></td><td>One row recording the size bands, where they were calibrated from, and the action and ownership counts for the units run.</td><td>1</td><td><code>launch_units.py:1176</code></td><td>&mdash;</td></tr>
+    <tr><td><code>market_opportunities_micro_&lt;run&gt;</code></td><td>One row per micro community with its market sizing, growth reliability and opportunity verdict. The community-first market view at section resolution.</td><td>2,878</td><td><code>market_map.py:419</code></td><td>&mdash;</td></tr>
+    <tr><td><code>market_opportunities_meso_&lt;run&gt;</code></td><td>The same measures at meso resolution, which is roughly journal-shaped.</td><td>406</td><td><code>market_map.py:419</code></td><td>&mdash;</td></tr>
+    <tr><td><code>market_opportunities_micro_meta_&lt;run&gt;</code></td><td>One row recording the window, corpus constants and opportunity counts for the micro level.</td><td>1</td><td><code>market_map.py:420</code></td><td>&mdash;</td></tr>
+    <tr><td><code>market_opportunities_meso_meta_&lt;run&gt;</code></td><td>The same for the meso level.</td><td>1</td><td><code>market_map.py:420</code></td><td>&mdash;</td></tr>
+    <tr><td><code>market_opportunities_&lt;run&gt;</code></td><td>Unlevelled predecessor of <code>market_opportunities_micro</code>. Nothing writes or reads it now.</td><td>2,878</td><td><strong>legacy &mdash; no current producer</strong></td><td>&mdash;</td></tr>
+    <tr><td><code>market_opportunities_meta_&lt;run&gt;</code></td><td>Its meta row. Same status.</td><td>1</td><td><strong>legacy &mdash; no current producer</strong></td><td>&mdash;</td></tr>
+    <tr><td><code>final_journal_opportunities_&lt;run&gt;</code></td><td>One row per OpenAlex subfield: market size, growth, funding, competitor concentration, Frontiers presence, a Leiden-derived scope with a confidence rating, a grade and an action. <strong>This is the V1 launch slate</strong> and the source of the Excel workbook.</td><td>252</td><td><code>final_opportunities.py:813</code></td><td>&mdash;</td></tr>
+    <tr><td><code>final_journal_opportunities_manifest_&lt;run&gt;</code></td><td>One row recording the thresholds, source-data versions and result counts behind the slate above. The reproducibility record &mdash; quote it whenever you quote a number from the slate.</td><td>1</td><td><code>final_opportunities.py:814</code></td><td>&mdash;</td></tr>
+  </tbody>
+</table>
+
+<h3>Which command writes what</h3>
+
+<table>
+  <tbody>
+    <tr><th>Command</th><th>Tables written</th></tr>
+    <tr><td><code>cwts_export.py</code> &rarr; <code>subprocess_leiden.py</code> &rarr; <code>taxonomy_naming.py</code> &rarr; <code>build_unified_dashboard.py</code></td><td>the <code>raw_citation_network_data</code> and <code>taxonomy_labelling</code> tables, plus <code>paper_scope</code></td></tr>
+    <tr><td><code>python src/opportunities/seed_jd.py</code></td><td><code>jd_opportunities</code></td></tr>
+    <tr><td><code>run.py --phase all</code></td><td><code>world_opportunities</code>, <code>world_field_scopes</code>, <code>papers</code>, <code>candidates</code>, <code>topics</code>, <code>journal_meta</code>, <code>p0_meta</code>, <code>home</code>, <code>volume</code>, <code>market</code>, <code>decisions</code>, <code>pack</code>, <code>launches</code>, <code>whitespace_jd</code>, <code>portfolio</code>, <code>community_matches</code>, <code>launch_units</code>, <code>launch_shortlist</code>, <code>launch_units_meta</code>, <code>final_journal_opportunities</code>, <code>final_journal_opportunities_manifest</code></td></tr>
+    <tr><td><code>python src/opportunities/market_map.py --level &lt;micro|meso&gt;</code></td><td><code>market_opportunities_&lt;level&gt;</code>, <code>market_opportunities_&lt;level&gt;_meta</code></td></tr>
+    <tr><td><code>python src/opportunities/run.py</code></td><td><code>final_journal_opportunities</code>, <code>final_journal_opportunities_manifest</code></td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>The V1 tables</h2>
+
+<p>V1 was built from citation run <strong><code>20260827_081311</code></strong>. Everywhere this page writes <code>&lt;run&gt;</code>, substitute <code>20260827_081311</code> to get the physical table. All 43 tables live in project <code>ocean-tech-adv-analytics-c-tfs</code>, location <code>EU</code>.</p>
+
+<h3>Exact names</h3>
+
+<table>
+  <tbody>
+    <tr><th>Dataset</th><th>Table</th><th>Rows</th></tr>
+    <tr><td rowspan="6"><code>raw_citation_network_data</code></td><td><code>pubs_raw_20260827_081311</code></td><td>17,136,717</td></tr>
+    <tr><td><code>cit_links_raw_20260827_081311</code></td><td>190,644,060</td></tr>
+    <tr><td><code>pub_metadata_raw_20260827_081311</code></td><td>17,136,717</td></tr>
+    <tr><td><code>classification_raw_20260827_081311</code></td><td>16,683,447</td></tr>
+    <tr><td><code>run_metadata_20260827_081311</code></td><td>1</td></tr>
+    <tr><td><code>paper_scope_20260827_081311</code></td><td>17,768</td></tr>
+    <tr><td rowspan="8"><code>taxonomy_labelling</code></td><td><code>cluster_labels_macro_20260827_081311</code></td><td>19</td></tr>
+    <tr><td><code>cluster_labels_meso_20260827_081311</code></td><td>402</td></tr>
+    <tr><td><code>cluster_labels_micro_20260827_081311</code></td><td>2,988</td></tr>
+    <tr><td><code>cluster_taxonomy_labels_macro_20260827_081311</code></td><td>102</td></tr>
+    <tr><td><code>cluster_taxonomy_labels_meso_20260827_081311</code></td><td>1,901</td></tr>
+    <tr><td><code>cluster_taxonomy_labels_micro_20260827_081311</code></td><td>13,438</td></tr>
+    <tr><td><code>cluster_l2_topics_meso_20260827_081311</code></td><td>3,248</td></tr>
+    <tr><td><code>cluster_l2_topics_micro_20260827_081311</code></td><td>24,248</td></tr>
+    <tr><td rowspan="29"><code>opportunity_mapping</code></td><td><code>world_market_fields</code> &mdash; no run suffix</td><td>23,771</td></tr>
+    <tr><td><code>jd_opportunities</code> &mdash; no run suffix</td><td>98</td></tr>
+    <tr><td><code>world_opportunities_20260827_081311</code></td><td>284</td></tr>
+    <tr><td><code>world_field_scopes_20260827_081311</code></td><td>406</td></tr>
+    <tr><td><code>papers_20260827_081311</code></td><td>282,689</td></tr>
+    <tr><td><code>candidates_20260827_081311</code></td><td>3,021</td></tr>
+    <tr><td><code>topics_20260827_081311</code></td><td>856</td></tr>
+    <tr><td><code>journal_meta_20260827_081311</code></td><td>209</td></tr>
+    <tr><td><code>p0_meta_20260827_081311</code></td><td>1</td></tr>
+    <tr><td><code>home_20260827_081311</code></td><td>3,021</td></tr>
+    <tr><td><code>volume_20260827_081311</code></td><td>3,021</td></tr>
+    <tr><td><code>market_20260827_081311</code></td><td>3,021</td></tr>
+    <tr><td><code>decisions_20260827_081311</code></td><td>3,021</td></tr>
+    <tr><td><code>pack_20260827_081311</code></td><td>1</td></tr>
+    <tr><td><code>launches_20260827_081311</code></td><td>320</td></tr>
+    <tr><td><code>whitespace_jd_20260827_081311</code></td><td>6</td></tr>
+    <tr><td><code>portfolio_20260827_081311</code></td><td>1</td></tr>
+    <tr><td><code>community_matches_20260827_081311</code></td><td>12,926</td></tr>
+    <tr><td><code>launch_units_20260827_081311</code></td><td>3,405</td></tr>
+    <tr><td><code>launch_shortlist_20260827_081311</code></td><td>768</td></tr>
+    <tr><td><code>launch_units_meta_20260827_081311</code></td><td>1</td></tr>
+    <tr><td><code>market_opportunities_micro_20260827_081311</code></td><td>2,878</td></tr>
+    <tr><td><code>market_opportunities_meso_20260827_081311</code></td><td>406</td></tr>
+    <tr><td><code>market_opportunities_micro_meta_20260827_081311</code></td><td>1</td></tr>
+    <tr><td><code>market_opportunities_meso_meta_20260827_081311</code></td><td>1</td></tr>
+    <tr><td><code>market_opportunities_20260827_081311</code> &mdash; legacy</td><td>2,878</td></tr>
+    <tr><td><code>market_opportunities_meta_20260827_081311</code> &mdash; legacy</td><td>1</td></tr>
+    <tr><td><strong><code>final_journal_opportunities_20260827_081311</code></strong></td><td>252</td></tr>
+    <tr><td><code>final_journal_opportunities_manifest_20260827_081311</code></td><td>1</td></tr>
+  </tbody>
+</table>
+
+<h3>How they link</h3>
+
+<p>Two identifiers carry the whole chain. <code>int_id</code> is the run-local paper ID and joins everything in the network layer. <code>community_id</code> is the Leiden community and joins the network layer to the opportunity layer. Both are meaningless outside this run.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="title">V1 join chain</ac:parameter>
+  <ac:plain-text-body><![CDATA[pubs_raw_20260827_081311            int_id
+cit_links_raw_20260827_081311       int_id1, int_id2 --> int_id
+pub_metadata_raw_20260827_081311    int_id            (pub_id --> AIRAK PublicationId --> DOI --> OpenAlex)
+classification_raw_20260827_081311  int_id + micro / meso / macro
+        |
+        |  meso --> cluster_id
+        v
+cluster_labels_meso_20260827_081311        community name
+cluster_l2_topics_meso_20260827_081311     subject topics
+        |
+        |  int_id + meso
+        v
+paper_scope_20260827_081311         in-scope / out-of-scope verdict  (partial: 17,768 rows)
+        |
+        v
+papers_20260827_081311              int_id + (journal, community_id)
+        |
+        |  (journal, community_id)
+        +--> candidates_20260827_081311
+        +--> home_20260827_081311
+        +--> volume_20260827_081311
+        +--> market_20260827_081311  -- field1 --> jd_opportunities.subfield
+        +--> decisions_20260827_081311
+                 |
+                 +--> launches_20260827_081311
+                 +--> community_matches_20260827_081311  (links to the PREVIOUS run's community_id)
+
+launch_units_20260827_081311        parent_id --> meso, member_ids --> micro
+                                    primary_world_field --> world_opportunities_20260827_081311.field
+
+world_market_fields  -- field_id -->  world_opportunities_20260827_081311  -- field -->  world_field_scopes_20260827_081311
+
+final_journal_opportunities_20260827_081311
+        subfield_id          --> openalex.subfields.id
+        scope_community_ids  --> cluster_labels_meso_20260827_081311.cluster_id  (JSON array, needs UNNEST)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<table>
+  <tbody>
+    <tr><th>If you want&hellip;</th><th>Start here</th></tr>
+    <tr><td>The V1 launch slate as presented</td><td><code>final_journal_opportunities_20260827_081311</code>, filtered to <code>shortlist_rank IS NOT NULL</code>. The 20 shortlisted rows.</td></tr>
+    <tr><td>The thresholds behind those numbers</td><td><code>final_journal_opportunities_manifest_20260827_081311</code>.</td></tr>
+    <tr><td>Per-journal drift findings</td><td><code>decisions_20260827_081311</code>.</td></tr>
+    <tr><td>What a community actually contains</td><td><code>papers_20260827_081311</code> filtered on <code>community_id</code>, titles from <code>pub_metadata_raw</code>.</td></tr>
+    <tr><td>A market size independent of Leiden</td><td><code>world_opportunities_20260827_081311</code>.</td></tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>Do not join across runs.</strong> Leiden assigns <code>int_id</code> and <code>community_id</code> afresh each time, so the same number means a different thing in a different run. To compare V1 with a later run, go through <code>community_matches</code>.</p>
+</blockquote>
+
+<hr />
+
+<h2><code>raw_citation_network_data</code> columns</h2>
+
+<p>Owner: Sophie Wilson / Advanced Analytics.</p>
+
+<h3><code>pubs_raw_&lt;run&gt;</code></h3>
+<p>Key <code>int_id</code>. Joins: <code>int_id</code> &rarr; <code>pub_metadata_raw</code>, <code>classification_raw</code>, <code>cit_links_raw.int_id1</code>/<code>int_id2</code>.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>int_id</code></td><td>INTEGER</td><td>Run-local node ID, assigned by sorting AIRAK publication IDs. Not stable across runs.</td></tr>
+    <tr><td><code>core_pub</code></td><td>INTEGER</td><td>CWTS core-publication flag. Set to <code>1</code> on every row by the current exporter, so it does not distinguish seed from neighbour papers. Use <code>pub_metadata_raw.is_frontiers</code> instead.</td></tr>
+  </tbody>
+</table>
+
+<h3><code>cit_links_raw_&lt;run&gt;</code></h3>
+<p>Key <code>(int_id1, int_id2)</code>. Pairs are normalised low-ID-first, deduplicated with weights summed, then written in both directions; each undirected edge appears twice.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>int_id1</code></td><td>INTEGER</td><td>Source node.</td></tr>
+    <tr><td><code>int_id2</code></td><td>INTEGER</td><td>Target node.</td></tr>
+    <tr><td><code>weight</code></td><td>FLOAT</td><td><code>exp(-(end_year - cited_year) / temporal_decay_tau)</code> floored at 0.01, multiplied by <code>self_cite_journal_weight</code> when both papers share a journal. Bibliographic-coupling weight is added and the total capped at 2.0 when that feature is on; it was off for this run.</td></tr>
+  </tbody>
+</table>
+
+<h3><code>pub_metadata_raw_&lt;run&gt;</code></h3>
+<p>Key <code>int_id</code>. Joins: <code>int_id</code> &rarr; other network tables; <code>pub_id</code> &rarr; <code>ocean-breeze-tier-1.airak.Publication.PublicationId</code>.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>int_id</code></td><td>INTEGER</td><td>Run-local node ID.</td></tr>
+    <tr><td><code>pub_id</code></td><td>INTEGER</td><td>AIRAK <code>PublicationId</code>. Route to OpenAlex is <code>pub_id</code> &rarr; AIRAK DOI &rarr; <code>openalex.works.doi</code>.</td></tr>
+    <tr><td><code>is_frontiers</code></td><td>INTEGER</td><td><code>1</code> when the journal is in the configured Frontiers journal-ID set, else <code>0</code>.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Journal name from AIRAK, falling back to journal ID. Populated for all publishers.</td></tr>
+    <tr><td><code>date</code></td><td>STRING</td><td>Published date, falling back to year then <code>0000-01-01</code>. Text, so parse with <code>SAFE.PARSE_DATE</code>.</td></tr>
+    <tr><td><code>title</code></td><td>STRING</td><td>Publication title, tabs and newlines stripped.</td></tr>
+  </tbody>
+</table>
+
+<h3><code>classification_raw_&lt;run&gt;</code></h3>
+<p>Key <code>int_id</code>. Leiden run with 1,000 iterations on the largest connected component. Resolution / minimum size: micro <code>1e-5 / 500</code>, meso <code>2e-6 / 5,000</code>, macro <code>2e-7 / 100,000</code>. Community IDs are run-local.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>int_id</code></td><td>INTEGER</td><td>Run-local node ID.</td></tr>
+    <tr><td><code>micro</code></td><td>INTEGER</td><td>Finest community. Section-shaped; used as the drill-down level.</td></tr>
+    <tr><td><code>meso</code></td><td>INTEGER</td><td>Middle community. Journal-shaped; the default opportunity community level.</td></tr>
+    <tr><td><code>macro</code></td><td>INTEGER</td><td>Broadest community.</td></tr>
+  </tbody>
+</table>
+
+<h3><code>run_metadata_&lt;run&gt;</code></h3>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th><th>Value in this table</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Timestamp recorded by the exporter.</td><td><code>20260818_090851</code> &mdash; does not match the table suffix; see Known issues.</td></tr>
+    <tr><td><code>generated_utc</code></td><td>STRING</td><td>UTC completion time of the export.</td><td><code>2026-08-18 15:43 UTC</code></td></tr>
+    <tr><td><code>bq_source_project</code></td><td>STRING</td><td>Query project used by the exporter.</td><td><code>ocean-tech-adv-analytics-p-usr</code></td></tr>
+    <tr><td><code>bq_source_dataset</code></td><td>STRING</td><td>AIRAK source dataset.</td><td><code>ocean-breeze-tier-1.airak</code></td></tr>
+    <tr><td><code>network_mode</code></td><td>STRING</td><td><code>global</code>, <code>full</code> or <code>ego</code>.</td><td><code>global</code></td></tr>
+    <tr><td><code>start_year</code></td><td>INTEGER</td><td>First publication year admitted.</td><td>2023</td></tr>
+    <tr><td><code>end_year</code></td><td>INTEGER</td><td>Last publication year admitted.</td><td>2026</td></tr>
+    <tr><td><code>top_n_journals</code></td><td>INTEGER</td><td>Fallback journal count, unused when <code>journal_ids</code> is set.</td><td>5</td></tr>
+    <tr><td><code>journal_ids</code></td><td>STRING</td><td>JSON array of AIRAK journal IDs forming the Frontiers seed set.</td><td>~220 IDs</td></tr>
+    <tr><td><code>edge_weighting_enabled</code></td><td>BOOLEAN</td><td>Whether decay and self-citation discounting were applied.</td><td><code>true</code></td></tr>
+    <tr><td><code>temporal_decay_tau</code></td><td>FLOAT</td><td>Decay constant in years.</td><td>5.0</td></tr>
+    <tr><td><code>self_cite_journal_weight</code></td><td>FLOAT</td><td>Multiplier for same-journal citations.</td><td>0.5</td></tr>
+    <tr><td><code>bc_edges_enabled</code></td><td>BOOLEAN</td><td>Whether bibliographic-coupling edges were added.</td><td><code>false</code></td></tr>
+    <tr><td><code>bc_min_shared_refs</code></td><td>INTEGER</td><td>Shared references required for a coupling edge.</td><td>3</td></tr>
+    <tr><td><code>total_nodes</code></td><td>INTEGER</td><td>Nodes before Leiden.</td><td>17,136,717</td></tr>
+    <tr><td><code>total_edges</code></td><td>INTEGER</td><td>Edges before the writer normalises pairs and emits both directions, so it does not equal the <code>cit_links_raw</code> row count.</td><td>95,369,744</td></tr>
+  </tbody>
+</table>
+
+<h3><code>paper_scope_&lt;run&gt;</code></h3>
+<p>Key <code>(int_id, journal, cluster_level)</code>. Covers only journals configured in the dashboard. Downstream code left-joins it and treats missing papers as in scope, so absence means &ldquo;not assessed&rdquo;.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>int_id</code></td><td>INTEGER</td><td>Run-local node ID.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Journal the paper is assessed against.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Leiden community at <code>cluster_level</code>.</td></tr>
+    <tr><td><code>cluster_level</code></td><td>STRING</td><td>Level used for the decision. <code>meso</code> for this run.</td></tr>
+    <tr><td><code>scope_code</code></td><td>INTEGER</td><td><code>0</code> out of scope, <code>1</code> borderline, <code>2</code> in scope. Derived from the flags below after overrides.</td></tr>
+    <tr><td><code>is_oos</code></td><td>BOOLEAN</td><td>Community outside the journal's primary-plus-borderline set, or a per-paper override forced it out.</td></tr>
+    <tr><td><code>is_borderline</code></td><td>BOOLEAN</td><td>Community admitted as borderline rather than primary. Forced false when the paper is made out of scope.</td></tr>
+    <tr><td><code>hard_negative</code></td><td>BOOLEAN</td><td>A journal-specific title pattern forced the paper out of scope.</td></tr>
+    <tr><td><code>paper_demoted</code></td><td>BOOLEAN</td><td>The paper-level LLM judged a suspicious title inside a risky primary community to be out of scope.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2><code>taxonomy_labelling</code> columns</h2>
+
+<h3><code>cluster_labels_&lt;level&gt;_&lt;run&gt;</code></h3>
+<p>Key <code>cluster_id</code>. Join <code>cluster_id</code> &rarr; <code>classification_raw.&lt;level&gt;</code> and to any <code>community_id</code> at the same level.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>cluster_id</code></td><td>INTEGER</td><td>Leiden community ID.</td></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>classification_join_column</code></td><td>STRING</td><td>Column in <code>classification_raw</code> this ID belongs to: <code>macro</code>, <code>meso</code> or <code>micro</code>.</td></tr>
+    <tr><td><code>short_label</code></td><td>STRING</td><td>Selected community name. The label used downstream.</td></tr>
+    <tr><td><code>long_label</code></td><td>STRING</td><td>Extended name.</td></tr>
+    <tr><td><code>keywords</code></td><td>STRING</td><td>Representative terms.</td></tr>
+    <tr><td><code>summary</code></td><td>STRING</td><td>Prose description of the community.</td></tr>
+    <tr><td><code>wikipedia_page</code></td><td>STRING</td><td>Matched Wikipedia page, where one was found.</td></tr>
+    <tr><td><code>coverage_pct</code></td><td>STRING</td><td>Share of community papers supporting the label.</td></tr>
+    <tr><td><code>level</code></td><td>STRING</td><td>Cluster level.</td></tr>
+    <tr><td><code>n_papers</code></td><td>INTEGER</td><td>Papers in the community.</td></tr>
+    <tr><td><code>taxonomy_key</code></td><td>STRING</td><td>Matched internal taxonomy node.</td></tr>
+    <tr><td><code>taxonomy_level</code></td><td>STRING</td><td>Level of that taxonomy node.</td></tr>
+    <tr><td><code>match_mode</code></td><td>STRING</td><td>How the label was chosen.</td></tr>
+    <tr><td><code>source</code></td><td>STRING</td><td>Origin of the label.</td></tr>
+  </tbody>
+</table>
+
+<h3><code>cluster_taxonomy_labels_&lt;level&gt;_&lt;run&gt;</code></h3>
+<p>Several rows per community: the ranked candidates behind the selected label. Key <code>(cluster_id, cluster_rank)</code>.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>cluster_id</code></td><td>INTEGER</td><td>Leiden community ID.</td></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>classification_join_column</code></td><td>STRING</td><td>Level column in <code>classification_raw</code>.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Community ID, duplicate of <code>cluster_id</code>.</td></tr>
+    <tr><td><code>community_name</code></td><td>STRING</td><td>Selected community name.</td></tr>
+    <tr><td><code>cluster_level</code></td><td>STRING</td><td>Cluster level.</td></tr>
+    <tr><td><code>n_community_papers</code></td><td>INTEGER</td><td>Papers in the community.</td></tr>
+    <tr><td><code>tier</code></td><td>STRING</td><td>Confidence tier of this candidate.</td></tr>
+    <tr><td><code>cluster_rank</code></td><td>INTEGER</td><td>Rank of this candidate; 1 is the selected label.</td></tr>
+    <tr><td><code>cluster_key</code></td><td>STRING</td><td>Candidate taxonomy node key.</td></tr>
+    <tr><td><code>cluster_name</code></td><td>STRING</td><td>Candidate taxonomy node name.</td></tr>
+    <tr><td><code>taxonomy_level</code></td><td>STRING</td><td>Level of that node.</td></tr>
+    <tr><td><code>match_mode</code></td><td>STRING</td><td>How this candidate was matched.</td></tr>
+    <tr><td><code>llm_confidence</code></td><td>STRING</td><td>LLM confidence in this candidate.</td></tr>
+    <tr><td><code>llm_rationale</code></td><td>STRING</td><td>Short LLM justification.</td></tr>
+    <tr><td><code>llm_reasoning</code></td><td>STRING</td><td>Full LLM reasoning.</td></tr>
+    <tr><td><code>run_date</code></td><td>STRING</td><td>Date the labelling ran.</td></tr>
+  </tbody>
+</table>
+
+<h3><code>cluster_l2_topics_&lt;level&gt;_&lt;run&gt;</code></h3>
+<p>Key <code>(cluster_id, l2_rank)</code>.</p>
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>cluster_id</code></td><td>INTEGER</td><td>Leiden community ID.</td></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>classification_join_column</code></td><td>STRING</td><td>Level column in <code>classification_raw</code>.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Community ID.</td></tr>
+    <tr><td><code>level</code></td><td>STRING</td><td>Cluster level.</td></tr>
+    <tr><td><code>l2_rank</code></td><td>INTEGER</td><td>Rank of this topic inside the community, 1 = largest.</td></tr>
+    <tr><td><code>l2_key</code></td><td>INTEGER</td><td>L2 taxonomy topic ID.</td></tr>
+    <tr><td><code>l2_name</code></td><td>STRING</td><td>L2 topic name.</td></tr>
+    <tr><td><code>l2_share</code></td><td>FLOAT</td><td>Share of the community's papers in this topic. Floor for use is 0.10 (<code>L2_SHARE_FLOOR</code>).</td></tr>
+    <tr><td><code>n_articles</code></td><td>INTEGER</td><td>Papers in the community carrying this topic.</td></tr>
+    <tr><td><code>l1_taxref</code></td><td>INTEGER</td><td>Parent L1 taxonomy ID.</td></tr>
+    <tr><td><code>l1_name</code></td><td>STRING</td><td>Parent L1 name.</td></tr>
+    <tr><td><code>l0_taxref</code></td><td>INTEGER</td><td>Parent L0 taxonomy ID.</td></tr>
+    <tr><td><code>l0_name</code></td><td>STRING</td><td>Parent L0 name.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2><code>opportunity_mapping</code> columns</h2>
+
+<h2><code>world_market_fields</code> columns</h2>
+
+<p>No run suffix. Key <code>(field_id, year, month)</code>. Rebuilt by <code>world_market.materialize_world_market</code> when missing or when the AIRAK version changes. Monthly grain exists so growth compares like-for-like calendar months.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>field_id</code></td><td>INTEGER</td><td>AIRAK level-1 field ID.</td></tr>
+    <tr><td><code>field</code></td><td>STRING</td><td>Field name.</td></tr>
+    <tr><td><code>year</code></td><td>INTEGER</td><td>Publication year, 2020&ndash;2026.</td></tr>
+    <tr><td><code>month</code></td><td>INTEGER</td><td>Publication month, 1&ndash;12.</td></tr>
+    <tr><td><code>n_world</code></td><td>INTEGER</td><td>All-publisher papers whose highest-similarity L1 field is this field.</td></tr>
+    <tr><td><code>n_fi</code></td><td>INTEGER</td><td>Subset published by Frontiers (<code>FRONTIERS_PUBLISHER_ID</code>).</td></tr>
+    <tr><td><code>source_version</code></td><td>DATE</td><td>AIRAK version the table was built from.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2><code>jd_opportunities</code> columns</h2>
+
+<p>No run suffix. Key <code>subfield</code>. Joined into <code>final_journal_opportunities</code> on normalised <code>domain|field|subfield</code>, and into <code>market</code> on <code>subfield</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>tier</code></td><td>STRING</td><td>Governed strategy tier.</td></tr>
+    <tr><td><code>score</code></td><td>FLOAT</td><td>Governed opportunity score. Becomes <code>governed_source_score</code>.</td></tr>
+    <tr><td><code>domain</code>, <code>field</code>, <code>subfield</code></td><td>STRING</td><td>Governed taxonomy path.</td></tr>
+    <tr><td><code>mkt_2025</code></td><td>FLOAT</td><td>Governed 2025 market size.</td></tr>
+    <tr><td><code>cagr</code></td><td>FLOAT</td><td>Governed CAGR.</td></tr>
+    <tr><td><code>fi_articles</code></td><td>FLOAT</td><td>Governed Frontiers article count.</td></tr>
+    <tr><td><code>fi_share</code></td><td>FLOAT</td><td>Governed Frontiers share.</td></tr>
+    <tr><td><code>pattern</code></td><td>STRING</td><td>Governed opportunity pattern.</td></tr>
+    <tr><td><code>funding</code></td><td>STRING</td><td>Funding band: <code>strong</code>, <code>mid</code> or blank.</td></tr>
+    <tr><td><code>top3_share</code></td><td>FLOAT</td><td>Governed competitor concentration.</td></tr>
+    <tr><td><code>anchor_journal</code></td><td>STRING</td><td>Governed anchor title.</td></tr>
+    <tr><td><code>competitor_1</code>, <code>competitor_2</code>, <code>competitor_3</code></td><td>STRING</td><td>Governed competitor journals.</td></tr>
+    <tr><td><code>source_action</code></td><td>STRING</td><td>Governed action.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>world_opportunities_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>field_id</code>. Joins: <code>field_id</code>/<code>field</code> &rarr; <code>world_market_fields</code>; <code>field</code> &rarr; <code>world_field_scopes.field</code>. Growth measured 2020 to 2025.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>field_id</code></td><td>INTEGER</td><td>AIRAK level-1 field ID.</td></tr>
+    <tr><td><code>field</code></td><td>STRING</td><td>Field name.</td></tr>
+    <tr><td><code>n_global_3y</code></td><td>INTEGER</td><td>World papers 2023&ndash;2025.</td></tr>
+    <tr><td><code>n_global_base</code></td><td>INTEGER</td><td>World papers in 2020.</td></tr>
+    <tr><td><code>n_global_late</code></td><td>INTEGER</td><td>World papers in 2025.</td></tr>
+    <tr><td><code>cagr</code></td><td>FLOAT</td><td>Five-year CAGR.</td></tr>
+    <tr><td><code>excess_cagr</code></td><td>FLOAT</td><td><code>cagr - corpus_cagr</code>.</td></tr>
+    <tr><td><code>is_large</code></td><td>BOOLEAN</td><td><code>n_global_late &ge; 20,000</code> (<code>WORLD_FIELD_LARGE_ANNUAL</code>).</td></tr>
+    <tr><td><code>is_growing</code></td><td>BOOLEAN</td><td>&ge;4,000 a year, base &ge;300, excess CAGR &ge;0.02.</td></tr>
+    <tr><td><code>is_opportunity</code></td><td>BOOLEAN</td><td><code>is_large OR is_growing</code>.</td></tr>
+    <tr><td><code>opportunity_score</code></td><td>FLOAT</td><td><code>min(n_global_3y / 100,000, 10) &times; (1 + max(excess_cagr, 0) &times; 5)</code>.</td></tr>
+    <tr><td><code>n_fi_3y</code></td><td>INTEGER</td><td>Frontiers papers 2023&ndash;2025.</td></tr>
+    <tr><td><code>n_fi_late</code></td><td>INTEGER</td><td>Frontiers papers in 2025.</td></tr>
+    <tr><td><code>fi_share</code></td><td>FLOAT</td><td><code>n_fi_late / n_global_late</code>.</td></tr>
+    <tr><td><code>fi_share_vs_portfolio</code></td><td>FLOAT</td><td>That share against parity.</td></tr>
+    <tr><td><code>lead_journal</code></td><td>STRING</td><td>Frontiers title with most papers in the field.</td></tr>
+    <tr><td><code>lead_n_3y</code></td><td>INTEGER</td><td>Its paper count.</td></tr>
+    <tr><td><code>lead_share</code></td><td>FLOAT</td><td>Its share of Frontiers papers in the field.</td></tr>
+    <tr><td><code>n_titles_10plus</code></td><td>INTEGER</td><td>Frontiers titles with &ge;10 papers.</td></tr>
+    <tr><td><code>leiden_scope_count</code></td><td>INTEGER</td><td>Distinct meso communities mapped to the field.</td></tr>
+    <tr><td><code>leiden_scopes</code></td><td>STRING</td><td>Up to 12 scope names, <code>;</code>-separated.</td></tr>
+    <tr><td><code>action</code></td><td>STRING</td><td><code>watch</code> / <code>launch_greenfield</code> (&lt;30 Frontiers papers) / <code>launch_consolidate</code> (<code>lead_share &lt; 0.40</code>) / <code>grow_existing</code>.</td></tr>
+    <tr><td><code>corpus_cagr</code></td><td>FLOAT</td><td>All-field corpus CAGR.</td></tr>
+    <tr><td><code>fi_portfolio_share</code></td><td>FLOAT</td><td>Frontiers' corpus share in 2025.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>world_field_scopes_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(field, community_id)</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>field</code></td><td>STRING</td><td>AIRAK level-1 field name.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Meso Leiden community.</td></tr>
+    <tr><td><code>scope_name</code></td><td>STRING</td><td><code>unit_name</code> &rarr; <code>topic_compound</code> &rarr; <code>community_label</code> &rarr; <code>Cluster &lt;id&gt;</code>.</td></tr>
+    <tr><td><code>primary_world_field_share</code></td><td>FLOAT</td><td>Field's share of the community's non-Frontiers papers.</td></tr>
+    <tr><td><code>world_field_mix</code></td><td>STRING</td><td>Top five fields with percent shares.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>papers_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>int_id</code>. Joins: <code>int_id</code> &rarr; <code>classification_raw</code>, <code>pub_metadata_raw</code>, <code>paper_scope</code>; <code>(journal, community_id)</code> &rarr; <code>candidates</code>, <code>home</code>, <code>volume</code>, <code>market</code>, <code>decisions</code>; <code>drilldown_id</code> &rarr; micro-level tables.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>int_id</code></td><td>INTEGER</td><td>Run-local node ID.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Leiden community at <code>community_level</code>.</td></tr>
+    <tr><td><code>drilldown_id</code></td><td>INTEGER</td><td>Leiden community at <code>drilldown_level</code>.</td></tr>
+    <tr><td><code>community_level</code></td><td>STRING</td><td><code>meso</code>.</td></tr>
+    <tr><td><code>drilldown_level</code></td><td>STRING</td><td><code>micro</code>.</td></tr>
+    <tr><td><code>pub_id</code></td><td>STRING</td><td>AIRAK publication ID.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>title</code></td><td>STRING</td><td>Article title.</td></tr>
+    <tr><td><code>year</code></td><td>INTEGER</td><td>Publication year.</td></tr>
+    <tr><td><code>labelled</code></td><td>BOOLEAN</td><td>Whether the community has a taxonomy label.</td></tr>
+    <tr><td><code>community_label</code></td><td>STRING</td><td>Community short label, or <code>Cluster &lt;id&gt;</code>.</td></tr>
+    <tr><td><code>scope_code</code></td><td>INTEGER</td><td>From <code>paper_scope</code>; defaults to <code>2</code> when not assessed.</td></tr>
+    <tr><td><code>is_oos</code></td><td>BOOLEAN</td><td>From <code>paper_scope</code>; defaults false.</td></tr>
+    <tr><td><code>is_borderline</code></td><td>BOOLEAN</td><td>From <code>paper_scope</code>; defaults false.</td></tr>
+    <tr><td><code>l2_key</code></td><td>STRING</td><td>L2 topic ID of the paper's micro community.</td></tr>
+    <tr><td><code>l2_name</code></td><td>STRING</td><td>L2 topic name.</td></tr>
+    <tr><td><code>l2_share</code></td><td>FLOAT</td><td>That topic's share of the micro community.</td></tr>
+    <tr><td><code>in_baseline_primary</code></td><td>BOOLEAN</td><td>Community was in the journal's baseline-year set covering 80% of its papers.</td></tr>
+    <tr><td><code>in_current_primary</code></td><td>BOOLEAN</td><td>Same test across the journal's whole history.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>candidates_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id)</code>. Joins to <code>home</code>, <code>volume</code>, <code>market</code>, <code>decisions</code> on that pair; <code>(journal, community_id, l2_key)</code> &rarr; <code>topics</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Meso community.</td></tr>
+    <tr><td><code>community_label</code></td><td>STRING</td><td>Community short label.</td></tr>
+    <tr><td><code>candidate_type</code></td><td>STRING</td><td><code>stable_core</code> / <code>mix_shift</code> (baseline scope with &ge;3pp move or &ge;0.08 share CAGR) / <code>non_primary</code>.</td></tr>
+    <tr><td><code>in_baseline_primary</code></td><td>BOOLEAN</td><td>In the journal's baseline 80% set.</td></tr>
+    <tr><td><code>in_current_primary</code></td><td>BOOLEAN</td><td>In the journal's current 80% set.</td></tr>
+    <tr><td><code>n_3y</code></td><td>INTEGER</td><td>Papers in the three-year window.</td></tr>
+    <tr><td><code>n_baseline</code></td><td>INTEGER</td><td>Papers in the baseline year.</td></tr>
+    <tr><td><code>n_late</code></td><td>INTEGER</td><td>Papers in the late year.</td></tr>
+    <tr><td><code>journal_n_3y</code></td><td>INTEGER</td><td>Journal's total papers in the window.</td></tr>
+    <tr><td><code>share_3y</code></td><td>FLOAT</td><td><code>n_3y / journal_n_3y</code>.</td></tr>
+    <tr><td><code>share_baseline_pct</code></td><td>FLOAT</td><td>Community share of journal in the baseline year, percent.</td></tr>
+    <tr><td><code>share_late_pct</code></td><td>FLOAT</td><td>Community share of journal in the late year, percent.</td></tr>
+    <tr><td><code>share_pp_delta</code></td><td>FLOAT</td><td><code>share_late_pct - share_baseline_pct</code>.</td></tr>
+    <tr><td><code>share_cagr</code></td><td>FLOAT</td><td>CAGR of that share. NULL when baseline share is zero.</td></tr>
+    <tr><td><code>n_years</code></td><td>INTEGER</td><td>Distinct years with papers.</td></tr>
+    <tr><td><code>years_present</code></td><td>STRING</td><td>Those years, comma-separated.</td></tr>
+    <tr><td><code>oos_pct</code></td><td>FLOAT</td><td>Percent of window papers flagged out of scope.</td></tr>
+    <tr><td><code>baseline_year</code></td><td>INTEGER</td><td>Baseline year for this journal.</td></tr>
+    <tr><td><code>late_year</code></td><td>INTEGER</td><td>Late year for this journal.</td></tr>
+    <tr><td><code>l2_key</code></td><td>STRING</td><td>Leading L2 topic ID for this pair.</td></tr>
+    <tr><td><code>l2_topic</code></td><td>STRING</td><td>Leading L2 topic name.</td></tr>
+    <tr><td><code>l2_topic_n_3y</code></td><td>FLOAT</td><td>That topic's window papers.</td></tr>
+    <tr><td><code>l2_topic_share</code></td><td>FLOAT</td><td>That topic's share of the community.</td></tr>
+    <tr><td><code>topic_compound</code></td><td>STRING</td><td>Compound of the community's top 3 L2 names.</td></tr>
+    <tr><td><code>unit_name</code></td><td>STRING</td><td>L1 rollup name. Empty on all rows in this run &mdash; see Known issues.</td></tr>
+    <tr><td><code>topic_label</code></td><td>STRING</td><td>Label used: <code>l2_topic</code>, else <code>unit_name</code>, else <code>topic_compound</code>, else <code>community_label</code>.</td></tr>
+    <tr><td><code>topic_label_source</code></td><td>STRING</td><td><code>l2_topic</code> / <code>l1_rollup</code> / <code>l2_compound</code> / <code>l1</code>.</td></tr>
+    <tr><td><code>mkt_n_global_3y</code></td><td>FLOAT</td><td>All-publisher papers in the community over three years.</td></tr>
+    <tr><td><code>mkt_n_global_late</code></td><td>FLOAT</td><td>All-publisher papers in the late year.</td></tr>
+    <tr><td><code>mkt_n_fi_3y</code></td><td>INTEGER</td><td>Frontiers papers in the community, all titles.</td></tr>
+    <tr><td><code>mkt_fi_share</code></td><td>FLOAT</td><td><code>mkt_n_fi_3y / mkt_n_global_3y</code>.</td></tr>
+    <tr><td><code>mkt_fi_share_vs_portfolio</code></td><td>FLOAT</td><td>That share against Frontiers' corpus share.</td></tr>
+    <tr><td><code>mkt_cagr</code></td><td>FLOAT</td><td>Community growth, like-for-like months.</td></tr>
+    <tr><td><code>mkt_excess_cagr</code></td><td>FLOAT</td><td><code>mkt_cagr - corpus_cagr</code>.</td></tr>
+    <tr><td><code>mkt_is_large</code></td><td>BOOLEAN</td><td><code>mkt_n_global_3y &ge; 1,500</code> (<code>MARKET_LARGE_3Y</code>).</td></tr>
+    <tr><td><code>mkt_is_growing</code></td><td>BOOLEAN</td><td>Base &ge;300 papers (<code>MARKET_GROWTH_MIN_BASE</code>) and excess CAGR &ge;0.02.</td></tr>
+    <tr><td><code>mkt_is_opportunity</code></td><td>BOOLEAN</td><td>Large or growing, and the parent world field also qualifies.</td></tr>
+    <tr><td><code>mkt_is_launchable_size</code></td><td>BOOLEAN</td><td>Between 5,000 and 50,000 global papers over three years.</td></tr>
+    <tr><td><code>mkt_opportunity_kind</code></td><td>STRING</td><td><code>large_and_growing</code> / <code>large</code> / <code>growing</code> / blank.</td></tr>
+    <tr><td><code>mkt_presence</code></td><td>STRING</td><td><code>whitespace</code> (&lt;0.5&times; parity) / <code>partial</code> / <code>covered</code> (&ge;1.0&times;).</td></tr>
+    <tr><td><code>mkt_primary_world_field</code></td><td>STRING</td><td>Dominant AIRAK L1 field among non-Frontiers papers.</td></tr>
+    <tr><td><code>mkt_primary_world_field_share</code></td><td>FLOAT</td><td>That field's share.</td></tr>
+    <tr><td><code>mkt_world_field_mix</code></td><td>STRING</td><td>Top five fields with percent shares.</td></tr>
+    <tr><td><code>mkt_world_field_is_opportunity</code></td><td>BOOLEAN</td><td>Parent field's own opportunity verdict.</td></tr>
+    <tr><td><code>mkt_world_field_action</code></td><td>STRING</td><td><code>launch_greenfield</code> / <code>launch_consolidate</code> / <code>grow_existing</code> / <code>watch</code>.</td></tr>
+    <tr><td><code>mkt_world_field_n_global_3y</code></td><td>INTEGER</td><td>Parent field's three-year global volume.</td></tr>
+    <tr><td><code>mkt_world_field_cagr</code></td><td>FLOAT</td><td>Parent field's CAGR.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>topics_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id, l2_key)</code>. Rows require <code>n_3y &ge; 10</code> (<code>TOPIC_MIN_PAPERS</code>).</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Meso community.</td></tr>
+    <tr><td><code>l2_key</code></td><td>STRING</td><td>L2 topic ID.</td></tr>
+    <tr><td><code>l2_name</code></td><td>STRING</td><td>L2 topic name.</td></tr>
+    <tr><td><code>n_3y</code></td><td>INTEGER</td><td>Papers in the window for this journal, community and topic.</td></tr>
+    <tr><td><code>l2_share</code></td><td>FLOAT</td><td>Topic's dominance of its drilldown cluster.</td></tr>
+    <tr><td><code>oos_pct</code></td><td>FLOAT</td><td>Percent out of scope in this slice.</td></tr>
+    <tr><td><code>n_late</code></td><td>INTEGER</td><td>Papers in the late year.</td></tr>
+    <tr><td><code>community_n_3y</code></td><td>INTEGER</td><td>Journal's papers in the community, all topics.</td></tr>
+    <tr><td><code>journal_n_3y</code></td><td>INTEGER</td><td>Journal's total window papers.</td></tr>
+    <tr><td><code>share_of_community</code></td><td>FLOAT</td><td><code>n_3y / community_n_3y</code>.</td></tr>
+    <tr><td><code>share_of_journal</code></td><td>FLOAT</td><td><code>n_3y / journal_n_3y</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>journal_meta_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>journal</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>baseline_year</code></td><td>INTEGER</td><td>Effective baseline year for this journal.</td></tr>
+    <tr><td><code>late_year</code></td><td>INTEGER</td><td>End year of the window.</td></tr>
+    <tr><td><code>n_papers</code></td><td>INTEGER</td><td>Total papers in the run.</td></tr>
+    <tr><td><code>n_3y</code></td><td>INTEGER</td><td>Papers in the three-year window.</td></tr>
+    <tr><td><code>baseline_primary</code></td><td>STRING</td><td>Comma-separated community IDs in the baseline 80% set.</td></tr>
+    <tr><td><code>current_primary</code></td><td>STRING</td><td>Comma-separated community IDs in the current 80% set.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>p0_meta_&lt;run&gt;</code> columns</h2>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>baseline_year</code></td><td>INTEGER</td><td>Resolved run-wide baseline year.</td></tr>
+    <tr><td><code>baseline_year_configured</code></td><td>INTEGER</td><td>Configured <code>BASELINE_YEAR</code>, 2020.</td></tr>
+    <tr><td><code>late_year</code></td><td>INTEGER</td><td>Resolved latest year.</td></tr>
+    <tr><td><code>window_years</code></td><td>STRING</td><td>Comma-separated window years.</td></tr>
+    <tr><td><code>n_journals</code></td><td>INTEGER</td><td>Distinct journals.</td></tr>
+    <tr><td><code>n_papers</code></td><td>INTEGER</td><td>Paper rows written.</td></tr>
+    <tr><td><code>n_candidates</code></td><td>INTEGER</td><td>Candidate rows written.</td></tr>
+    <tr><td><code>fi_portfolio_share</code></td><td>FLOAT</td><td>Frontiers' share of the corpus in the window.</td></tr>
+    <tr><td><code>corpus_cagr</code></td><td>FLOAT</td><td>Corpus like-for-like CAGR.</td></tr>
+    <tr><td><code>community_level</code></td><td>STRING</td><td><code>meso</code>.</td></tr>
+    <tr><td><code>drilldown_level</code></td><td>STRING</td><td><code>micro</code>.</td></tr>
+    <tr><td><code>n_labelled_papers</code></td><td>INTEGER</td><td>Papers whose community has a label.</td></tr>
+    <tr><td><code>paper_source</code></td><td>STRING</td><td>Always <code>bigquery</code>.</td></tr>
+    <tr><td><code>n_topic_rows</code></td><td>INTEGER</td><td>Rows in <code>topics</code>.</td></tr>
+    <tr><td><code>n_distinct_topics</code></td><td>INTEGER</td><td>Distinct <code>l2_name</code> values.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>home_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id)</code>. All similarity measures are title-token Jaccard.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Meso community.</td></tr>
+    <tr><td><code>community_label</code></td><td>STRING</td><td>Community short label.</td></tr>
+    <tr><td><code>methods_shared</code></td><td>BOOLEAN</td><td>Label matches a generic-method pattern (<code>METHODS_SHARED_RE</code>).</td></tr>
+    <tr><td><code>domain_hit_rate</code></td><td>FLOAT</td><td>Share of up to 250 sampled titles hitting the journal's domain tokens.</td></tr>
+    <tr><td><code>offbrand_title_share</code></td><td>FLOAT</td><td>Share of titles matching <code>OFFBRAND_TITLE_RE</code>.</td></tr>
+    <tr><td><code>parent_jaccard</code></td><td>FLOAT</td><td>Similarity to the journal's baseline-scope titles.</td></tr>
+    <tr><td><code>on_brand_gated</code></td><td>BOOLEAN</td><td>(not methods-shared AND baseline) OR (methods-shared AND <code>domain_hit_rate &ge; 0.25</code>). Forced false when <code>offbrand_title_share &ge; 0.35</code>.</td></tr>
+    <tr><td><code>parent_owns_gated</code></td><td>BOOLEAN</td><td>Not home elsewhere AND (baseline OR <code>parent_jaccard &ge; 0.18</code>).</td></tr>
+    <tr><td><code>home_elsewhere</code></td><td>BOOLEAN</td><td>Another journal scores &ge;0.40 (<code>TOPIC_JACCARD_HOME</code>).</td></tr>
+    <tr><td><code>best_home_journal</code></td><td>STRING</td><td>That journal. Blank below the 0.40 gate.</td></tr>
+    <tr><td><code>best_home_jaccard</code></td><td>FLOAT</td><td>Best other-journal score, kept even below the gate.</td></tr>
+    <tr><td><code>macro_id_share_in_best_home</code></td><td>FLOAT</td><td>Share of that journal's papers in this community.</td></tr>
+    <tr><td><code>gate_string</code></td><td>STRING</td><td>Editorial gate wording for a methods community; blank otherwise.</td></tr>
+    <tr><td><code>home_method</code></td><td>STRING</td><td>Always <code>title_token_jaccard</code>.</td></tr>
+    <tr><td><code>existing_section</code></td><td>STRING</td><td>Live specialty section matching at &ge;0.45; blank otherwise.</td></tr>
+    <tr><td><code>existing_section_journal</code></td><td>STRING</td><td>Journal hosting that section.</td></tr>
+    <tr><td><code>existing_section_jaccard</code></td><td>FLOAT</td><td>That match score; 0.0 below 0.45.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>volume_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id)</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Meso community.</td></tr>
+    <tr><td><code>n_3y</code></td><td>INTEGER</td><td>Window papers, from <code>candidates</code>.</td></tr>
+    <tr><td><code>share_3y</code></td><td>FLOAT</td><td>Share of journal, from <code>candidates</code>.</td></tr>
+    <tr><td><code>n_rt</code></td><td>FLOAT</td><td>Window papers linked to a Research Topic. NULL when <code>rt_join</code> is false.</td></tr>
+    <tr><td><code>n_spontaneous</code></td><td>FLOAT</td><td><code>n_3y - n_rt</code>.</td></tr>
+    <tr><td><code>rt_share</code></td><td>FLOAT</td><td><code>n_rt / n_3y</code>.</td></tr>
+    <tr><td><code>share_cagr_spontaneous</code></td><td>FLOAT</td><td>Share CAGR for non-Research-Topic papers.</td></tr>
+    <tr><td><code>share_cagr_rt</code></td><td>FLOAT</td><td>Share CAGR for Research-Topic papers.</td></tr>
+    <tr><td><code>spontaneous_rising</code></td><td>BOOLEAN</td><td><code>share_cagr_spontaneous &ge; 0.08</code> (<code>SHARE_CAGR_SHIFT</code>).</td></tr>
+    <tr><td><code>section_scale</code></td><td>BOOLEAN</td><td><code>share_3y &ge; 0.08</code>; also needs <code>n_3y &ge; 40</code> when <code>journal_n_3y &ge; 500</code>.</td></tr>
+    <tr><td><code>journal_scale</code></td><td>BOOLEAN</td><td><code>share_3y &ge; 0.12</code>, or <code>n_3y &ge; 200</code> when <code>journal_n_3y &ge; 1,500</code>.</td></tr>
+    <tr><td><code>persist_ok</code></td><td>BOOLEAN</td><td><code>n_years &ge; 3</code>, or <code>n_years &ge; 2</code> and rising. <strong>Different from <code>decisions.persist_ok</code>.</strong></td></tr>
+    <tr><td><code>n_offbrand_rts</code></td><td>INTEGER</td><td>Research Topics with &ge;5 papers and either &ge;45% out of scope or &ge;40% off-brand titles.</td></tr>
+    <tr><td><code>offbrand_rts</code></td><td>STRING</td><td>Those Research Topic titles with counts.</td></tr>
+    <tr><td><code>rt_join</code></td><td>BOOLEAN</td><td>Whether Research Topic data was joined. False makes every RT column meaningless.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>market_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id)</code>. <code>field1</code>/<code>field2</code> join to <code>jd_opportunities.subfield</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Meso community.</td></tr>
+    <tr><td><code>matched_on</code></td><td>STRING</td><td>String used for JD matching: world field, else topic label, else community label.</td></tr>
+    <tr><td><code>market_source</code></td><td>STRING</td><td>Always <code>AIRAK all-publisher level-1 fields</code>.</td></tr>
+    <tr><td><code>field1</code></td><td>STRING</td><td>Best matching field. Null below 0.30 Jaccard (<code>FIELD_MATCH_MIN_JACCARD</code>).</td></tr>
+    <tr><td><code>field1_jaccard</code></td><td>FLOAT</td><td>Not populated by current code.</td></tr>
+    <tr><td><code>field1_mkt_2025</code></td><td>FLOAT</td><td>Annualised global market size for the community.</td></tr>
+    <tr><td><code>field1_cagr</code></td><td>FLOAT</td><td>Community growth rate.</td></tr>
+    <tr><td><code>field1_funding</code></td><td>STRING</td><td>Governed funding band for the matched subfield.</td></tr>
+    <tr><td><code>field1_tier</code></td><td>STRING</td><td>Governed tier.</td></tr>
+    <tr><td><code>field1_pattern</code></td><td>STRING</td><td>Governed opportunity pattern.</td></tr>
+    <tr><td><code>field1_fi_articles</code></td><td>FLOAT</td><td>Annualised Frontiers articles, <code>mkt_n_fi_3y / 3</code>.</td></tr>
+    <tr><td><code>field1_fi_share</code></td><td>FLOAT</td><td>Frontiers share of the community.</td></tr>
+    <tr><td><code>field1_anchor</code></td><td>STRING</td><td>Governed anchor journal.</td></tr>
+    <tr><td><code>field2</code></td><td>STRING</td><td>Second matching subfield at &ge;0.30 (<code>SECOND_FIELD_MIN</code>); blank otherwise.</td></tr>
+    <tr><td><code>field2_jaccard</code></td><td>FLOAT</td><td>Second match score.</td></tr>
+    <tr><td><code>market_journal_gate</code></td><td>BOOLEAN</td><td><code>field1_mkt_2025 &ge; 10,000</code> AND <code>field1_cagr &ge; 0.05</code>.</td></tr>
+    <tr><td><code>parent_owns_blocks_journal</code></td><td>BOOLEAN</td><td><code>home.parent_owns_gated</code>; blocks a <code>new_journal</code> call.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>decisions_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id)</code>. Columns 1&ndash;49 are <code>candidates</code> verbatim. Columns 50&ndash;69 are copied from <code>home</code>, <code>volume</code> and <code>market</code>: <code>parent_jaccard</code>, <code>on_brand_gated</code>, <code>home_elsewhere</code>, <code>best_home_journal</code>, <code>best_home_jaccard</code>, <code>existing_section</code>, <code>existing_section_journal</code> (from <code>home</code>); <code>section_scale</code>, <code>journal_scale</code>, <code>n_offbrand_rts</code>, <code>offbrand_rts</code> (from <code>volume</code>); <code>matched_on</code>, <code>market_source</code>, <code>field1</code>, <code>field1_mkt_2025</code>, <code>field1_cagr</code>, <code>field1_fi_articles</code>, <code>field1_fi_share</code>, <code>field1_pattern</code> (from <code>market</code>). The columns below are added by this step.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>call</code></td><td>STRING</td><td>Recommendation. Values below.</td></tr>
+    <tr><td><code>presence</code></td><td>STRING</td><td><code>whitespace</code> (&lt;1.0&times; parity) / <code>already_publish</code> (&ge;1.0&times;) / <code>unknown</code> (no market data).</td></tr>
+    <tr><td><code>presence_reason</code></td><td>STRING</td><td>Text detail for <code>presence</code>.</td></tr>
+    <tr><td><code>ownership</code></td><td>STRING</td><td><code>negligible</code> (&lt;10 papers) / <code>core</code> (baseline and <code>oos_pct &lt; 45</code>) / <code>drift</code>.</td></tr>
+    <tr><td><code>ownership_reason</code></td><td>STRING</td><td>Text detail for <code>ownership</code>.</td></tr>
+    <tr><td><code>score</code></td><td>INTEGER</td><td><code>score_internal + score_home + score_market</code>, 0&ndash;12.</td></tr>
+    <tr><td><code>score_internal</code></td><td>INTEGER</td><td>0&ndash;4 from share scale, share movement, persistence.</td></tr>
+    <tr><td><code>score_home</code></td><td>INTEGER</td><td>0&ndash;4 from home-elsewhere, parent-owns, absence of a gate string.</td></tr>
+    <tr><td><code>score_market</code></td><td>INTEGER</td><td>0&ndash;4 from market size, growth, funding.</td></tr>
+    <tr><td><code>reasons</code></td><td>STRING</td><td>Rationale strings, <code>;</code>-joined.</td></tr>
+    <tr><td><code>gate_string</code></td><td>STRING</td><td>From <code>home</code>.</td></tr>
+    <tr><td><code>pending_persist</code></td><td>BOOLEAN</td><td>Launch call not yet confirmed by a second consecutive run.</td></tr>
+    <tr><td><code>sibling_titles</code></td><td>STRING</td><td>Other journals surfacing the same community, with counts, on a winning <code>new_journal</code> row.</td></tr>
+    <tr><td><code>sibling_n_3y</code></td><td>INTEGER</td><td>Their combined window papers.</td></tr>
+    <tr><td><code>uniqueness_note</code></td><td>STRING</td><td>Why this row lost a deduplication pass.</td></tr>
+    <tr><td><code>prior_call</code></td><td>STRING</td><td>Previous run's <code>call_effective</code> for the same pair.</td></tr>
+    <tr><td><code>persist_ok</code></td><td>BOOLEAN</td><td>Current launch call equals <code>prior_call</code>. <strong>Different from <code>volume.persist_ok</code>.</strong></td></tr>
+    <tr><td><code>call_effective</code></td><td>STRING</td><td>Actionable call. Equals <code>call</code> for non-launch calls and for launch calls confirmed twice; otherwise <code>emerging_watch</code>.</td></tr>
+    <tr><td><code>logged_utc</code></td><td>STRING</td><td>UTC write time.</td></tr>
+  </tbody>
+</table>
+
+<p><code>call</code> values, first matching rule wins:</p>
+
+<table>
+  <tbody>
+    <tr><th>Value</th><th>Rule</th></tr>
+    <tr><td><code>gate_intake</code></td><td><code>oos_pct &ge; 70</code>, or <code>n_3y &lt; 5</code>, or off-brand methods work inside baseline scope.</td></tr>
+    <tr><td><code>expand_rename</code></td><td>Baseline scope and (on-brand OR section scale OR persistent).</td></tr>
+    <tr><td><code>redirect_crosslist</code></td><td>Home elsewhere, or a live section already covers it, or lost a uniqueness pass.</td></tr>
+    <tr><td><code>new_gated_section</code></td><td><code>parent_owns_gated</code> AND section scale AND persistent.</td></tr>
+    <tr><td><code>new_journal</code></td><td>Not parent-owned, not blocked, market is an opportunity and launchable in size, persistent.</td></tr>
+    <tr><td><code>emerging_watch</code></td><td>Default; also losers of the <code>new_journal</code> deduplication.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>pack_&lt;run&gt;</code> columns</h2>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>run</code></td><td>STRING</td><td>Same value.</td></tr>
+    <tr><td><code>n_rows</code></td><td>INTEGER</td><td>Rows in <code>decisions</code>.</td></tr>
+    <tr><td><code>calls</code></td><td>STRING</td><td>JSON object, count per <code>call_effective</code>.</td></tr>
+    <tr><td><code>presence</code></td><td>STRING</td><td>JSON object, count per <code>presence</code>.</td></tr>
+    <tr><td><code>pending_launch</code></td><td>INTEGER</td><td>Rows with <code>pending_persist = true</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>launches_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id)</code>. Subset of <code>decisions</code> where <code>call</code> is a launch call. Filters on <code>call</code>, not <code>call_effective</code>, so unconfirmed proposals are included; check <code>pending_persist</code>. Every column is copied from <code>decisions</code> except <code>opportunity_kind</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>opportunity_kind</code></td><td>STRING</td><td><strong>Computed here.</strong> <code>section</code> for <code>expand_rename</code> and <code>new_gated_section</code>; <code>journal</code> for <code>new_journal</code>.</td></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>presence</code>, <code>presence_reason</code>, <code>ownership</code>, <code>ownership_reason</code>, <code>call</code>, <code>score</code>, <code>gate_string</code>, <code>reasons</code>, <code>pending_persist</code>, <code>sibling_titles</code>, <code>sibling_n_3y</code></td><td>&mdash;</td><td>From <code>decisions</code>.</td></tr>
+    <tr><td><code>journal</code>, <code>community_id</code>, <code>community_label</code>, <code>candidate_type</code>, <code>share_3y</code>, <code>share_late_pct</code>, <code>share_pp_delta</code>, <code>n_3y</code>, <code>topic_label</code>, <code>topic_label_source</code>, <code>l2_topic</code>, <code>l2_topic_share</code>, <code>l2_topic_n_3y</code>, <code>mkt_n_global_3y</code>, <code>mkt_fi_share</code>, <code>mkt_fi_share_vs_portfolio</code>, <code>mkt_opportunity_kind</code>, <code>mkt_is_launchable_size</code></td><td>&mdash;</td><td>From <code>candidates</code> via <code>decisions</code>.</td></tr>
+    <tr><td><code>field1</code>, <code>field1_mkt_2025</code>, <code>field1_fi_articles</code>, <code>field1_fi_share</code>, <code>field1_pattern</code>, <code>matched_on</code></td><td>&mdash;</td><td>From <code>market</code> via <code>decisions</code>.</td></tr>
+    <tr><td><code>best_home_journal</code>, <code>existing_section</code>, <code>existing_section_journal</code></td><td>&mdash;</td><td>From <code>home</code> via <code>decisions</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>whitespace_jd_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>subfield</code>. JD subfields that are large and growing, Frontiers share below 1% (<code>FI_SHARE_WHITESPACE</code>), no Frontiers anchor, and not surfaced by the community mapper.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>tier</code></td><td>STRING</td><td>Governed tier.</td></tr>
+    <tr><td><code>score</code></td><td>FLOAT</td><td>Governed opportunity score.</td></tr>
+    <tr><td><code>domain</code></td><td>STRING</td><td>Governed domain.</td></tr>
+    <tr><td><code>field</code></td><td>STRING</td><td>Governed field.</td></tr>
+    <tr><td><code>subfield</code></td><td>STRING</td><td>Governed subfield. Join key to <code>market.field1</code>.</td></tr>
+    <tr><td><code>mkt_2025</code></td><td>FLOAT</td><td>Governed 2025 market size; gate is &ge;10,000.</td></tr>
+    <tr><td><code>cagr</code></td><td>FLOAT</td><td>Governed CAGR; gate is &ge;0.05.</td></tr>
+    <tr><td><code>fi_articles</code></td><td>FLOAT</td><td>Frontiers articles in the subfield.</td></tr>
+    <tr><td><code>fi_share</code></td><td>FLOAT</td><td><code>fi_articles / mkt_2025</code>; gate is &lt;0.01.</td></tr>
+    <tr><td><code>pattern</code></td><td>STRING</td><td>Governed opportunity pattern.</td></tr>
+    <tr><td><code>funding</code></td><td>STRING</td><td>Governed funding band.</td></tr>
+    <tr><td><code>anchor_journal</code></td><td>STRING</td><td>Governed anchor; rows naming a Frontiers title are excluded.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>portfolio_&lt;run&gt;</code> columns</h2>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>run</code></td><td>STRING</td><td>Same value.</td></tr>
+    <tr><td><code>n_decisions</code></td><td>INTEGER</td><td>Rows in <code>decisions</code>.</td></tr>
+    <tr><td><code>n_journals_scored</code></td><td>INTEGER</td><td>Distinct journals in <code>decisions</code>.</td></tr>
+    <tr><td><code>n_already_publish_launches</code></td><td>INTEGER</td><td>Launch rows with <code>presence = already_publish</code>.</td></tr>
+    <tr><td><code>n_whitespace_launches</code></td><td>INTEGER</td><td>Launch rows with <code>presence = whitespace</code>.</td></tr>
+    <tr><td><code>n_whitespace_mapper_rows</code></td><td>INTEGER</td><td>Whitespace decisions with a market size, capped at 80.</td></tr>
+    <tr><td><code>n_whitespace_jd_gaps</code></td><td>INTEGER</td><td>Rows in <code>whitespace_jd</code>.</td></tr>
+    <tr><td><code>n_section_opportunities</code></td><td>INTEGER</td><td>Launches with <code>opportunity_kind = section</code>.</td></tr>
+    <tr><td><code>n_journal_opportunities</code></td><td>INTEGER</td><td>Launches with <code>opportunity_kind = journal</code>.</td></tr>
+    <tr><td><code>section_by_journal</code></td><td>STRING</td><td>JSON object, top 20 journals by section-launch count.</td></tr>
+    <tr><td><code>top_already_publish</code></td><td>STRING</td><td>JSON array, top 25 already-publish launches.</td></tr>
+    <tr><td><code>top_whitespace_launches</code></td><td>STRING</td><td>JSON array, top 25 whitespace launches.</td></tr>
+    <tr><td><code>top_whitespace_jd</code></td><td>STRING</td><td>JSON array, top 25 JD gaps.</td></tr>
+    <tr><td><code>note</code></td><td>STRING</td><td>Fixed text defining presence and whitespace.</td></tr>
+    <tr><td><code>portfolio_markdown</code></td><td>STRING</td><td>Rendered markdown report.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>community_matches_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>(journal, community_id)</code>. Links this run's community IDs to the previous run's, since Leiden IDs are not stable. Written only when a prior run exists.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Frontiers journal.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Community ID in this run.</td></tr>
+    <tr><td><code>matched_community_id</code></td><td>FLOAT</td><td>Best-matching community ID in the previous run at &ge;0.5 Jaccard; NULL if none.</td></tr>
+    <tr><td><code>paper_jaccard</code></td><td>FLOAT</td><td>Overlap of <code>int_id</code> sets between the two communities; 0 when unmatched.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>launch_units_&lt;run&gt;</code> and <code>launch_shortlist_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>unit_id</code>. Identical 50 columns; <code>launch_shortlist</code> is <code>launch_units</code> filtered to <code>action IN (launch_journal, launch_section, formalise_section, reroute, expand, consolidate)</code>, with nothing recomputed. Joins: <code>parent_id</code> &rarr; meso <code>community_id</code>; <code>member_ids</code> &rarr; micro <code>community_id</code>; <code>primary_world_field</code> &rarr; <code>world_opportunities.field</code>; <code>owner_journal</code> &rarr; <code>papers.journal</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>unit_id</code></td><td>STRING</td><td><code>meso:&lt;id&gt;</code>, <code>micro:&lt;id&gt;</code> or <code>bundle:&lt;parent&gt;:&lt;n&gt;</code>.</td></tr>
+    <tr><td><code>unit_kind</code></td><td>STRING</td><td><code>meso</code> / <code>micro</code> / <code>micro_bundle</code>. Bundles form only within one meso parent, capped at 8 members.</td></tr>
+    <tr><td><code>parent_id</code></td><td>INTEGER</td><td>Meso parent community.</td></tr>
+    <tr><td><code>n_members</code></td><td>INTEGER</td><td>Micro communities in the unit.</td></tr>
+    <tr><td><code>member_ids</code></td><td>STRING</td><td>Those IDs, comma-separated.</td></tr>
+    <tr><td><code>role</code></td><td>STRING</td><td>Size verdict against calibrated bands: <code>journal</code> / <code>section</code> / <code>too_broad</code> / <code>too_small</code>.</td></tr>
+    <tr><td><code>n_global_3y</code></td><td>FLOAT</td><td>All-publisher papers over three years.</td></tr>
+    <tr><td><code>n_global_base_ytd</code></td><td>FLOAT</td><td>Base-year papers, months 1 to <code>growth_max_month</code> only.</td></tr>
+    <tr><td><code>n_global_late_ytd</code></td><td>FLOAT</td><td>Same months in the latest year.</td></tr>
+    <tr><td><code>n_fi_3y</code></td><td>INTEGER</td><td>Frontiers papers in the unit's members.</td></tr>
+    <tr><td><code>cagr</code></td><td>FLOAT</td><td>Growth from the two year-to-date endpoints.</td></tr>
+    <tr><td><code>excess_cagr</code></td><td>FLOAT</td><td><code>cagr - corpus_cagr</code>.</td></tr>
+    <tr><td><code>fi_share</code></td><td>FLOAT</td><td><code>n_fi_3y / n_global_3y</code>.</td></tr>
+    <tr><td><code>fi_share_vs_portfolio</code></td><td>FLOAT</td><td>That share against Frontiers' corpus share.</td></tr>
+    <tr><td><code>is_large</code></td><td>BOOLEAN</td><td><code>n_global_3y &ge; 1,500</code>.</td></tr>
+    <tr><td><code>is_growing</code></td><td>BOOLEAN</td><td>Base &ge;300 and excess CAGR &ge;0.02.</td></tr>
+    <tr><td><code>is_opportunity</code></td><td>BOOLEAN</td><td>Large or growing, and the world field qualifies.</td></tr>
+    <tr><td><code>opportunity_kind</code></td><td>STRING</td><td><code>large_and_growing</code> / <code>large</code> / <code>growing</code> / blank.</td></tr>
+    <tr><td><code>primary_world_field</code></td><td>STRING</td><td>Dominant AIRAK field among non-Frontiers papers. Blank for bundles.</td></tr>
+    <tr><td><code>primary_world_field_share</code></td><td>FLOAT</td><td>That field's share.</td></tr>
+    <tr><td><code>world_field_mix</code></td><td>STRING</td><td>Top five fields with percent shares.</td></tr>
+    <tr><td><code>world_field_is_opportunity</code></td><td>BOOLEAN</td><td>Parent field's verdict.</td></tr>
+    <tr><td><code>world_field_action</code></td><td>STRING</td><td>Parent field's action.</td></tr>
+    <tr><td><code>world_field_n_global_3y</code></td><td>INTEGER</td><td>Parent field's three-year volume.</td></tr>
+    <tr><td><code>world_field_cagr</code></td><td>FLOAT</td><td>Parent field's CAGR.</td></tr>
+    <tr><td><code>name</code></td><td>STRING</td><td>Unit name: <code>unit_name</code> &rarr; <code>topic_compound</code> &rarr; <code>community_label</code> &rarr; <code>Cluster &lt;id&gt;</code>.</td></tr>
+    <tr><td><code>name_source</code></td><td>STRING</td><td><code>l1_rollup</code> / <code>l2_compound</code> / <code>l1</code> / <code>cluster_id</code> / <code>bundle</code>. All rows are <code>l2_compound</code> in this run.</td></tr>
+    <tr><td><code>owner_journal</code></td><td>STRING</td><td>Journal with most Frontiers papers in the unit.</td></tr>
+    <tr><td><code>owner_n_3y</code></td><td>INTEGER</td><td>Its paper count.</td></tr>
+    <tr><td><code>owner_share_of_unit</code></td><td>FLOAT</td><td>Its share of Frontiers papers in the unit.</td></tr>
+    <tr><td><code>owner_share_of_journal</code></td><td>FLOAT</td><td>The unit's share of that journal's output.</td></tr>
+    <tr><td><code>owner_baseline_share</code></td><td>FLOAT</td><td>Share of the owner's unit papers that were baseline scope.</td></tr>
+    <tr><td><code>owner_oos_pct</code></td><td>FLOAT</td><td>Percent of the owner's unit papers flagged out of scope.</td></tr>
+    <tr><td><code>n_journals_present</code></td><td>INTEGER</td><td>Journals with &ge;10 papers in the unit (<code>UNIT_MIN_FI_PAPERS</code>).</td></tr>
+    <tr><td><code>unit_n_fi_3y</code></td><td>INTEGER</td><td>Total Frontiers papers in the unit.</td></tr>
+    <tr><td><code>drift_journals</code></td><td>STRING</td><td>Drifting journals with counts, largest first.</td></tr>
+    <tr><td><code>drift_share_of_unit</code></td><td>FLOAT</td><td>Their share of the unit's Frontiers volume.</td></tr>
+    <tr><td><code>drift_lead_journal</code></td><td>STRING</td><td>Largest drifting journal.</td></tr>
+    <tr><td><code>drift_lead_n_3y</code></td><td>INTEGER</td><td>Its drifting paper count.</td></tr>
+    <tr><td><code>drift_lead_share_of_journal</code></td><td>FLOAT</td><td>Its share of that journal's output.</td></tr>
+    <tr><td><code>drift_lead_baseline_share</code></td><td>FLOAT</td><td>Its baseline share among unit papers.</td></tr>
+    <tr><td><code>ownership</code></td><td>STRING</td><td><code>absent</code> (&lt;10 papers) / <code>core</code> (top journal &ge;0.40, not drifting) / <code>drift</code> / <code>scattered</code>. Drift means baseline share &lt;0.5 or <code>oos_pct &ge; 45</code>.</td></tr>
+    <tr><td><code>coverage</code></td><td>STRING</td><td><code>thin</code> (&lt;0.5&times;) / <code>under_indexed</code> (0.5&ndash;1.0&times;) / <code>at_or_above</code> (&ge;1.0&times;) / blank.</td></tr>
+    <tr><td><code>action</code></td><td>STRING</td><td><code>launch_journal</code> / <code>launch_section</code> / <code>formalise_section</code> / <code>reroute</code> / <code>gate_intake</code> / <code>expand</code> / <code>continue</code> / <code>consolidate</code> / blank. Launches suppressed when excess CAGR &le; &minus;0.05.</td></tr>
+    <tr><td><code>action_reason</code></td><td>STRING</td><td>Generated explanation.</td></tr>
+    <tr><td><code>superseded_by</code></td><td>STRING</td><td><code>unit_id</code> of the broader journal proposal that displaced this one.</td></tr>
+    <tr><td><code>home_unit_id</code></td><td>STRING</td><td>For section actions, the <code>unit_id</code> of the journal it would sit under.</td></tr>
+    <tr><td><code>suggested_home</code></td><td>STRING</td><td>That journal's name.</td></tr>
+    <tr><td><code>home_kind</code></td><td>STRING</td><td><code>proposed_journal</code> / <code>existing_journal</code> / blank.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>launch_units_meta_&lt;run&gt;</code> columns</h2>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code>, <code>run</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>journal_level</code></td><td>STRING</td><td><code>meso</code>.</td></tr>
+    <tr><td><code>section_level</code></td><td>STRING</td><td><code>micro</code>.</td></tr>
+    <tr><td><code>window_years</code></td><td>STRING</td><td>Comma-separated window years.</td></tr>
+    <tr><td><code>growth_max_month</code></td><td>INTEGER</td><td>Last month treated as fully reported.</td></tr>
+    <tr><td><code>growth_ytd_share</code></td><td>FLOAT</td><td>Fraction of a full year those months represent.</td></tr>
+    <tr><td><code>corpus_cagr</code></td><td>FLOAT</td><td>Corpus like-for-like CAGR.</td></tr>
+    <tr><td><code>fi_portfolio_share</code></td><td>FLOAT</td><td>Frontiers' corpus share over the window.</td></tr>
+    <tr><td><code>band_source</code></td><td>STRING</td><td>Whether the journal-band ceiling was calibrated against live titles or taken from config.</td></tr>
+    <tr><td><code>journal_band</code></td><td>STRING</td><td><code>floor-ceiling</code> global papers per 3y for a journal.</td></tr>
+    <tr><td><code>section_band</code></td><td>STRING</td><td>Same for a section.</td></tr>
+    <tr><td><code>n_journals_calibrated</code></td><td>INTEGER</td><td>Journals used for ceiling calibration.</td></tr>
+    <tr><td><code>n_sections_calibrated</code></td><td>INTEGER</td><td>Live sections observed.</td></tr>
+    <tr><td><code>n_units</code></td><td>INTEGER</td><td>Rows in <code>launch_units</code>.</td></tr>
+    <tr><td><code>n_ownership_pairs</code></td><td>INTEGER</td><td>Unit &times; journal ownership rows.</td></tr>
+    <tr><td><code>n_micro</code>, <code>n_meso</code></td><td>INTEGER</td><td>Units by kind.</td></tr>
+    <tr><td><code>n_action_none</code>, <code>n_action_continue</code>, <code>n_action_launch_section</code>, <code>n_action_launch_journal</code>, <code>n_action_expand</code>, <code>n_action_reroute</code>, <code>n_action_gate_intake</code></td><td>INTEGER</td><td>Units per <code>action</code> value.</td></tr>
+    <tr><td><code>n_ownership_absent</code>, <code>n_ownership_scattered</code>, <code>n_ownership_core</code>, <code>n_ownership_drift</code></td><td>INTEGER</td><td>Units per <code>ownership</code> value.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>market_opportunities_&lt;level&gt;_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>community_id</code>. Written for <code>micro</code> and <code>meso</code>. Rows require <code>n_global_3y &ge; 450</code> (<code>MARKET_MIN_3Y</code>).</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Leiden community at this level.</td></tr>
+    <tr><td><code>n_global_3y</code></td><td>INTEGER</td><td>All-publisher papers over three years.</td></tr>
+    <tr><td><code>n_fi_3y</code></td><td>INTEGER</td><td>Frontiers papers over three years.</td></tr>
+    <tr><td><code>n_global_base</code>, <code>n_global_late</code></td><td>INTEGER</td><td>Full-year world totals at each endpoint.</td></tr>
+    <tr><td><code>n_fi_base</code>, <code>n_fi_late</code></td><td>INTEGER</td><td>Same for Frontiers.</td></tr>
+    <tr><td><code>cagr</code></td><td>FLOAT</td><td>Growth from year-to-date endpoints.</td></tr>
+    <tr><td><code>excess_cagr</code></td><td>FLOAT</td><td><code>cagr - corpus_cagr</code>.</td></tr>
+    <tr><td><code>share_of_world_base</code>, <code>share_of_world_late</code></td><td>FLOAT</td><td>Community's share of the corpus at each endpoint.</td></tr>
+    <tr><td><code>share_of_world_delta</code></td><td>FLOAT</td><td>Late share minus base share.</td></tr>
+    <tr><td><code>fi_share</code></td><td>FLOAT</td><td><code>n_fi_3y / n_global_3y</code>.</td></tr>
+    <tr><td><code>fi_share_vs_portfolio</code></td><td>FLOAT</td><td>That share against parity.</td></tr>
+    <tr><td><code>is_large</code></td><td>BOOLEAN</td><td><code>n_global_3y &ge; 1,500</code>.</td></tr>
+    <tr><td><code>is_launchable_size</code></td><td>BOOLEAN</td><td>Within the 5,000&ndash;50,000 launchable band.</td></tr>
+    <tr><td><code>growth_reliable</code></td><td>BOOLEAN</td><td>Base year-to-date &ge;300 papers. A CAGR without this is noise.</td></tr>
+    <tr><td><code>is_growing</code></td><td>BOOLEAN</td><td><code>growth_reliable</code> and excess CAGR &ge;0.02.</td></tr>
+    <tr><td><code>is_opportunity</code></td><td>BOOLEAN</td><td>Large or growing, and the world field qualifies.</td></tr>
+    <tr><td><code>presence</code></td><td>STRING</td><td><code>whitespace</code> / <code>partial</code> / <code>covered</code>.</td></tr>
+    <tr><td><code>opportunity_kind</code></td><td>STRING</td><td><code>large_and_growing</code> / <code>large</code> / <code>growing</code> / blank.</td></tr>
+    <tr><td><code>community_label</code></td><td>STRING</td><td>L1 short label.</td></tr>
+    <tr><td><code>l2_topic</code></td><td>STRING</td><td>Top L2 topic at or above the 0.10 floor.</td></tr>
+    <tr><td><code>l2_topic_share</code></td><td>FLOAT</td><td>That topic's share.</td></tr>
+    <tr><td><code>topic_list</code></td><td>STRING</td><td>Topics above the floor, <code>;</code>-separated.</td></tr>
+    <tr><td><code>topic_compound</code></td><td>STRING</td><td>Top three L2 names joined with <code>/</code>.</td></tr>
+    <tr><td><code>name</code></td><td>STRING</td><td>Display name cascade.</td></tr>
+    <tr><td><code>name_source</code></td><td>STRING</td><td><code>l1_rollup</code> / <code>l2_compound</code> / <code>l1</code> / <code>cluster_id</code>.</td></tr>
+    <tr><td><code>opportunity_score</code></td><td>FLOAT</td><td><code>min(n_global_3y / 10,000, 10) &times; (1 + max(excess_cagr, 0) &times; 5)</code>.</td></tr>
+    <tr><td><code>base_year</code>, <code>late_year</code>, <code>window_years</code></td><td>INTEGER / STRING</td><td>Window definition.</td></tr>
+    <tr><td><code>corpus_cagr</code></td><td>FLOAT</td><td>Corpus CAGR.</td></tr>
+    <tr><td><code>fi_portfolio_share</code></td><td>FLOAT</td><td>Frontiers' corpus share.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>market_opportunities_&lt;level&gt;_meta_&lt;run&gt;</code> columns</h2>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>base_year</code>, <code>late_year</code>, <code>window_years</code></td><td>INTEGER / STRING</td><td>Window definition.</td></tr>
+    <tr><td><code>corpus_base</code>, <code>corpus_late</code></td><td>INTEGER</td><td>Full-year corpus totals at each endpoint.</td></tr>
+    <tr><td><code>corpus_cagr</code></td><td>FLOAT</td><td>Corpus like-for-like CAGR.</td></tr>
+    <tr><td><code>fi_portfolio_share</code></td><td>FLOAT</td><td>Frontiers' corpus share.</td></tr>
+    <tr><td><code>n_communities</code></td><td>INTEGER</td><td>Rows written after the size floor.</td></tr>
+    <tr><td><code>n_opportunities</code></td><td>INTEGER</td><td>Communities with <code>is_opportunity</code>.</td></tr>
+    <tr><td><code>n_large</code>, <code>n_growing</code></td><td>INTEGER</td><td>Flag counts.</td></tr>
+    <tr><td><code>n_whitespace</code></td><td>INTEGER</td><td>Communities with <code>presence = whitespace</code>.</td></tr>
+    <tr><td><code>n_whitespace_opportunities</code></td><td>INTEGER</td><td>Both opportunity and whitespace.</td></tr>
+    <tr><td><code>level</code></td><td>STRING</td><td><code>micro</code> or <code>meso</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>final_journal_opportunities_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>subfield_id</code>. Joins: <code>subfield_id</code> &rarr; <code>ocean-breeze-tier-3.openalex.subfields.id</code>; <code>scope_community_ids</code> &rarr; <code>cluster_labels_meso.cluster_id</code> after <code>UNNEST(JSON_VALUE_ARRAY(...))</code>. Governed columns joined from <code>jd_opportunities</code> on normalised <code>domain|field|subfield</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run used for the Leiden scope evidence.</td></tr>
+    <tr><td><code>subfield_id</code></td><td>STRING</td><td>OpenAlex subfield ID.</td></tr>
+    <tr><td><code>taxonomy_subfield</code></td><td>STRING</td><td>Subfield name. This is the market.</td></tr>
+    <tr><td><code>taxonomy_field</code></td><td>STRING</td><td>Parent field.</td></tr>
+    <tr><td><code>taxonomy_domain</code></td><td>STRING</td><td>Parent domain.</td></tr>
+    <tr><td><code>n_global_base</code></td><td>INTEGER</td><td>All-publisher articles in 2022.</td></tr>
+    <tr><td><code>mkt_2025</code></td><td>INTEGER</td><td>All-publisher articles in 2025.</td></tr>
+    <tr><td><code>fi_articles_2025</code></td><td>INTEGER</td><td>Frontiers articles in 2025.</td></tr>
+    <tr><td><code>n_fi_3y</code></td><td>INTEGER</td><td>Frontiers articles 2023&ndash;2025.</td></tr>
+    <tr><td><code>funded_pct</code></td><td>FLOAT</td><td>Share of 2025 world articles with a funder.</td></tr>
+    <tr><td><code>gold_oa_pct</code></td><td>FLOAT</td><td>Share of 2025 world articles with gold OA status.</td></tr>
+    <tr><td><code>awarded_pct</code></td><td>FLOAT</td><td>Share of 2025 world articles with an award.</td></tr>
+    <tr><td><code>top3_share</code></td><td>FLOAT</td><td>Share of 2025 output held by the three largest journals.</td></tr>
+    <tr><td><code>top_competitors</code></td><td>STRING</td><td>Those three journals with 2025 counts, <code>;</code>-separated.</td></tr>
+    <tr><td><code>lead_journal</code></td><td>STRING</td><td>Frontiers title publishing most in the subfield over three years.</td></tr>
+    <tr><td><code>lead_n_3y</code></td><td>INTEGER</td><td>That title's three-year count.</td></tr>
+    <tr><td><code>lead_share</code></td><td>FLOAT</td><td><code>lead_n_3y / n_fi_3y</code>. At or above 0.40 (<code>OWNED_MIN_FI_SHARE</code>) counts as ownership.</td></tr>
+    <tr><td><code>n_titles_10plus</code></td><td>INTEGER</td><td>Frontiers titles with 10+ articles over three years.</td></tr>
+    <tr><td><code>fi_titles_10plus</code></td><td>STRING</td><td>Those titles, <code>;</code>-separated, largest first.</td></tr>
+    <tr><td><code>fi_share</code></td><td>FLOAT</td><td><code>fi_articles_2025 / mkt_2025</code>.</td></tr>
+    <tr><td><code>fi_share_vs_portfolio</code></td><td>FLOAT</td><td><code>fi_share / fi_portfolio_share</code>. 1.00 is parity.</td></tr>
+    <tr><td><code>fi_portfolio_share</code></td><td>FLOAT</td><td>Frontiers' share of all 2025 world output. Same on every row.</td></tr>
+    <tr><td><code>cagr</code></td><td>FLOAT</td><td><code>(mkt_2025 / n_global_base)^(1/3) - 1</code>.</td></tr>
+    <tr><td><code>market_qualified</code></td><td>BOOLEAN</td><td><code>mkt_2025 &gt;= 10,000</code> AND <code>cagr &gt;= 0.05</code>. No Frontiers input.</td></tr>
+    <tr><td><code>funding</code></td><td>STRING</td><td>Governed funding band: <code>strong</code>, <code>mid</code> or blank.</td></tr>
+    <tr><td><code>anchor_journal</code></td><td>STRING</td><td>Governed anchor title for the taxonomy path.</td></tr>
+    <tr><td><code>competitor_1</code></td><td>STRING</td><td>Governed competitor journal.</td></tr>
+    <tr><td><code>competitor_2</code></td><td>STRING</td><td>Governed competitor journal.</td></tr>
+    <tr><td><code>competitor_3</code></td><td>STRING</td><td>Governed competitor journal.</td></tr>
+    <tr><td><code>source_action</code></td><td>STRING</td><td>Action recorded in the governed reference.</td></tr>
+    <tr><td><code>governed_source_score</code></td><td>FLOAT</td><td>Governed score. Overrides the recomputed <code>score</code> where present.</td></tr>
+    <tr><td><code>mapped_non_fi_papers</code></td><td>FLOAT</td><td>Non-Frontiers run papers mapped to this subfield by DOI.</td></tr>
+    <tr><td><code>scope_community_ids</code></td><td>STRING</td><td>JSON array of meso community IDs forming the scope.</td></tr>
+    <tr><td><code>scope_community_count</code></td><td>FLOAT</td><td>Number of communities in that scope.</td></tr>
+    <tr><td><code>scope_coverage</code></td><td>FLOAT</td><td>Share of mapped non-Frontiers papers those communities cover. Target 0.80 (<code>PRIMARY_COVERAGE</code>).</td></tr>
+    <tr><td><code>top_community_share</code></td><td>FLOAT</td><td>Share held by the largest single community.</td></tr>
+    <tr><td><code>dominant_macro_share</code></td><td>FLOAT</td><td>Share in the leading macro community.</td></tr>
+    <tr><td><code>scope_confidence</code></td><td>STRING</td><td><code>high</code> (300+ papers, coverage met, &le;30 communities) / <code>medium</code> (100+ papers, 0.70 coverage, &le;45) / <code>low</code>. <code>low</code> blocks a launch.</td></tr>
+    <tr><td><code>run_fi_papers</code></td><td>FLOAT</td><td>Frontiers run papers mapped to this subfield.</td></tr>
+    <tr><td><code>run_fi_core_share</code></td><td>FLOAT</td><td>Share of those not flagged out of scope for their own journal.</td></tr>
+    <tr><td><code>run_lead_journal</code></td><td>STRING</td><td>Leading Frontiers title among mapped run papers.</td></tr>
+    <tr><td><code>run_lead_share</code></td><td>FLOAT</td><td>That title's share of mapped Frontiers papers.</td></tr>
+    <tr><td><code>label_strength</code></td><td>FLOAT</td><td>Fraction of scope communities carrying a name. Below 0.8 forces <code>scope_confidence = low</code>.</td></tr>
+    <tr><td><code>scope_names</code></td><td>STRING</td><td>Scope community names, <code>;</code>-separated.</td></tr>
+    <tr><td><code>section_themes</code></td><td>STRING</td><td>Up to eight micro-community names inside the scope.</td></tr>
+    <tr><td><code>dedicated_home_title</code></td><td>STRING</td><td>First active Frontiers title whose name covers the subfield, else blank. Requires at least half the meaningful subfield tokens in the title.</td></tr>
+    <tr><td><code>dedicated_home</code></td><td>BOOLEAN</td><td>Whether <code>dedicated_home_title</code> is non-blank.</td></tr>
+    <tr><td><code>ownership_status</code></td><td>STRING</td><td><code>dedicated_home</code> / <code>adjacent_core_owner</code> / <code>concentrated_drift</code> / <code>scattered</code>.</td></tr>
+    <tr><td><code>score</code></td><td>INTEGER</td><td>0&ndash;12: funding band 0&ndash;2, funded &ge;45% +1, gold OA &ge;38% +1, CAGR 0&ndash;2, market size 0&ndash;2, no Frontiers presence +1, unconcentrated competitors +1.</td></tr>
+    <tr><td><code>grade</code></td><td>STRING</td><td><code>A</code> &ge;8, <code>B</code> 5&ndash;7, <code>C</code> &lt;5.</td></tr>
+    <tr><td><code>coverage_status</code></td><td>STRING</td><td><code>served</code> / <code>whitespace</code> (&lt;0.50&times; parity) / <code>under_indexed</code> (0.50&ndash;1.00&times;) / <code>fragmented_existing</code>.</td></tr>
+    <tr><td><code>action</code></td><td>STRING</td><td>In priority order: <code>pass_market</code>, <code>validate_scope</code>, <code>grow_existing</code>, <code>launch_greenfield</code> (&lt;30 Frontiers papers in 3y), <code>launch_consolidation</code>.</td></tr>
+    <tr><td><code>expected_fi_at_parity</code></td><td>FLOAT</td><td><code>mkt_2025 &times; fi_portfolio_share</code>.</td></tr>
+    <tr><td><code>cannibalisation_risk</code></td><td>STRING</td><td><code>duplicate</code> / <code>high</code> / <code>medium</code> / <code>low</code>. Subtracts 3/2/1/0 from <code>launch_confidence</code>.</td></tr>
+    <tr><td><code>launch_confidence</code></td><td>INTEGER</td><td><code>score</code> + scope-confidence points (high 2, medium 1) + 1 if whitespace &minus; cannibalisation penalty.</td></tr>
+    <tr><td><code>proposed_journal</code></td><td>STRING</td><td>&ldquo;Frontiers in &lt;subfield&gt;&rdquo;.</td></tr>
+    <tr><td><code>action_reason</code></td><td>STRING</td><td>Generated sentence explaining <code>action</code> using the row's numbers.</td></tr>
+    <tr><td><code>evidence_warnings</code></td><td>STRING</td><td>Caveats: missing funding evidence, scope needs validation, overlap with an operating title, concentrated competitors.</td></tr>
+    <tr><td><code>is_launch_candidate</code></td><td>BOOLEAN</td><td><code>action</code> is either launch type.</td></tr>
+    <tr><td><code>shortlist_rank</code></td><td>FLOAT</td><td>1&ndash;20 for launch candidates with <code>high</code>/<code>medium</code> scope confidence, ranked by grade, launch confidence, market size, growth. NULL otherwise.</td></tr>
+  </tbody>
+</table>
+
+<h2><code>final_journal_opportunities_manifest_&lt;run&gt;</code> columns</h2>
+
+<p>Key <code>run_timestamp</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_timestamp</code></td><td>STRING</td><td>Citation run.</td></tr>
+    <tr><td><code>source_scope_run</code></td><td>STRING</td><td>Citation run used for Leiden evidence.</td></tr>
+    <tr><td><code>openalex_works_modified</code></td><td>STRING</td><td>Last-modified time of <code>openalex.works</code> at run time.</td></tr>
+    <tr><td><code>openalex_subfields_modified</code></td><td>STRING</td><td>Last-modified time of <code>openalex.subfields</code>.</td></tr>
+    <tr><td><code>market_base_year</code></td><td>INTEGER</td><td>Growth base year. 2022.</td></tr>
+    <tr><td><code>market_late_year</code></td><td>INTEGER</td><td>Growth end year. 2025.</td></tr>
+    <tr><td><code>market_min_annual</code></td><td>INTEGER</td><td>Market size gate. 10,000.</td></tr>
+    <tr><td><code>market_min_cagr</code></td><td>FLOAT</td><td>Growth gate. 0.05.</td></tr>
+    <tr><td><code>scope_coverage_target</code></td><td>FLOAT</td><td>Scope coverage target. 0.80.</td></tr>
+    <tr><td><code>ownership_threshold</code></td><td>FLOAT</td><td>Ownership share threshold. 0.40.</td></tr>
+    <tr><td><code>greenfield_max_fi_3y</code></td><td>INTEGER</td><td>Greenfield ceiling. 30.</td></tr>
+    <tr><td><code>n_subfields</code></td><td>INTEGER</td><td>Subfields evaluated. Always 252.</td></tr>
+    <tr><td><code>n_market_qualified</code></td><td>INTEGER</td><td>Subfields passing the market gate.</td></tr>
+    <tr><td><code>n_launch_candidates</code></td><td>INTEGER</td><td>Subfields routed to a launch action.</td></tr>
+    <tr><td><code>n_shortlisted</code></td><td>INTEGER</td><td>Shortlisted subfields. Capped at 20.</td></tr>
+    <tr><td><code>action_counts</code></td><td>STRING</td><td>JSON object, count per <code>action</code>.</td></tr>
+    <tr><td><code>coverage_counts</code></td><td>STRING</td><td>JSON object, count per <code>coverage_status</code>.</td></tr>
+    <tr><td><code>notes</code></td><td>STRING</td><td>Fixed method statement.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Join reference</h2>
+
+<table>
+  <tbody>
+    <tr><th>From</th><th>To</th><th>Key</th></tr>
+    <tr><td>Any output table</td><td>Another table, same run</td><td>Match the <code>_&lt;run&gt;</code> suffix. Never join across suffixes.</td></tr>
+    <tr><td><code>pubs_raw</code></td><td><code>pub_metadata_raw</code>, <code>classification_raw</code></td><td><code>int_id</code>. One-to-one, except classification covers only the largest connected component.</td></tr>
+    <tr><td><code>cit_links_raw</code></td><td>Node tables</td><td><code>int_id1</code> and <code>int_id2</code> each &rarr; <code>int_id</code>.</td></tr>
+    <tr><td><code>classification_raw</code></td><td><code>cluster_labels_&lt;level&gt;</code></td><td><code>classification_raw.&lt;level&gt; = cluster_labels_&lt;level&gt;.cluster_id</code>.</td></tr>
+    <tr><td><code>classification_raw</code></td><td><code>paper_scope</code></td><td><code>int_id</code> plus the column named by <code>cluster_level</code>. Partial on the scope side.</td></tr>
+    <tr><td><code>pub_metadata_raw</code></td><td>AIRAK</td><td><code>pub_id = airak.Publication.PublicationId</code>.</td></tr>
+    <tr><td>Any run paper</td><td>OpenAlex</td><td><code>pub_id</code> &rarr; AIRAK DOI &rarr; <code>openalex.works.doi</code>. The DOI hop is the only link.</td></tr>
+    <tr><td><code>world_opportunities</code></td><td><code>world_field_scopes</code></td><td><code>field</code>.</td></tr>
+    <tr><td><code>world_opportunities</code></td><td><code>world_market_fields</code></td><td><code>field_id</code> / <code>field</code>.</td></tr>
+    <tr><td><code>papers</code></td><td><code>candidates</code>, <code>home</code>, <code>volume</code>, <code>market</code>, <code>decisions</code></td><td><code>(journal, community_id)</code>.</td></tr>
+    <tr><td><code>candidates</code></td><td><code>topics</code></td><td><code>(journal, community_id, l2_key)</code>.</td></tr>
+    <tr><td><code>market</code></td><td><code>jd_opportunities</code></td><td><code>field1</code> or <code>field2</code> &rarr; <code>subfield</code>.</td></tr>
+    <tr><td><code>decisions</code></td><td>Previous run's <code>decisions</code></td><td><code>community_matches.matched_community_id</code>. Never join on raw community ID.</td></tr>
+    <tr><td><code>launch_units</code></td><td>Communities</td><td><code>parent_id</code> &rarr; meso ID; <code>member_ids</code> &rarr; micro IDs.</td></tr>
+    <tr><td><code>launch_units</code></td><td><code>world_opportunities</code></td><td><code>primary_world_field = field</code>.</td></tr>
+    <tr><td><code>final_journal_opportunities</code></td><td><code>cluster_labels_meso</code></td><td><code>UNNEST(JSON_VALUE_ARRAY(scope_community_ids))</code> &rarr; <code>cluster_id</code>.</td></tr>
+    <tr><td><code>final_journal_opportunities</code></td><td>OpenAlex</td><td><code>subfield_id = openalex.subfields.id</code>.</td></tr>
+  </tbody>
+</table>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">sql</ac:parameter>
+  <ac:plain-text-body><![CDATA[SELECT
+  f.shortlist_rank,
+  f.proposed_journal,
+  f.mkt_2025,
+  f.cagr,
+  l.short_label AS scope_community
+FROM `ocean-tech-adv-analytics-c-tfs.opportunity_mapping.final_journal_opportunities_20260827_081311` f,
+UNNEST(JSON_VALUE_ARRAY(f.scope_community_ids)) AS meso_id
+JOIN `ocean-tech-adv-analytics-c-tfs.taxonomy_labelling.cluster_labels_meso_20260827_081311` l
+  ON l.cluster_id = CAST(meso_id AS INT64)
+WHERE f.shortlist_rank IS NOT NULL
+ORDER BY f.shortlist_rank]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<hr />
+
+<h2>Known issues</h2>
+
+<table>
+  <tbody>
+    <tr><th>Issue</th><th>Detail</th></tr>
+    <tr><td><code>unit_name</code> is empty</td><td><code>bq.fetch_l2_topics</code> reads <code>unit_name</code>, <code>l1_roll_name</code> and <code>l1_roll_share</code>, which the current <code>cluster_l2_topics</code> tables do not have. It falls back silently, so <code>unit_name</code> is blank on all 3,021 <code>candidates</code> rows and all 3,405 <code>launch_units</code> rows carry <code>name_source = l2_compound</code>. Re-running <code>taxonomy_naming</code> for this run fixes it.</td></tr>
+    <tr><td><code>run_metadata</code> timestamp mismatch</td><td><code>run_metadata_20260827_081311</code> stores <code>run_timestamp = 20260818_090851</code> and <code>generated_utc = 2026-08-18 15:43 UTC</code>. The row appears copied from the earlier export. Trust the table suffix for lineage, not the row.</td></tr>
+    <tr><td><code>core_pub</code> is constant</td><td>Set to <code>1</code> on every <code>pubs_raw</code> row, so it cannot separate seed from neighbour papers. Use <code>pub_metadata_raw.is_frontiers</code>.</td></tr>
+    <tr><td><code>persist_ok</code> is two different columns</td><td><code>volume.persist_ok</code> means the community appears across enough years. <code>decisions.persist_ok</code> means the same launch call was made in the previous run.</td></tr>
+    <tr><td><code>launches</code> filters on <code>call</code></td><td>Not <code>call_effective</code>, so unconfirmed proposals are included. Check <code>pending_persist</code>.</td></tr>
+    <tr><td><code>paper_scope</code> is partial</td><td>17,768 rows against 282,689 papers. Unassessed papers default to in scope, so <code>oos_pct</code> understates drift for journals the dashboard does not cover.</td></tr>
+    <tr><td>Growth is fragile</td><td>The run spans 2023&ndash;2026, so community growth is a three-step ratio. Check <code>growth_reliable</code> before quoting a CAGR.</td></tr>
+    <tr><td>Leiden IDs are run-local</td><td>Community IDs carry no meaning across runs. Join through <code>community_matches</code>.</td></tr>
+    <tr><td>Missing table means no rows</td><td><code>bq.write_table</code> deletes rather than writing an empty table.</td></tr>
+    <tr><td>Legacy tables</td><td><code>market_opportunities_&lt;run&gt;</code> and <code>market_opportunities_meta_&lt;run&gt;</code> have no current producer. <code>taxonomy_labelling.sample_pubs</code> and <code>sample_pub_ids_&lt;level&gt;</code> were last written for run <code>20260818_090851</code> and have no code reference.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p><em>Disclaimer: This page was created with AI assistance.</em></p>

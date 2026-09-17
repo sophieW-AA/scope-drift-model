@@ -1,0 +1,170 @@
+<p>How we decide whether a Frontiers journal is publishing inside its own citation neighbourhood, how that mix is changing, and what we hand to Journal Development. The graph itself is on <ac:link><ri:page ri:content-title="Citation Network" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Citation Network]]></ac:plain-text-link-body></ac:link>. Table columns are on <ac:link><ri:page ri:content-title="Data Mapping" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Data Mapping]]></ac:plain-text-link-body></ac:link>. What we do with those communities for launches is on <ac:link><ri:page ri:content-title="Opportunities" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Opportunities]]></ac:plain-text-link-body></ac:link>.</p>
+
+<hr />
+
+<h2>Goal</h2>
+
+<p>Tell, for a named Frontiers journal, which of its papers sit outside the topics that actually make up that journal, and whether that mix has moved since a baseline year. The point is operational: gate off-scope intake, retarget Research Topics, or consider a new section &mdash; with paper titles a Journal Development Manager can recognise, not only a cluster ID.</p>
+
+<p>Scope is inferred from citation structure, not from the journal's stated aims and scope. That is deliberate. Aims-and-scope text describes intent; this pipeline describes what got published.</p>
+
+<hr />
+
+<h2>Owner and stakeholder</h2>
+
+<table>
+  <tbody>
+    <tr><th>Role</th><th>Who</th></tr>
+    <tr><td>Owner</td><td>Sophie Wilson, Advanced Analytics (Lead analyst 2026).</td></tr>
+    <tr><td>Stakeholder</td><td>Journal Development &mdash; Journal Development Managers and the editors they support. They are the people who can change intake, Research Topics and section strategy on a title.</td></tr>
+    <tr><td>Not the stakeholder</td><td>The opportunity-mapping slate (new-journal recommendations) is a separate product, even though it reuses <code>paper_scope</code>.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Why it is done like this</h2>
+
+<p>Four design choices, each solving a failure mode of the obvious alternative.</p>
+
+<table>
+  <tbody>
+    <tr><th>Choice</th><th>Instead of</th><th>Why</th></tr>
+    <tr><td>Infer the journal's core from where its papers already sit in the citation graph (smallest set of communities covering 80% of its output)</td><td>Scoring papers against the published aims-and-scope paragraph</td><td>Aims-and-scope is marketing copy. Using it to judge the journal would circularly confirm whatever we already wrote. The citation neighbourhood is external evidence.</td></tr>
+    <tr><td>Judge communities first, papers second</td><td>An LLM over every title</td><td>Most papers inherit their community's verdict. That is cheap, stable, and auditable. Title-level rules only catch the known failure: a methods community (deep learning, monitoring, construction materials) that mixes on-scope and off-scope work.</td></tr>
+    <tr><td>Keep borderline as its own state, not a soft out-of-scope</td><td>A binary in/out cut</td><td>A community adjacent to the core is not the same as a paper on table tennis in <em>Frontiers in Neurorobotics</em>. Borderline is &ldquo;watch&rdquo;; hard OOS is &ldquo;gate&rdquo;.</td></tr>
+    <tr><td>Measure drift as change in the community mix (Jensen&ndash;Shannon distance vs a 2020-shaped baseline), not only current OOS%</td><td>A single out-of-scope rate</td><td>A journal can stay inside its core and still change what that core is. JSD catches the mix shifting; OOS% catches papers that left the mix. Both are in the PDF because they answer different questions.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>How it works</h2>
+
+<p>Run with <code>python main.py -t &lt;run&gt;</code> (Leiden already done) or <code>python main.py --export</code> for a new graph. Scope drift starts after clustering. Default dashboard level is <code>macro</code>; the eight default journals are listed under Outputs. Opportunity mapping later reads the same <code>classification_raw</code> at <strong>meso</strong> &mdash; different grain, same graph.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="title">Scope-drift steps</ac:parameter>
+  <ac:plain-text-body><![CDATA[classification_raw + pub_metadata_raw
+  |
+  v
+taxonomy_naming.py          names each community (GPT + Frontiers taxonomy)
+  |
+  v
+build_unified_dashboard.py  per journal:
+                              1. primary communities  (80% coverage)
+                              2. LLM borderline on the rest
+                              3. title hard-negatives
+                              4. paper-level LLM inside risky primaries
+                              5. JSD + entropy vs baseline years
+  |
+  +--> HTML dashboards
+  +--> paper_scope_<run>          (BigQuery)
+  v
+build_scope_drift_report_pdf.py --> Scope_Drift_Report.pdf]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>1. Name the communities</h3>
+
+<p><code>taxonomy_naming.py</code> samples up to 300 papers per cluster and asks GPT to map it onto the Frontiers taxonomy. The chosen name is <code>short_label</code> on <code>cluster_labels_&lt;level&gt;</code>. Unlabelled clusters display as <code>Cluster &lt;id&gt;</code>. That is not only cosmetic: the hard-negative and paper-LLM steps compare label tokens, so a missing name weakens the scope call itself.</p>
+
+<h3>2. Primary communities (the empirical core)</h3>
+
+<p>For each journal, take its papers, rank communities by count, and keep adding until they cover <code>PRIMARY_COVERAGE</code> (0.80) of that journal. Those communities are in scope by construction. Everything else is a candidate for borderline or out of scope.</p>
+
+<p>Example: if 82% of <em>Frontiers in Earth Science</em> papers sit in three macro communities, those three are primary even if a fourth community is &ldquo;geological&rdquo; by name. Share in the journal, not the label, defines the core.</p>
+
+<h3>3. Borderline communities</h3>
+
+<p>Non-primary communities with at least three papers (or 0.3% of the journal) are sent to GPT with the primary set as context. The model may admit a community as borderline &mdash; adjacent, not foreign. Borderline papers are counted as in-scope for the OOS rate (<code>soft_in_scope = primary &cup; borderline</code>) but flagged so a reader can see the edge.</p>
+
+<h3>4. Title hard-negatives</h3>
+
+<p>Journal-specific regexes in <code>config/journal_hard_negatives.json</code> force a paper out of scope even inside a primary community. An <code>unless_patterns</code> list can rescue it. This is for known contaminants that ride inside methods clusters.</p>
+
+<p>Example, <em>Frontiers in Neurorobotics</em>: a title matching <code>steel</code> / <code>rail surface defect</code> is forced OOS, unless it also matches neuro / BCI / EEG / rehab. A pneumonia chest X-ray YOLO paper in the same &ldquo;Deep Learning Applications&rdquo; community is OOS; a motor-imagery BCI paper is not.</p>
+
+<p>Example, <em>Frontiers in Earth Science</em>: retaining walls, foundation pits, pumped concrete are forced OOS unless the title is seismic / tectonic / sediment and so on. Construction sits next to geology in the citation graph; the regex is how we refuse to treat that adjacency as Earth Science.</p>
+
+<h3>5. Paper-level demotion</h3>
+
+<p>Inside primary communities whose labels are on a risky list (deep learning, construction materials, environmental monitoring, &hellip;), a second GPT pass scores suspicious titles and can demote an individual paper. Community stays in-scope; that paper does not. Capped at 60 titles per journal so the step stays bounded.</p>
+
+<h3>6. Drift through time</h3>
+
+<p>Each year the journal is a distribution over communities. Jensen&ndash;Shannon distance compares that distribution to the baseline mix (years 2018&ndash;2020 where present, otherwise the earliest year with enough papers). Shannon entropy says whether the journal is spreading or concentrating. Bands used in the dashboards and PDF:</p>
+
+<table>
+  <tbody>
+    <tr><th>Band</th><th>JSD</th><th>Reading</th></tr>
+    <tr><td>High</td><td>&gt; 0.30</td><td>The papers coming in now look meaningfully different from the baseline mix.</td></tr>
+    <tr><td>Moderate</td><td>0.20&ndash;0.30</td><td>Enough movement to watch.</td></tr>
+    <tr><td>Low</td><td>&le; 0.20</td><td>Still close to the original mix.</td></tr>
+  </tbody>
+</table>
+
+<p>JSD can be high while OOS% is low: the core itself moved. OOS% can be high while JSD is low: a stable core with a growing off-scope tail. The PDF writes both sentences on purpose.</p>
+
+<hr />
+
+<h2>Outputs</h2>
+
+<p>Local files land in <code>C:\Users\sophie.wilson\Documents\scope_drift_outputs\dashboards</code>. BigQuery tables use the citation-run suffix. Default journals (overridable with <code>--journals</code>):</p>
+
+<p><em>Frontiers in Neurorobotics</em>, <em>Earth Science</em>, <em>Surgery</em>, <em>Aging Neuroscience</em>, <em>Environmental Science</em>, <em>Chemistry</em>, <em>Materials</em>, <em>Robotics and AI</em>.</p>
+
+<p><code>paper_scope</code> only contains those journals. Opportunity mapping treats missing papers as in-scope, so drift is understated for any title not on this list.</p>
+
+<h3>BigQuery &mdash; <code>paper_scope_&lt;run&gt;</code></h3>
+
+<p>One row per assessed paper. Columns are on Data Mapping. The verdict is:</p>
+
+<table>
+  <tbody>
+    <tr><th><code>scope_code</code></th><th>Meaning</th><th>Example</th></tr>
+    <tr><td>2</td><td>In scope (primary, or not assessed)</td><td>A motor-imagery BCI paper in Neurorobotics' primary community.</td></tr>
+    <tr><td>1</td><td>Borderline</td><td>A community the LLM kept as adjacent to the core, not foreign.</td></tr>
+    <tr><td>0</td><td>Out of scope</td><td>A rail-defect detection paper in Neurorobotics (<code>hard_negative</code>), or a demoted title inside a risky primary (<code>paper_demoted</code>).</td></tr>
+  </tbody>
+</table>
+
+<h3>HTML dashboards</h3>
+
+<table>
+  <tbody>
+    <tr><th>File</th><th>What you see</th></tr>
+    <tr><td><code>scope_dashboard.html</code></td><td>Per journal: article count, OOS count, primary vs borderline vs OOS, example titles.</td></tr>
+    <tr><td><code>drift_dashboard.html</code></td><td>JSD and entropy &Delta; over years; High / Moderate / Low bands; which title drifted most.</td></tr>
+    <tr><td><code>network_maps.html</code></td><td>Community map with a year slider &mdash; where that journal's papers sit in the graph.</td></tr>
+    <tr><td><code>clusters.html</code></td><td>Named communities and their sizes.</td></tr>
+    <tr><td><code>paper_examples.html</code></td><td>In-scope vs OOS title lists used by the PDF.</td></tr>
+    <tr><td><code>combined_dashboard.html</code></td><td>Wrapper over the above.</td></tr>
+    <tr><td><code>gt_network_map.html</code></td><td>Optional. Manual labels from <code>manual_scope_check_truth.ods</code> overlaid on the map (<code>python main.py --gt</code>).</td></tr>
+  </tbody>
+</table>
+
+<h3>PDF &mdash; <code>Scope_Drift_Report.pdf</code></h3>
+
+<p>The artefact meant for the stakeholder. Author line: Sophie Wilson. For each of the eight journals it contains:</p>
+
+<ul>
+  <li>A High / Moderate / Low band from JSD, in plain language (&ldquo;the mix has shifted&rdquo; vs &ldquo;still close to original scope&rdquo;).</li>
+  <li>Current OOS share, whether that share has risen or fallen since 2020, entropy (spreading vs concentrating), and the largest topic today.</li>
+  <li>A side-by-side of in-scope and out-of-scope titles (five each; three for Environmental Science and Surgery so titles fit one page). OOS examples prefer hard-negatives and demotions in the latest year, so the stakeholder sees the worst cases first.</li>
+</ul>
+
+<p>Example of the two numbers disagreeing, which is why both are there: a journal whose primary communities have rotated from A+B to B+C can show high JSD and a modest OOS%. A journal that kept A+B but added a tail of construction papers can show low JSD and a high OOS%.</p>
+
+<hr />
+
+<h2>What this is not</h2>
+
+<ul>
+  <li>It is not a market-sizing exercise. Counts inside the citation graph are Frontiers-neighbourhood counts. Market size is OpenAlex, on the Opportunities page.</li>
+  <li>It is not a full-portfolio scan unless you pass every title in <code>--journals</code>. The default is eight journals chosen as a test set.</li>
+  <li>It cannot see before the export's <code>START_YEAR</code>. A 2023&ndash;2026 graph cannot reconstruct a 2020 paper-level baseline; JSD then uses the earliest year present.</li>
+</ul>
+
+<hr />
+
+<p><em>Disclaimer: This page was created with AI assistance.</em></p>

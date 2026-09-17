@@ -1,0 +1,167 @@
+<p>How we build and cluster the citation graph that scope drift and opportunity mapping both consume. How we turn those communities into in-scope / out-of-scope calls is on <ac:link><ri:page ri:content-title="Journal Scope Drift" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Journal Scope Drift]]></ac:plain-text-link-body></ac:link>. Table and column definitions live on <ac:link><ri:page ri:content-title="Data Mapping" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Data Mapping]]></ac:plain-text-link-body></ac:link>. The launch slate lives on <ac:link><ri:page ri:content-title="Opportunities" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Opportunities]]></ac:plain-text-link-body></ac:link>.</p>
+
+<hr />
+
+<h2>The Leiden method</h2>
+
+<p>We cluster papers with the Leiden algorithm, from Traag, Waltman and van Eck at Leiden University's Centre for Science and Technology Studies (CWTS):</p>
+
+<p><a href="https://www.nature.com/articles/s41598-019-41695-z">Traag V.A., Waltman L. &amp; van Eck N.J. From Louvain to Leiden: guaranteeing well-connected communities. <em>Scientific Reports</em> 9, 5233 (2019).</a> DOI <code>10.1038/s41598-019-41695-z</code>. Also at the <a href="https://scholarlypublications.universiteitleiden.nl/handle/1887/78029">Leiden University repository</a>.</p>
+
+<p>Community detection finds groups of nodes that cite each other more than they cite the rest of the graph. The older Louvain algorithm, which most bibliometric tools still use, has a known defect: after a few aggregation steps a &ldquo;community&rdquo; can be internally disconnected. Two topics that barely cite each other can share a label. Leiden adds a refinement step before each aggregation, so every community stays connected, and iterating it converges to a partition where no subset of a community would rather leave. It is also faster, which is what makes a 17-million-node run feasible.</p>
+
+<p>We do not reimplement Leiden in Python. <code>src/subprocess_leiden.py</code> writes the node and edge lists to disk and shells out to the CWTS jar <code>publicationclassification.jar</code> (<code>nl.cwts.publicationclassification.run.PublicationClassificationCreator</code>) with <code>java -Xmx350g</code>. That is the same lineage CWTS uses to classify the scientific literature.</p>
+
+<hr />
+
+<h2>Why this fits scope drift</h2>
+
+<table>
+  <tbody>
+    <tr><th>Reason</th><th>What it buys us</th></tr>
+    <tr><td>Journal is not an input</td><td>Communities form from citation structure alone. That is what lets us ask whether a Frontiers journal is publishing outside the community its own papers inhabit, rather than restating our taxonomy.</td></tr>
+    <tr><td>Three nested resolutions</td><td>One graph yields micro (section-shaped), meso (journal-shaped) and macro (field-shaped) units. The dashboard, launch units and the final slate all reuse those three IDs.</td></tr>
+    <tr><td>Connectedness is guaranteed</td><td>At 17 million papers a Louvain community that is secretly two topics would look like a coherent scope. Leiden will not emit that.</td></tr>
+    <tr><td>It scales</td><td>The jar runs on the largest connected component. Constant Potts Model resolution plus a minimum cluster size is how CWTS already partitions science; we use the same knobs.</td></tr>
+  </tbody>
+</table>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="title">Where Leiden sits</ac:parameter>
+  <ac:plain-text-body><![CDATA[AIRAK  (ocean-breeze-tier-1.airak)
+  |
+  v
+cwts_export.py              -> pubs_raw, cit_links_raw, pub_metadata_raw, run_metadata
+  |
+  v
+subprocess_leiden.py        -> classification_raw   (int_id -> micro / meso / macro)
+  |
+  +--> dashboards + paper_scope     (scope drift)
+  +--> src/opportunities/           (launch slate)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<hr />
+
+<h2>How the citation network is created</h2>
+
+<p>All of this is <code>src/cwts_export.py</code>. The script pulls from AIRAK, weights the edges, and writes four BigQuery tables. Nothing is clustered yet.</p>
+
+<h3>1. Seed journals</h3>
+
+<p><code>JOURNAL_IDS</code> is the full Frontiers journal-ID list and overrides <code>TOP_N_JOURNALS</code>. In <code>ego</code> and <code>full</code> modes that list bounds which papers enter the graph. In <strong>global</strong> mode &mdash; the current default &mdash; the edge query has no journal filter. The seed only labels which nodes are Frontiers (<code>pub_metadata_raw.is_frontiers</code>).</p>
+
+<h3>2. Year window</h3>
+
+<p><code>START_YEAR</code>&ndash;<code>END_YEAR</code> is baked into the graph. A paper published outside the window never becomes a node, even as a cited neighbour. The window cannot be widened downstream: a 2023&ndash;2026 export cannot support a 2020 drift baseline.</p>
+
+<h3>3. Which papers and which edges</h3>
+
+<table>
+  <tbody>
+    <tr><th>Mode</th><th>What enters the graph</th></tr>
+    <tr><td><code>ego</code></td><td>Frontiers papers in the window plus their immediate citation neighbours, capped at <code>MAX_EXTERNAL_PAPERS</code>.</td></tr>
+    <tr><td><code>full</code></td><td>Frontiers journals plus any related journal with at least 50 citation links into or out of that seed, then every paper those journals published in the window.</td></tr>
+    <tr><td><code>global</code></td><td>Every AIRAK citation whose <strong>both</strong> ends were published in the year window. No journal filter. Current default; on the order of 17 million nodes and 95 million undirected edges.</td></tr>
+  </tbody>
+</table>
+
+<h3>4. Node IDs</h3>
+
+<p><code>int_id</code> is assigned by sorting AIRAK <code>PublicationId</code> and numbering from zero. It is run-local. The same paper gets a different <code>int_id</code> on the next export, so never join two runs on it.</p>
+
+<h3>5. Edge weights</h3>
+
+<p>Direct-citation weight is</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:plain-text-body><![CDATA[weight = exp(-(end_year - cited_year) / TEMPORAL_DECAY_TAU)   floored at 0.01
+       × SELF_CITE_JOURNAL_WEIGHT   if both papers share a journal, else × 1]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<p>Older cited papers fade. Same-journal citations are halved so a title's internal habit does not glue its whole output into one community. That is the point of the self-cite discount: without it, Leiden would partly rediscover journals rather than topics.</p>
+
+<h3>6. Bibliographic coupling</h3>
+
+<p>Optional extra edges between papers that share references, even if they never cite each other. Weight is a cosine over shared refs, kept only when they share at least <code>BC_MIN_SHARED_REFS</code>, capped at 1.0, then summed with the citation weight and capped at 2.0.</p>
+
+<p><strong>In <code>global</code> mode the code force-disables BC</strong>, even though the environment default is true. There is no bounded journal set, so the shared-reference query would be unbounded. That is why the V1 <code>run_metadata</code> row has <code>bc_edges_enabled = false</code>.</p>
+
+<h3>7. Write-out</h3>
+
+<p>Pairs are normalised low-ID first, weights summed, then written in both directions to <code>cit_links_raw</code>. Each undirected edge appears twice. <code>core_pub</code> is currently <code>1</code> on every row of <code>pubs_raw</code>, so it cannot separate seed from neighbour papers. Use <code>is_frontiers</code>.</p>
+
+<hr />
+
+<h2>Current defaults</h2>
+
+<p>Values below are the defaults in code today, not the V1 snapshot. Changing any of them mints a new run suffix; the old tables stay.</p>
+
+<h3>Graph construction &mdash; <code>src/cwts_export.py</code></h3>
+
+<table>
+  <tbody>
+    <tr><th>Parameter</th><th>Default</th><th>What changing it does</th></tr>
+    <tr><td><code>NETWORK_MODE</code></td><td><code>global</code></td><td>Whole-window literature. Switch to <code>ego</code> or <code>full</code> for a cheaper Frontiers neighbourhood; the graph then no longer represents the market, only our citation vicinity.</td></tr>
+    <tr><td><code>START_YEAR</code></td><td>2023</td><td>Shorter window = more recent structure, weaker history. Longer window lets older citation habits dominate unless tau is reduced. Frozen into the graph.</td></tr>
+    <tr><td><code>END_YEAR</code></td><td>2026</td><td>The year used as &ldquo;now&rdquo; in the decay formula. A later end year without a later start year stretches the window and ages every cited paper.</td></tr>
+    <tr><td><code>JOURNAL_IDS</code></td><td>full Frontiers list</td><td>In global mode this only changes the <code>is_frontiers</code> flag. In ego/full it changes who is in the graph. Shrinking it does not shrink global edges.</td></tr>
+    <tr><td><code>TOP_N_JOURNALS</code></td><td>5</td><td>Fallback when <code>JOURNAL_IDS</code> is empty: take the n largest Frontiers titles by output. Unused while the ID list is set.</td></tr>
+    <tr><td><code>ENABLE_EDGE_WEIGHTS</code></td><td><code>true</code></td><td>Off sets every edge to 1. Leiden then treats a 2026 citation the same as a 2023 same-journal self-cite.</td></tr>
+    <tr><td><code>TEMPORAL_DECAY_TAU</code></td><td>5.0 years</td><td>Lower tau forgets older cited papers faster &mdash; tighter &ldquo;current&rdquo; communities. Higher tau lets long-lived methods papers pull distant topics together.</td></tr>
+    <tr><td><code>SELF_CITE_JOURNAL_WEIGHT</code></td><td>0.5</td><td>1.0 removes the discount; journal identity leaks into clusters. Near 0 treats same-journal cites as almost absent, which can split a coherent topic that happens to live in one title.</td></tr>
+    <tr><td><code>ENABLE_BC_EDGES</code></td><td><code>true</code>, ignored in global</td><td>Only takes effect in ego/full. On, papers that share a bibliography cluster even without a citation. Off, only direct citations count.</td></tr>
+    <tr><td><code>BC_MIN_SHARED_REFS</code></td><td>3</td><td>Ego/full only. Raise it to thin coupling edges; lower it (or 2) to add weaker &ldquo;same bibliography&rdquo; links.</td></tr>
+    <tr><td><code>MAX_EXTERNAL_PAPERS</code></td><td>50,000</td><td>Ego only. Raise it to pull a larger citation neighbourhood around Frontiers; lower it to keep the graph small and more Frontiers-heavy.</td></tr>
+  </tbody>
+</table>
+
+<h3>Leiden clustering &mdash; <code>src/subprocess_leiden.py</code></h3>
+
+<p>Lower resolution / higher minimum size gives coarser communities. Tightening micro toward meso merges section-shaped units into journal-shaped ones. Loosening creates more, smaller clusters: noisier names, more candidate &ldquo;launch sections&rdquo;.</p>
+
+<table>
+  <tbody>
+    <tr><th>Parameter</th><th>Default</th><th>What changing it does</th></tr>
+    <tr><td><code>largest_component_only</code></td><td><code>true</code></td><td>Drops papers off the giant component (about 2.6% on a comparable 17M-node run). Off would assign tiny islands their own clusters, most of them unusable.</td></tr>
+    <tr><td><code>iterations</code></td><td>1000</td><td>More iterations, more stable locally-optimal partition. 1000 is already high; cutting it saves runtime and can leave communities less settled.</td></tr>
+    <tr><td>micro resolution / min size</td><td><code>1e-5</code> / 500</td><td>Finest level. Used as the drill-down / section-shaped unit. Smaller min size or higher resolution fragments sections further.</td></tr>
+    <tr><td>meso resolution / min size</td><td><code>2e-6</code> / 5,000</td><td>Default opportunity community. This is the journal-shaped level the mapper joins on.</td></tr>
+    <tr><td>macro resolution / min size</td><td><code>2e-7</code> / 100,000</td><td>Broadest. Used as a sanity check that a scope is not split across fields; not the unit we launch against.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>What this step writes</h2>
+
+<p>Column-by-column meaning is on <ac:link><ri:page ri:content-title="Data Mapping" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Data Mapping]]></ac:plain-text-link-body></ac:link>. Opportunity mapping and the dashboards join on <code>int_id</code> and on <code>micro</code> / <code>meso</code> / <code>macro</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Table</th><th>Written by</th><th>Role</th></tr>
+    <tr><td><code>pubs_raw_&lt;run&gt;</code></td><td><code>cwts_export.py</code></td><td>Node list Leiden partitions.</td></tr>
+    <tr><td><code>cit_links_raw_&lt;run&gt;</code></td><td><code>cwts_export.py</code></td><td>Weighted directed edges Leiden optimises against.</td></tr>
+    <tr><td><code>pub_metadata_raw_&lt;run&gt;</code></td><td><code>cwts_export.py</code></td><td>AIRAK publication ID, journal, date, title, Frontiers flag. The bridge from network IDs to papers.</td></tr>
+    <tr><td><code>run_metadata_&lt;run&gt;</code></td><td><code>cwts_export.py</code></td><td>The parameter values actually used for this export.</td></tr>
+    <tr><td><code>classification_raw_&lt;run&gt;</code></td><td><code>subprocess_leiden.py</code></td><td><code>int_id</code> plus micro, meso and macro community IDs.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Things to know before you change a default</h2>
+
+<table>
+  <tbody>
+    <tr><th>Issue</th><th>Detail</th></tr>
+    <tr><td>The year window is frozen</td><td>Widen it only by re-exporting. Downstream phases cannot invent papers that were never nodes.</td></tr>
+    <tr><td>IDs are run-local</td><td><code>int_id</code> and community IDs mean nothing on another suffix. Compare runs through <code>community_matches</code>, not raw IDs.</td></tr>
+    <tr><td>Global mode disables BC</td><td>Setting <code>ENABLE_BC_EDGES=true</code> does nothing until you leave <code>global</code>.</td></tr>
+    <tr><td><code>core_pub</code> is constant</td><td>Always 1. Use <code>is_frontiers</code>.</td></tr>
+    <tr><td>Trust the table suffix, not the metadata row</td><td><code>run_metadata.run_timestamp</code> has been known to disagree with the physical table name. Lineage is the suffix.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p><em>Disclaimer: This page was created with AI assistance.</em></p>
