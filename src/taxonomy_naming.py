@@ -112,9 +112,25 @@ BQ_LABEL_DATASET = "taxonomy_labelling"
 BQ_LOCATION = "EU"
 pandas_gbq.context.location = BQ_LOCATION
 
-# Cluster levels to label in one run (classification_raw has micro, meso, macro)
+# Cluster levels to label in one run (classification_raw has micro, meso, macro).
+# Override with TAXONOMY_LEVELS=meso,macro to skip a level.
 CLUSTER_LEVELS = ("micro", "meso", "macro")
 CLUSTER_LEVEL = "macro"  # current level while a run is in progress
+
+
+def _levels_for_run() -> tuple[str, ...]:
+    raw = (os.environ.get("TAXONOMY_LEVELS") or "").strip()
+    if not raw:
+        return CLUSTER_LEVELS
+    levels = tuple(part.strip() for part in raw.split(",") if part.strip())
+    unknown = [level for level in levels if level not in CLUSTER_LEVELS]
+    if unknown:
+        raise ValueError(
+            f"Unknown TAXONOMY_LEVELS {unknown!r}; expected subset of {CLUSTER_LEVELS}"
+        )
+    if not levels:
+        raise ValueError("TAXONOMY_LEVELS is empty")
+    return levels
 
 # Per-cluster sample for the taxonomy join, applied inside BigQuery so it bounds
 # the join rather than local memory. The sample scales with the cluster: a flat
@@ -1706,14 +1722,15 @@ def main(timestamp: str | None = None):
     log.info("Taxonomy Naming Pipeline")
     log.info("Run timestamp: %s", timestamp)
     log.info("Log file: %s", log_path)
-    log.info("Cluster levels: %s", ", ".join(CLUSTER_LEVELS))
+    levels = _levels_for_run()
+    log.info("Cluster levels: %s", ", ".join(levels))
     log.info("=" * 60)
 
     init_clients()
     load_taxonomy()
 
     parts = []
-    for level in CLUSTER_LEVELS:
+    for level in levels:
         df_level = run_one_level(level, timestamp)
         if df_level is not None and not df_level.empty:
             parts.append(df_level)
