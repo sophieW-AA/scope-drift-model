@@ -8,8 +8,8 @@ then used only to choose the action: greenfield launch, consolidation launch,
 grow an existing title, or validate/pass.
 
 This module deliberately does not consume any prior canvas or hand-exported
-CSV. It writes a versioned BigQuery result and manifest so the presentation can
-always be traced back to source data, thresholds and a scope-drift run.
+CSV. It keeps the versioned result in ``opportunity_mapping`` and appends the
+stakeholder slate to ``opportunity_clean`` under the same citation-run timestamp.
 """
 
 from __future__ import annotations
@@ -812,6 +812,9 @@ def build_final_opportunities(
     if write:
         bqmod.write_table(out, FINAL_PREFIX, run_timestamp)
         bqmod.write_json_row(manifest, FINAL_MANIFEST_PREFIX, run_timestamp)
+        from .clean_publish import publish_clean
+
+        publish_clean(out, manifest, run_timestamp)
     return out, manifest
 
 

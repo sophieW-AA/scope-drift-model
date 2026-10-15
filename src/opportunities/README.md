@@ -34,7 +34,7 @@ That one command:
 2. evaluates all 252 OpenAlex subfields;
 3. maps qualified markets to Leiden meso and micro communities by DOI;
 4. grades and routes every field;
-5. writes the result and manifest to BigQuery;
+5. writes the versioned result to `opportunity_mapping` and appends the stakeholder tables in `opportunity_clean`;
 6. creates local JSON, manifest and readable Excel files; and
 7. writes a timestamped run log.
 
@@ -50,7 +50,7 @@ Generate deterministic template scopes without GPT:
 python src/opportunities/run.py --run 20260827_081311 --skip-llm
 ```
 
-Run locally without replacing the BigQuery final tables:
+Run locally without writing BigQuery:
 
 ```powershell
 python src/opportunities/run.py --run 20260827_081311 --no-write-bq
@@ -164,16 +164,24 @@ filtered Excel. It does not recalculate the analytics.
 
 ## BigQuery outputs
 
-Project: `ocean-tech-adv-analytics-c-tfs`, dataset:
-`opportunity_mapping`, location: EU.
+Project: `ocean-tech-adv-analytics-c-tfs`, location: EU.
 
-The supported final run writes:
+The supported final run writes both sets, under the citation-run timestamp:
 
-- `final_journal_opportunities_{scope_run}`
-- `final_journal_opportunities_manifest_{scope_run}`
+- `opportunity_mapping.final_journal_opportunities_{run}`
+- `opportunity_mapping.final_journal_opportunities_manifest_{run}`
+- `opportunity_clean.runs` and `opportunity_clean.subfields`
 
-The manifest records source-table timestamps, the selected Leiden run and all
-decision thresholds.
+`run_timestamp` is that citation run. `opportunity_clean` joins to
+`leiden_output.communities` on `run_timestamp`, `level = 'meso'`, and
+`community_id` from `scope_community_ids`. A run already stored in
+`opportunity_clean` is left as it is. The versioned `opportunity_mapping`
+tables are still replaced when that same run is written again.
+
+| Table | Grain | What it holds |
+|---|---|---|
+| `opportunity_clean.runs` | one row per citation run | OpenAlex snapshot time, market and scope gates, result counts |
+| `opportunity_clean.subfields` | one row per OpenAlex subfield per run | Proposed journal, grade, market size, action, and `scope_community_ids` |
 
 ---
 
@@ -183,6 +191,7 @@ decision thresholds.
 |---|---|
 | `run.py` / `__main__.py` | One-command orchestration, file logging and local artifacts |
 | `final_opportunities.py` | Market facts, DOI overlap, Leiden scope, scoring and routing |
+| `clean_publish.py` | Append-only write of `opportunity_clean.runs` and `subfields` |
 | `export_workbook.py` | Readable Excel and narrative columns |
 | `paths.py` | External output/log directories |
 | `bq.py` | BigQuery reads and writes |

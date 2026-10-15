@@ -1,8 +1,9 @@
 """Run the journal-opportunity mapper.
 
-The default command runs the final OpenAlex + Leiden method and writes the
-machine result, manifest, readable Excel workbook and run log under
-``scope_drift_outputs/opportunities``.
+The default command runs the final OpenAlex + Leiden method, writes the
+versioned result to ``opportunity_mapping``, appends the stakeholder tables
+in ``opportunity_clean`` for that citation run, and writes the readable Excel
+workbook and run log under ``scope_drift_outputs/opportunities``.
 
 Usage (from repo root):
 

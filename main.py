@@ -1,8 +1,8 @@
 """
 Scope drift pipeline orchestrator.
 
-Default: Leiden + taxonomy + dashboard + PDF. Pass --timestamp to reuse an
-existing BigQuery export (or --export to build a new network first).
+Default: Leiden + taxonomy + dashboard + read model + PDF. Pass --timestamp
+to reuse an existing BigQuery export (or --export to build a new network first).
 
 Optional: --export (new CWTS network), --gt (GT map). Use --skip-leiden to
 reuse an existing classification_raw_{timestamp}.
@@ -125,6 +125,11 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--skip-taxonomy", action="store_true")
     p.add_argument("--skip-dashboard", action="store_true")
+    p.add_argument(
+        "--skip-read-model",
+        action="store_true",
+        help="Skip publishing leiden_output.papers, communities, and journals.",
+    )
     p.add_argument("--skip-pdf", action="store_true")
     return p.parse_args()
 
@@ -201,6 +206,14 @@ def main() -> None:
     if not args.skip_dashboard:
         run_step("dashboard", REPO / "src" / "build_unified_dashboard.py", env)
 
+    if not args.skip_read_model:
+        run_step(
+            "read_model",
+            REPO / "src" / "read_model.py",
+            env,
+            extra_args=["--timestamp", timestamp],
+        )
+
     if args.gt:
         run_step("gt_map", REPO / "scripts" / "build_gt_network_map.py", env)
 
@@ -214,6 +227,12 @@ def main() -> None:
         print("  GT map:     (see scripts/build_gt_network_map.py OUT_HTML)")
     if not args.skip_pdf:
         print(f"  PDF:        {out / 'Scope_Drift_Report.pdf'}")
+    if not args.skip_read_model:
+        read_dataset = os.environ.get("BQ_READ_DATASET", "leiden_output")
+        print(
+            f"  Read model: {read_dataset}.papers, "
+            f"{read_dataset}.communities, {read_dataset}.journals"
+        )
 
 
 if __name__ == "__main__":

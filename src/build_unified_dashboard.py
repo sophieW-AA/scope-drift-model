@@ -10,6 +10,8 @@ Reads from BigQuery tables:
 
 Output:
     - output/combined_dashboard.html
+    - {BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}
+    - {BQ_DATASET}.journal_summary_{RUN_TIMESTAMP}
 
 Usage:
     python scripts/build_unified_dashboard.py
@@ -1583,46 +1585,74 @@ def compute_paper_scope_overrides(
     return demotions, meta
 
 
-def write_paper_scope_to_bq(scope: pd.DataFrame) -> None:
-    """Persist per-paper scope flags so downstream jobs do not parse the HTML.
+def write_paper_scope_to_bq(
+    scope: pd.DataFrame,
+    journal_summary: pd.DataFrame | None = None,
+) -> None:
+    """Persist per-paper scope flags and the journal summary for the read model.
 
-    Written to `{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}`; the opportunity
-    mapper reads this instead of `output/network_maps.html`. Set
-    PAPER_SCOPE_TO_BQ=0 to skip.
+    Written to `{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}` and
+    `{BQ_DATASET}.journal_summary_{RUN_TIMESTAMP}`. The opportunity mapper
+    reads the paper table instead of `output/network_maps.html`. Set
+    PAPER_SCOPE_TO_BQ=0 to skip both writes.
     """
     if os.environ.get("PAPER_SCOPE_TO_BQ", "1").strip() in ("0", "false", "False", "no"):
         return
     if not RUN_TIMESTAMP:
         log.warning("paper scope not written to BigQuery: RUN_TIMESTAMP is unset")
         return
-    if scope is None or scope.empty:
-        return
     try:
         import pandas_gbq
+    except Exception as exc:
+        log.warning("paper scope BigQuery write failed: %s", exc)
+        return
 
-        dest = f"{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}"
+    if scope is not None and not scope.empty:
+        try:
+            dest = f"{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}"
+            pandas_gbq.to_gbq(
+                scope,
+                dest,
+                project_id=BQ_PROJECT,
+                if_exists="replace",
+                location="EU",
+            )
+            log.info(
+                "  → BigQuery: %s.%s (%s papers, %s journals)",
+                BQ_PROJECT,
+                dest,
+                f"{len(scope):,}",
+                scope["journal"].nunique(),
+            )
+        except Exception as exc:
+            log.warning("paper scope BigQuery write failed: %s", exc)
+
+    if journal_summary is None or journal_summary.empty:
+        return
+    try:
+        dest_summary = f"{BQ_DATASET}.journal_summary_{RUN_TIMESTAMP}"
         pandas_gbq.to_gbq(
-            scope,
-            dest,
+            journal_summary,
+            dest_summary,
             project_id=BQ_PROJECT,
             if_exists="replace",
             location="EU",
         )
         log.info(
-            "  → BigQuery: %s.%s (%s papers, %s journals)",
+            "  → BigQuery: %s.%s (%s journals)",
             BQ_PROJECT,
-            dest,
-            f"{len(scope):,}",
-            scope["journal"].nunique(),
+            dest_summary,
+            f"{len(journal_summary):,}",
         )
     except Exception as exc:
-        log.warning("paper scope BigQuery write failed: %s", exc)
+        log.warning("journal summary BigQuery write failed: %s", exc)
 
 
 def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
     """Compute statistics for each journal."""
     journals_data = []
     scope_rows = []
+    summary_rows = []
     years = sorted(df["pub_year"].unique())
 
     for journal in JOURNALS:
@@ -1803,6 +1833,23 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
         primary_shift = compute_primary_shift(jdf, baseline_year=2020)
 
         borderline_ids = [int(c) for c in sorted(borderline_clusters, key=int)]
+        primary_ids = [int(c) for c in sorted(primary_clusters, key=int)]
+        summary_rows.append(
+            {
+                "journal": journal,
+                "cluster_level": CLUSTER_LEVEL,
+                "n_articles": n_articles,
+                "n_out_of_scope": int(n_oos),
+                "out_of_scope_pct": round(oos_pct, 1),
+                "primary_coverage_pct": round(PRIMARY_COVERAGE * 100, 1),
+                "n_borderline_papers": n_borderline_papers,
+                "n_hard_negative_papers": n_hard_neg,
+                "n_paper_demoted": n_paper_demoted,
+                "primary_community_ids": ",".join(str(c) for c in primary_ids),
+                "borderline_community_ids": ",".join(str(c) for c in borderline_ids),
+                "oos_by_year": json.dumps(oos_by_year),
+            }
+        )
         journals_data.append(
             {
                 "name": journal,
@@ -1835,8 +1882,12 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
             }
         )
 
-    if scope_rows:
-        write_paper_scope_to_bq(pd.concat(scope_rows, ignore_index=True))
+    scope_df = (
+        pd.concat(scope_rows, ignore_index=True) if scope_rows else pd.DataFrame()
+    )
+    summary_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame()
+    if not scope_df.empty or not summary_df.empty:
+        write_paper_scope_to_bq(scope_df, summary_df)
 
     return journals_data
 
