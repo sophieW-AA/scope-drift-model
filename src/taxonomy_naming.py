@@ -94,11 +94,17 @@ PROJECT_DATA = "ocean-tech-adv-analytics-c-esf"
 BQ_SRC_PROJECT = "ocean-tech-adv-analytics-c-tfs"
 BQ_SRC_DATASET = "raw_citation_network_data"
 
-# Source tables
-TBL_SCORES = f"{PROJECT_DATA}.aa_taxonomy.article_taxonomy_scores_current"
+# Frontiers taxonomy v6. article_taxonomy_scores_current is scorer_version 6.
+# The *_current cluster views keep the open version (valid_to_version IS NULL).
+# Labelling uses the CORE_TOPIC spine. The other axes (method, application,
+# translational stage, demographic cohort) are facets, not launch topics.
+TAXONOMY_DATASET = f"{PROJECT_DATA}.fw_taxonomy"
+TBL_SCORES = f"{TAXONOMY_DATASET}.article_taxonomy_scores_current"
+TBL_TAXONOMY = f"{TAXONOMY_DATASET}.flat_taxonomy"
 TBL_PUB = "ocean-breeze-tier-1.airak.Publication"
-TBL_L2_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l2_cluster_assignments"
-TBL_L1_CLUS = f"{PROJECT_DATA}.aa_taxonomy.l1_cluster_assignments"
+TBL_L2_CLUS = f"{TAXONOMY_DATASET}.l2_cluster_assignments_current"
+TBL_L1_CLUS = f"{TAXONOMY_DATASET}.l1_cluster_assignments_current"
+TOPIC_AXIS = "CORE_TOPIC"
 
 # CWTS tables (constructed from timestamp / RUN_TIMESTAMP)
 TBL_CLASSIF = None  # Set in main()
@@ -151,11 +157,11 @@ L1_DEPTH_FULL = 0.35
 L1_DEPTH_PARTIAL = 0.10
 L1_ARTICLE_SHARE_FLOOR = 0.010
 
-# L2 topics kept per community. The taxonomy has ~27.5k L2 terms under 987 L1
-# terms, so the L1 name alone is reused across many clusters ("Cardiology"
-# lands on 25 separate micro clusters). L2 is the level at which a topic is
-# specific enough to launch against, so it is retained rather than aggregated
-# away.
+# L2 topics kept per community. The v6 CORE_TOPIC spine has ~47.8k L2 terms
+# under 2,272 L1 terms, so the L1 name alone is reused across many clusters
+# ("Cardiology" lands on many separate micro clusters). L2 is the level at
+# which a topic is specific enough to launch against, so it is retained rather
+# than aggregated away.
 TOP_L2_TOPICS = 8
 
 # LLM settings
@@ -310,26 +316,37 @@ def load_taxonomy():
 
     log.info("Loading taxonomy reference data...")
 
-    # L2 → L1 → L0 mapping
-    _df_l2_raw = bq.query(
+    # L2 → L1 → L0. v6 inserts an axis under each L1 and a WoS category
+    # between L1 and L0: level_2 → axis → level_1 → wos_category → l0.
+    # The OECD code prefix on l0.name ("3.02 Clinical medicine") is stripped
+    # so the label the model sees is the field name.
+    df_l2_map = bq.query(
         f"""
-        SELECT DISTINCT l2_taxref AS l2_key, l2_name, l1_taxref, l1_name
-        FROM `{TBL_L2_CLUS}`
+        SELECT DISTINCT
+            l2.taxref AS l2_key,
+            l2.name AS l2_name,
+            l1.taxref AS l1_taxref,
+            l1.name AS l1_name,
+            l0.taxref AS l0_taxref,
+            REGEXP_REPLACE(l0.name, r'^\\d+\\.\\d+\\s+', '') AS l0_name
+        FROM `{TBL_TAXONOMY}` AS l2
+        JOIN `{TBL_TAXONOMY}` AS axis_term
+          ON l2.parent_taxref = axis_term.taxref
+         AND axis_term.level = 'axis'
+        JOIN `{TBL_TAXONOMY}` AS l1
+          ON axis_term.parent_taxref = l1.taxref
+         AND l1.level = 'level_1'
+        JOIN `{TBL_TAXONOMY}` AS wos
+          ON l1.parent_taxref = wos.taxref
+         AND wos.level = 'wos_category'
+        JOIN `{TBL_TAXONOMY}` AS l0
+          ON wos.parent_taxref = l0.taxref
+         AND l0.level = 'l0'
+        WHERE l2.level = 'level_2'
+          AND l2.axis = '{TOPIC_AXIS}'
     """
     ).to_dataframe()
-
-    _df_l1_l0 = bq.query(
-        f"""
-        SELECT DISTINCT l1_taxref, l1_name, l0_taxref, l0_name
-        FROM `{TBL_L1_CLUS}`
-    """
-    ).to_dataframe()
-
-    df_l2_map = _df_l2_raw.merge(
-        _df_l1_l0[["l1_taxref", "l0_taxref", "l0_name"]].drop_duplicates("l1_taxref"),
-        on="l1_taxref",
-        how="left",
-    )
+    df_l2_map = df_l2_map.drop_duplicates("l2_key")
     log.info("L2 map: %d rows", len(df_l2_map))
 
     # L1 vocabulary size
@@ -338,9 +355,25 @@ def load_taxonomy():
     # L1 cluster membership
     df_l1c_raw = bq.query(
         f"""
-        SELECT l0_taxref, l0_name, l1_taxref, l1_name, cluster_id, cluster_name, level_index
-        FROM `{TBL_L1_CLUS}`
-        ORDER BY level_index
+        SELECT
+            l0.taxref AS l0_taxref,
+            REGEXP_REPLACE(l0.name, r'^\\d+\\.\\d+\\s+', '') AS l0_name,
+            c.l1_taxref,
+            l1.name AS l1_name,
+            c.cluster_id,
+            c.cluster_name,
+            c.level_index
+        FROM `{TBL_L1_CLUS}` AS c
+        JOIN `{TBL_TAXONOMY}` AS l1
+          ON l1.taxref = c.l1_taxref
+         AND l1.level = 'level_1'
+        JOIN `{TBL_TAXONOMY}` AS wos
+          ON wos.taxref = c.wos_taxref
+         AND wos.level = 'wos_category'
+        JOIN `{TBL_TAXONOMY}` AS l0
+          ON l0.taxref = wos.parent_taxref
+         AND l0.level = 'l0'
+        ORDER BY c.level_index
     """
     ).to_dataframe()
 
@@ -383,9 +416,22 @@ def load_taxonomy():
     # L2 cluster membership
     df_l2c_raw = bq.query(
         f"""
-        SELECT l1_taxref, l1_name, l2_taxref AS l2_key, l2_name, cluster_id, cluster_name
-        FROM `{TBL_L2_CLUS}`
-        ORDER BY cluster_id
+        SELECT
+            c.l1_taxref,
+            l1.name AS l1_name,
+            c.l2_taxref AS l2_key,
+            l2.name AS l2_name,
+            c.cluster_id,
+            c.cluster_name
+        FROM `{TBL_L2_CLUS}` AS c
+        JOIN `{TBL_TAXONOMY}` AS l2
+          ON l2.taxref = c.l2_taxref
+         AND l2.level = 'level_2'
+         AND l2.axis = '{TOPIC_AXIS}'
+        JOIN `{TBL_TAXONOMY}` AS l1
+          ON l1.taxref = c.l1_taxref
+         AND l1.level = 'level_1'
+        ORDER BY c.cluster_id
     """
     ).to_dataframe()
 
@@ -442,9 +488,14 @@ def pull_taxonomy_scores(level: str) -> pd.DataFrame:
         FROM sampled s
         JOIN `{TBL_SCORES}` t
             ON CAST(t.publication_id AS INT64) = s.pub_id
-        JOIN `{TBL_L2_CLUS}` l2
-            ON t.taxref = l2.l2_taxref
-        WHERE t.level = 2
+        JOIN `{TBL_TAXONOMY}` tax
+            ON tax.taxref = t.taxref
+           AND tax.level = 'level_2'
+           AND tax.axis = '{TOPIC_AXIS}'
+        -- v6 scores the leaf one level deeper than v2. Score level 2 is the
+        -- axis container; score level 3 is the level_2 topic.
+        WHERE t.level = 3
+          AND t.axis = '{TOPIC_AXIS}'
           AND t.in_top_k = TRUE
           AND t.is_weak_match = FALSE
         GROUP BY community_id, l2_key
@@ -1421,7 +1472,7 @@ def build_l1_rollup(cluster_level: str) -> pd.DataFrame:
 def _disambiguate(names: pd.Series, qualifiers: pd.Series) -> pd.Series:
     """Append a qualifier only where the base name repeats across communities.
 
-    L1 names are reused heavily — the taxonomy has 987 L1 terms against ~3k micro
+    L1 names are reused heavily — the taxonomy has 2,272 L1 terms against ~3k micro
     communities, so "Cardiology" alone lands on many of them. Where a name is
     already unique it is left clean; where it collides the leading L2 term is
     added to say which part of the parent this unit occupies.
