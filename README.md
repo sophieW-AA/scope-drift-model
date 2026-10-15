@@ -54,17 +54,18 @@ Default path runs **Leiden** (unless `--skip-leiden`). Pass a timestamp to reuse
 | Skip some steps | `python main.py -t 20260721_122750 --skip-leiden --skip-taxonomy --skip-pdf` |
 
 ```text
-[--export]  ->  [leiden]  ->  taxonomy_naming  ->  build_unified_dashboard  ->  [--gt]  ->  PDF
+[--export]  ->  [leiden]  ->  taxonomy_naming  ->  build_unified_dashboard  ->  read_model  ->  [--gt]  ->  PDF
 ```
 
 - **`--export`**: runs `src/cwts_export.py` (network + weights → BigQuery).
 - **Leiden** (default): runs `src/subprocess_leiden.py` → `classification_raw_{timestamp}`. Skip with `--skip-leiden`.
 - **taxonomy**: `src/taxonomy_naming.py` uploads cluster labels to BigQuery (`taxonomy_labelling`).
-- **dashboard**: `src/build_unified_dashboard.py` (scope / drift / network maps; LLM borderline, hard-negatives, paper demotion on by default).
+- **dashboard**: `src/build_unified_dashboard.py` (scope / drift / network maps; LLM borderline, hard-negatives, paper demotion on by default). Also writes `journal_summary_{timestamp}` next to `paper_scope_{timestamp}` in `raw_citation_network_data`.
+- **read model**: `src/read_model.py` adds `leiden_output.papers`, `communities`, and `journals`. Skip with `--skip-read-model`.
 - **`--gt`**: optional `scripts/build_gt_network_map.py` (needs local truth ODS).
 - **PDF**: `src/build_scope_drift_report_pdf.py` → `scope_drift_outputs/dashboards/Scope_Drift_Report.pdf`.
 
-Useful flags: `--cluster-level {micro,meso,macro}`, `--journals "..."`, `--skip-leiden`, `--skip-taxonomy`, `--skip-dashboard`, `--skip-pdf`. See `python main.py --help`.
+Useful flags: `--cluster-level {micro,meso,macro}`, `--journals "..."`, `--skip-leiden`, `--skip-taxonomy`, `--skip-dashboard`, `--skip-read-model`, `--skip-pdf`. See `python main.py --help`.
 
 ### Partial / manual steps
 
@@ -162,6 +163,37 @@ Reads `classification_raw_*` + `pub_metadata_raw_*`, then uploads labels to data
 | `taxonomy_labelling.cluster_taxonomy_labels_{level}_{timestamp}` |
 
 Dashboards load labels from these BigQuery tables.
+
+`taxonomy_naming` also writes `taxonomy_labelling.cluster_l2_topics_{level}_{timestamp}` (top L2 topics and the L1 rollup name). The read model uses that for community names.
+
+#### From the dashboard
+
+Writes into `raw_citation_network_data`:
+
+| BigQuery table |
+|----------------|
+| `raw_citation_network_data.paper_scope_{timestamp}` |
+| `raw_citation_network_data.journal_summary_{timestamp}` |
+
+#### Read model (`src/read_model.py`)
+
+Adds three stable tables in `leiden_output`. The network tables stay in `raw_citation_network_data`. `run_timestamp` is a column, so a run is one filter rather than a new table name. Republishing a run replaces only that run's rows in `leiden_output`.
+
+| Table | Grain | What it holds |
+|-------|-------|----------------|
+| `leiden_output.papers` | one row per paper | `int_id`, `pub_id`, `title`, `journal`, `is_frontiers`, `pub_year`, `macro_id`, `meso_id`, `micro_id`. Scope columns are filled only for journals the dashboard scored. |
+| `leiden_output.communities` | one row per community per level | `level` (`macro` / `meso` / `micro`), `community_id`, `name` (`unit_name`, else `short_label`), `n_papers`, `parent_name`, `topics`, `taxonomy_key` |
+| `leiden_output.journals` | one row per scored journal | `n_articles`, `n_out_of_scope`, `out_of_scope_pct`, `primary_communities`, `borderline_communities` (semicolon-separated names), `oos_by_year` (JSON), plus borderline / hard-negative / paper-LLM counts |
+
+`papers.scope` is `in_scope`, `borderline`, or `out_of_scope`. `papers.scope_reason` is `primary`, `borderline_community`, `hard_negative`, `paper_llm`, or `outside_primary`. `papers.scope_level` is the dashboard cluster level. Those three columns are null for papers the dashboard did not score.
+
+Network inputs are read from `raw_citation_network_data`: `classification_raw_{timestamp}`, `pub_metadata_raw_{timestamp}`, `paper_scope_{timestamp}`, and `journal_summary_{timestamp}`. `journals` is filled only when `journal_summary_{timestamp}` is in that dataset. A missing label level is skipped; `papers` and `communities` still publish when `--skip-dashboard` is set.
+
+Backfill a finished run without re-clustering:
+
+```powershell
+python src/read_model.py --timestamp 20260721_122750
+```
 
 ## Key environment variables
 
