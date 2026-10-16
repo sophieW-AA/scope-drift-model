@@ -80,7 +80,8 @@ Its market phase is deliberately independent of the export corpus:
 |---|---|---|---|---|
 | **1 Export** | `--export` (off by default) | `src/cwts_export.py` | `ocean-breeze-tier-1.airak` Publication, PublicationCitation, Journal | `pubs_raw_{ts}`, `pub_metadata_raw_{ts}`, `cit_links_raw_{ts}`, `run_metadata_{ts}` |
 | **2 Leiden** | on by default, `--skip-leiden` | `src/subprocess_leiden.py` + `publicationclassification.jar` | `pubs_raw_{ts}`, `cit_links_raw_{ts}` | `classification_raw_{ts}` |
-| **3 Taxonomy** | on by default, `--skip-taxonomy` | `src/taxonomy_naming.py` | `classification_raw_{ts}` ⋈ `pub_metadata_raw_{ts}`, Frontiers taxonomy, OpenAI | `cluster_labels_{level}_{ts}`, `cluster_taxonomy_labels_{level}_{ts}` |
+| **2b Taxonomy assignment** | `--taxonomy-enrichment` (off by default) | `src/taxonomy_assignment.py` | `classification_raw_{ts}`, `pub_metadata_raw_{ts}`, AIRAK, `fw_taxonomy` v6 | rows appended to `classification_raw_{ts}` with `assignment_method` |
+| **3 Taxonomy** | on by default, `--skip-taxonomy` | `src/taxonomy_naming.py` | Leiden rows of `classification_raw_{ts}` ⋈ `pub_metadata_raw_{ts}`, Frontiers taxonomy, OpenAI | `cluster_labels_{level}_{ts}`, `cluster_taxonomy_labels_{level}_{ts}` |
 | **4 Dashboard** | on by default, `--skip-dashboard` | `src/build_unified_dashboard.py` | `classification_raw`, `pub_metadata_raw`, `cit_links_raw`, `run_metadata`, labels, OpenAI | 6 HTML dashboards, `paper_scope_{ts}` |
 | **5 GT map** | `--gt` (off by default) | `scripts/build_gt_network_map.py` | `manual_scope_check_truth.ods`, `classification_raw`, `pub_metadata_raw` | `output/gt_network_map.html` |
 | **6 PDF** | on by default, `--skip-pdf` | `src/build_scope_drift_report_pdf.py` | `scope_dashboard.html` + `drift_dashboard.html` (embedded JS constants) | `Scope_Drift_Report.pdf` |
@@ -123,11 +124,29 @@ macro   resolution 2e-7   min cluster size 100000
 
 Journal is **not** an input — clusters are formed from citation structure alone, which is what makes the downstream scope analysis independent of our own labelling.
 
-> **Note:** `largest_component_only=true` drops papers disconnected from the main component. On run `20260818_090851` that is ~453k of 17.1M rows (2.6%).
+> **Note:** `largest_component_only=true` drops papers disconnected from the main component. On run `20260818_090851` that is ~453k of 17.1M rows (2.6%). The export still writes Frontiers papers that have no citation edges into `pubs_raw` and `pub_metadata_raw`, without adding edges.
+
+### 2b. Taxonomy assignment — `src/taxonomy_assignment.py`
+
+Optional. Run it with `python main.py --timestamp <ts> --skip-leiden --taxonomy-enrichment` after Leiden. It does not run unless that flag is set.
+
+Frontiers papers in the run's journal and year window that Leiden did not classify — no citations, or outside the largest component — are scored against the Leiden clusters with taxonomy v6 (`fw_taxonomy`, CORE_TOPIC, score level 3). Profiles are fit on Leiden papers only. A paper is written back into `classification_raw_{ts}` at micro, then meso, then macro, and only as deep as the similarity and margin thresholds allow.
+
+`assignment_method` on that table is `leiden`, `taxonomy`, or `unassigned`. Leiden rows keep their cluster ids. Cluster names stay based on the Leiden rows. The network view still draws citation edges only; community coverage can show the extra taxonomy count beside the Leiden size.
+
+On the `20260827_081311` holdout, macro placement at similarity 0.15 and margin 0.02 was right about 78% of the time. Meso and micro stayed below 41% and 36%, so those levels are closed and a taxonomy row only receives a macro id.
+
+A dry run prints acceptance counts and writes nothing:
+
+```text
+python src/taxonomy_assignment.py --timestamp 20260827_081311 --audit
+python src/taxonomy_assignment.py --timestamp 20260827_081311 --calibrate
+python src/taxonomy_assignment.py --timestamp 20260827_081311
+```
 
 ### 3. Taxonomy naming — `src/taxonomy_naming.py`
 
-Turns numeric cluster ids into readable labels. It joins classification to metadata, samples up to `SAMPLE_SIZE_PER_CLUSTER` (300) papers per cluster, builds a per-cluster brief, and asks GPT to assign each cluster to `core` and `bleed` categories from the Frontiers taxonomy. `export_dashboard_labels` then takes the top-ranked core category as `short_label`.
+Turns numeric cluster ids into readable labels. It joins classification to metadata, samples papers per cluster, builds a per-cluster brief, and asks GPT to assign each cluster to `core` and `bleed` categories from the Frontiers taxonomy. `export_dashboard_labels` then takes the top-ranked core category as `short_label`. When `assignment_method` is present, only `leiden` rows are sampled, so taxonomy-assigned papers do not change the names.
 
 Levels come from the module constant `CLUSTER_LEVELS = ("micro", "meso", "macro")` — there is no CLI or environment override, and no checkpoint/resume. Both output tables are written with `if_exists="replace"`.
 

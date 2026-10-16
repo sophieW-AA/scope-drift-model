@@ -123,6 +123,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip clustering; reuse existing classification_raw_{timestamp}.",
     )
+    p.add_argument(
+        "--taxonomy-enrichment",
+        action="store_true",
+        help=(
+            "After Leiden, assign uncited Frontiers papers into "
+            "classification_raw using taxonomy v6. Off unless this flag is set."
+        ),
+    )
+    p.add_argument(
+        "--skip-taxonomy-enrichment",
+        action="store_true",
+        help="Do not run taxonomy assignment even if --taxonomy-enrichment is set.",
+    )
     p.add_argument("--skip-taxonomy", action="store_true")
     p.add_argument("--skip-dashboard", action="store_true")
     p.add_argument(
@@ -194,6 +207,14 @@ def main() -> None:
 
     if not args.skip_leiden:
         run_step("leiden", REPO / "src" / "subprocess_leiden.py", env)
+
+    if args.taxonomy_enrichment and not args.skip_taxonomy_enrichment:
+        run_step(
+            "taxonomy-enrichment",
+            REPO / "src" / "taxonomy_assignment.py",
+            env,
+            extra_args=["--timestamp", timestamp, "--write"],
+        )
 
     if not args.skip_taxonomy:
         run_step(

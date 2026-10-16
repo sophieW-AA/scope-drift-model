@@ -59,6 +59,7 @@ PAPERS_FIELDS = [
     ("macro_id", "INT64", "NULLABLE"),
     ("meso_id", "INT64", "NULLABLE"),
     ("micro_id", "INT64", "NULLABLE"),
+    ("assignment_method", "STRING", "NULLABLE"),
     ("scope", "STRING", "NULLABLE"),
     ("scope_reason", "STRING", "NULLABLE"),
     ("scope_level", "STRING", "NULLABLE"),
@@ -69,6 +70,7 @@ COMMUNITIES_FIELDS = [
     ("community_id", "INT64", "REQUIRED"),
     ("name", "STRING", "NULLABLE"),
     ("n_papers", "INT64", "NULLABLE"),
+    ("n_papers_enriched", "INT64", "NULLABLE"),
     ("parent_name", "STRING", "NULLABLE"),
     ("topics", "STRING", "NULLABLE"),
     ("taxonomy_key", "STRING", "NULLABLE"),
@@ -142,7 +144,16 @@ def table_exists(bq: bigquery.Client, fq_table: str) -> bool:
 def ensure_table(bq: bigquery.Client, table: str, fields: list[tuple[str, str, str]]) -> str:
     fq = f"{BQ_PROJECT}.{BQ_READ_DATASET}.{table}"
     schema = [bigquery.SchemaField(name, typ, mode=mode) for name, typ, mode in fields]
-    bq.create_table(bigquery.Table(fq, schema=schema), exists_ok=True)
+    try:
+        existing = bq.get_table(fq)
+    except NotFound:
+        bq.create_table(bigquery.Table(fq, schema=schema))
+        return fq
+    have = {field.name for field in existing.schema}
+    extra = [field for field in schema if field.name not in have]
+    if extra:
+        existing.schema = list(existing.schema) + extra
+        bq.update_table(existing, ["schema"])
     return fq
 
 
@@ -200,6 +211,14 @@ def publish_papers(bq: bigquery.Client, run_timestamp: str) -> None:
             f"in {BQ_DATASET}."
         )
 
+    class_fields = {field.name for field in bq.get_table(classification).schema}
+    if "assignment_method" in class_fields:
+        assignment_sql = (
+            "COALESCE(NULLIF(CAST(c.assignment_method AS STRING), ''), 'leiden')"
+        )
+    else:
+        assignment_sql = "'leiden'"
+
     scope = f"{BQ_PROJECT}.{BQ_DATASET}.paper_scope_{run_timestamp}"
     has_scope = table_exists(bq, scope)
     if has_scope:
@@ -248,7 +267,7 @@ def publish_papers(bq: bigquery.Client, run_timestamp: str) -> None:
     insert_sql = f"""
     INSERT INTO `{fq}` (
       run_timestamp, int_id, pub_id, title, journal, is_frontiers, pub_year,
-      macro_id, meso_id, micro_id, scope, scope_reason, scope_level
+      macro_id, meso_id, micro_id, assignment_method, scope, scope_reason, scope_level
     )
     SELECT
       @ts AS run_timestamp,
@@ -270,6 +289,7 @@ def publish_papers(bq: bigquery.Client, run_timestamp: str) -> None:
       CAST(c.macro AS INT64) AS macro_id,
       CAST(c.meso AS INT64) AS meso_id,
       CAST(c.micro AS INT64) AS micro_id,
+      {assignment_sql} AS assignment_method,
       {scope_sql}
     FROM `{classification}` c
     JOIN `{metadata}` m
@@ -342,6 +362,8 @@ def fetch_label_rows(bq: bigquery.Client, run_timestamp: str, level: str) -> pd.
     frame["parent_name"] = frame["parent_name"].fillna("").astype(str).str.strip()
     frame["taxonomy_key"] = frame["taxonomy_key"].fillna("").astype(str)
     frame["n_papers"] = pd.to_numeric(frame["n_papers"], errors="coerce").fillna(0).astype("int64")
+    # Leiden count until publish_communities replaces it with leiden + taxonomy.
+    frame["n_papers_enriched"] = frame["n_papers"]
     frame["community_id"] = frame["community_id"].astype("int64")
     frame["run_timestamp"] = run_timestamp
     frame["level"] = level
@@ -389,6 +411,49 @@ def fetch_topic_rollup(bq: bigquery.Client, run_timestamp: str, level: str) -> p
     return frame
 
 
+def _attach_enriched_counts(
+    bq: bigquery.Client, communities: pd.DataFrame, run_timestamp: str
+) -> pd.DataFrame:
+    """n_papers stays the Leiden count. n_papers_enriched adds taxonomy rows."""
+    if communities.empty:
+        return communities
+    classification = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_{run_timestamp}"
+    if not table_exists(bq, classification):
+        return communities
+    fields = {field.name for field in bq.get_table(classification).schema}
+    if "assignment_method" not in fields:
+        return communities
+    parts = []
+    for level in LEVELS:
+        parts.append(
+            f"""
+            SELECT
+              '{level}' AS level,
+              CAST({level} AS INT64) AS community_id,
+              COUNTIF(
+                assignment_method IS NULL
+                OR assignment_method IN ('leiden', 'taxonomy')
+              ) AS n_papers_enriched
+            FROM `{classification}`
+            WHERE {level} IS NOT NULL
+            GROUP BY 2
+            """
+        )
+    counts = bq.query(" UNION ALL ".join(parts)).to_dataframe()
+    if counts.empty:
+        return communities
+    counts["community_id"] = counts["community_id"].astype("int64")
+    out = communities.drop(columns=["n_papers_enriched"], errors="ignore")
+    out["community_id"] = out["community_id"].astype("int64")
+    out = out.merge(counts, on=["level", "community_id"], how="left")
+    out["n_papers_enriched"] = (
+        pd.to_numeric(out["n_papers_enriched"], errors="coerce")
+        .fillna(out["n_papers"])
+        .astype("int64")
+    )
+    return out
+
+
 def publish_communities(bq: bigquery.Client, run_timestamp: str) -> pd.DataFrame | None:
     """Write communities. None means no label tables existed, so existing rows stay."""
     frames: list[pd.DataFrame] = []
@@ -411,6 +476,7 @@ def publish_communities(bq: bigquery.Client, run_timestamp: str) -> pd.DataFrame
         if frames
         else pd.DataFrame(columns=[name for name, _, _ in COMMUNITIES_FIELDS])
     )
+    combined = _attach_enriched_counts(bq, combined, run_timestamp)
     write_frame(bq, combined, "communities", COMMUNITIES_FIELDS, run_timestamp)
     return combined
 
