@@ -167,6 +167,23 @@ GPT_LABELS_ALL = {"macro": {}, "meso": {}, "micro": {}}
 # ══════════════════════════════════════════════════════════════════════════════
 # BIGQUERY DATA LOADING
 # ══════════════════════════════════════════════════════════════════════════════
+def classification_assignment_sql(client, table: str, alias: str = "c") -> tuple[str, str]:
+    """Return (assignment_method select, Leiden-only filter).
+
+    Tables written before taxonomy assignment have no assignment_method column.
+    """
+    names = {field.name for field in client.get_table(table).schema}
+    if "assignment_method" not in names:
+        return "'leiden'", ""
+    select_expr = (
+        f"COALESCE(NULLIF(CAST({alias}.assignment_method AS STRING), ''), 'leiden')"
+    )
+    leiden_filter = (
+        f"AND ({alias}.assignment_method IS NULL OR {alias}.assignment_method = 'leiden')"
+    )
+    return select_expr, leiden_filter
+
+
 def load_merged_data() -> pd.DataFrame:
     """Load and merge classification + metadata from BigQuery, filtered to target journals."""
     from google.cloud import bigquery
@@ -184,6 +201,7 @@ def load_merged_data() -> pd.DataFrame:
     journals_str = ", ".join(f"'{j}'" for j in JOURNALS)
 
     client = bigquery.Client(project=BQ_PROJECT, location="EU")
+    _, leiden_filter = classification_assignment_sql(client, tbl_classif)
 
     query = f"""
     SELECT 
@@ -199,6 +217,7 @@ def load_merged_data() -> pd.DataFrame:
     FROM `{tbl_classif}` c
     JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
     WHERE m.journal IN ({journals_str})
+      {leiden_filter}
     """
 
     df = client.query(query).to_dataframe()
@@ -222,6 +241,7 @@ def load_all_papers() -> pd.DataFrame:
     log.info(f"       Loading ALL papers for community composition...")
 
     client = bigquery.Client(project=BQ_PROJECT, location="EU")
+    assignment_sql, _ = classification_assignment_sql(client, tbl_classif)
 
     query = f"""
     SELECT 
@@ -230,7 +250,8 @@ def load_all_papers() -> pd.DataFrame:
         c.meso,
         c.macro,
         m.is_frontiers,
-        m.journal
+        m.journal,
+        {assignment_sql} AS assignment_method
     FROM `{tbl_classif}` c
     JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
     """
@@ -252,6 +273,7 @@ def load_citations() -> pd.DataFrame:
     log.info(f"       Citation links: {tbl_cit_links}")
 
     client = bigquery.Client(project=BQ_PROJECT, location="EU")
+    _, leiden_filter = classification_assignment_sql(client, tbl_classif)
 
     journals_str = ", ".join(f"'{j}'" for j in JOURNALS)
 
@@ -261,6 +283,7 @@ def load_citations() -> pd.DataFrame:
         FROM `{tbl_classif}` c
         JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
         WHERE m.journal IN ({journals_str})
+          {leiden_filter}
     )
     SELECT cl.int_id1, cl.int_id2, cl.weight
     FROM `{tbl_cit_links}` cl
@@ -1907,10 +1930,20 @@ def compute_community_stats_scope(
     target_clusters = df[CLUSTER_LEVEL].unique()
 
     # Use all papers if available, otherwise just use df
-    if df_all is not None:
-        # Get total size of each cluster (all papers)
+    taxonomy_counts = None
+    if df_all is not None and "assignment_method" in df_all.columns:
+        method = df_all["assignment_method"].fillna("leiden")
+        size_frame = df_all[method.eq("leiden")]
+        taxonomy_counts = (
+            df_all[method.eq("taxonomy")].groupby(CLUSTER_LEVEL).size()
+        )
+    else:
+        size_frame = df_all
+
+    if size_frame is not None:
+        # Cluster size stays the Leiden papers. Taxonomy rows are counted beside it.
         all_comm_counts = (
-            df_all.groupby(CLUSTER_LEVEL)
+            size_frame.groupby(CLUSTER_LEVEL)
             .agg(
                 total_size=("int_id", "count"), frontiers_count=("is_frontiers", "sum")
             )
@@ -1948,8 +1981,8 @@ def compute_community_stats_scope(
         # Get TRUE dominant journal from ALL papers in cluster
         true_dominant_journal = "Unknown"
         true_dominant_pct = 0.0
-        if df_all is not None:
-            cluster_all = df_all[df_all[CLUSTER_LEVEL] == comm_id]
+        if size_frame is not None:
+            cluster_all = size_frame[size_frame[CLUSTER_LEVEL] == comm_id]
             if len(cluster_all) > 0:
                 all_journal_counts = cluster_all["journal"].value_counts()
                 true_dominant_journal = (
@@ -1995,7 +2028,10 @@ def compute_community_stats_scope(
                 "keywords": [str(k) for k in keywords],
                 "summary": summary,
                 "description": summary or long_label,
-                "size": int(total_size),  # Total cluster size
+                "size": int(total_size),  # Leiden papers only
+                "taxonomy_assigned": int(taxonomy_counts.get(comm_id, 0))
+                if taxonomy_counts is not None
+                else 0,
                 "frontiers_size": frontiers_size,  # Just our target journals
                 "frontiers_pct": frontiers_pct,
                 "true_dominant_journal": true_dominant_journal,
@@ -2823,7 +2859,7 @@ function rList(data,elId,detId,level,childLevel){
     const jt=Object.entries(c.journals||{}).slice(0,4).map(([j,p])=>
       `<span class="${jcl(j)}">${j} ${p}%</span>`).join('');
     h+=`<div class="ci" data-i="${i}" onclick="showDet('${level}',${i},'${detId}','${childLevel}')">
-      <div class="ci-h"><span class="ci-n">C${c.id} — ${c.label}</span><span class="ci-s">${c.size.toLocaleString()}</span></div>
+      <div class="ci-h"><span class="ci-n">C${c.id} — ${c.label}</span><span class="ci-s">${c.size.toLocaleString()}${c.taxonomy_assigned ? ' (+' + c.taxonomy_assigned.toLocaleString() + ' taxonomy)' : ''}</span></div>
       <div class="ci-f">${fos}</div><div class="ci-j">${jt}</div></div>`;
   });
   el.innerHTML=h;

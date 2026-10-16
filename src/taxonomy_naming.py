@@ -189,6 +189,10 @@ l2c_members = {}
 l2c_meta = {}
 l2_to_clusters = {}
 
+# Set in main() when classification_raw has assignment_method. Naming stays
+# on Leiden rows so taxonomy-assigned papers do not move cluster names.
+LEIDEN_ONLY_SQL = ""
+
 community_names = {}
 profiles = {}
 df_scope = None
@@ -252,6 +256,7 @@ def _ranked_cte(level: str) -> str:
         FROM `{TBL_CLASSIF}` c
         JOIN `{TBL_PUB_META}` m ON c.int_id = m.int_id
         WHERE c.{level} IS NOT NULL
+        {LEIDEN_ONLY_SQL}
     )"""
 
 
@@ -1758,7 +1763,7 @@ def main(timestamp: str | None = None):
             cluster_labels_{level}_{timestamp}. If omitted, uses
             taxonomy_naming.RUN_TIMESTAMP or env RUN_TIMESTAMP.
     """
-    global TBL_CLASSIF, TBL_PUB_META, RUN_TIMESTAMP
+    global TBL_CLASSIF, TBL_PUB_META, RUN_TIMESTAMP, LEIDEN_ONLY_SQL
 
     timestamp = resolve_timestamp(timestamp)
     RUN_TIMESTAMP = timestamp
@@ -1768,6 +1773,17 @@ def main(timestamp: str | None = None):
 
     TBL_CLASSIF = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.classification_raw_{timestamp}"
     TBL_PUB_META = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.pub_metadata_raw_{timestamp}"
+    LEIDEN_ONLY_SQL = ""
+    try:
+        probe = bigquery.Client(project=PROJECT_BILL, location=BQ_LOCATION)
+        fields = {field.name for field in probe.get_table(TBL_CLASSIF).schema}
+        if "assignment_method" in fields:
+            LEIDEN_ONLY_SQL = (
+                "AND (c.assignment_method IS NULL OR c.assignment_method = 'leiden')"
+            )
+            log.info("Naming uses Leiden rows only (assignment_method = leiden)")
+    except Exception:
+        log.warning("Could not read classification schema; naming will use every row")
 
     log.info("=" * 60)
     log.info("Taxonomy Naming Pipeline")

@@ -710,6 +710,17 @@ def main():
         else:
             df_edges, final_nodes = get_ego_network_edges(frontiers_pub_ids)
 
+        # Frontiers papers with no citation edge never appear as endpoints.
+        # Keep them as nodes so they get an int_id. Do not invent edges;
+        # Leiden still drops isolates when largest_component_only is true.
+        isolated = frontiers_pub_ids - final_nodes
+        if isolated:
+            log.info(
+                "Including %s Frontiers papers with no citation edges",
+                f"{len(isolated):,}",
+            )
+        final_nodes = final_nodes | frontiers_pub_ids
+
         # Step 4: Node metadata (year + journal — needed for weights)
         node_lookup = get_node_metadata(final_nodes, journal_ids)
 
