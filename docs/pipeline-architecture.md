@@ -72,6 +72,8 @@ Its market phase is deliberately independent of the export corpus:
 
 `cwts_export.py` remains Frontiers-seeded because Leiden needs a relevant citation neighbourhood for scope analysis. Counts from that ego network are never labelled or used as global market volume.
 
+A person run is a separate path. `--network-entity person` builds an author citation network, runs Leiden, and stops. It does not name clusters, build dashboards, or write the read model. See [Person network](#person-network).
+
 ---
 
 ## Step reference
@@ -190,6 +192,25 @@ python main.py --export --start-year 2020 --end-year 2026 --network-mode full
 
 # Dashboard only (the step that writes paper_scope)
 python main.py -t 20260818_090851 --skip-leiden --skip-taxonomy --skip-pdf
+
+# Author citation network, then Leiden, then stop
+python main.py --network-entity person --export --start-year 2023 --end-year 2026
+
+# Global author citation network: no journal filter, then Leiden
+python main.py --network-entity person --export --network-mode global --start-year 2020 --end-year 2026
+
+# Global author network, 2024-2026, first and last authors only
+python main.py --network-entity person --export --network-mode global --first-last-only --start-year 2024 --end-year 2026
+
+# One citation step around four authors, every paper of theirs, every author.
+python main.py --network-entity person --export --person-seed-all-years --end-year 2026 --person-seed-author-ids "34360390519,1374390108942,34360385232,94489924562" --person-citation-hops 1
+
+# One citation step around authors affiliated in Belgium, Spain, and Italy,
+# 2023-2026. First and last authors only. A sole author counts as both.
+python main.py --network-entity person --export --first-last-only --start-year 2023 --end-year 2026 --person-seed-countries "BEL,ESP,ITA" --person-citation-hops 1
+
+# Re-cluster an existing person export
+python main.py --network-entity person -t 20261016_120000
 ```
 
 ---
@@ -201,5 +222,49 @@ python main.py -t 20260818_090851 --skip-leiden --skip-taxonomy --skip-pdf
 - **Step 6 depends on step 4's files, not on BigQuery.** Skipping the dashboard while keeping the PDF will fail on a missing `scope_dashboard.html`.
 - **`subprocess_leiden.py` has a hardcoded `DATA_TIMESTAMP` fallback.** Running it directly without `RUN_TIMESTAMP` set will silently cluster whatever run that constant points at.
 - **`java -Xmx350g`** means step 2 is only viable on the large-memory host.
+- **A person Leiden run loads every author-author edge into memory.** One paper citation becomes a pair for every citing author and cited author. Leiden logs the author and edge counts before the jar starts. The person block uses macro resolution `2e-6` and a macro minimum of 5,000.
+
+---
+
+## Person network
+
+`--network-entity person` on `main.py` runs [src/person_network_export.py](../src/person_network_export.py) and then Leiden. Taxonomy naming, the dashboard, the read model, the PDF, and the opportunities scripts stay on the paper dataset and are not called.
+
+Nodes are AIRAK authors (`Author.AuthorId`). Papers are not nodes. An edge exists when a paper by author A cites a paper by author B. Both papers have to be published in `START_YEAR`–`END_YEAR`.
+
+| `NETWORK_MODE` | Who gets in |
+|---|---|
+| `journal_window` | Both papers are also in `JOURNAL_IDS`. This is the person default when `--network-mode` is omitted. |
+| `global` | No journal filter. Every citation whose two papers fall in the year window. Pass `--network-mode global`. |
+| `seed` | An induced citation neighbourhood around papers by `PERSON_SEED_AUTHOR_IDS`, expanded by `PERSON_CITATION_HOPS`. `main.py` selects this mode when `--person-seed-author-ids` is passed. `--person-seed-all-years` keeps every paper by those authors and does not apply the year window to the hops. |
+| `country` | Same hop expansion, starting from papers whose `PublicationAuthor.OrganizationId` is in a country listed by `--person-seed-countries` (ISO alpha-3, for example `BEL,USA,ESP,ITA`). Each hop adds papers cited by the current set and papers that cite it. |
+
+Authors who are not on one of those citing or cited papers are left out. Paper modes `ego` and `full` are not person networks.
+
+The edge weight is the paper export's temporal decay, `exp(-(end_year - cited_paper_year) / TEMPORAL_DECAY_TAU)`, tau 5, floored at 0.01. That decay is multiplied by the citing author's role weight and the cited author's role weight, then summed over citations. The same weight is stored in both directions. Pairs where both ends are the same `AuthorId` are dropped.
+
+| Role | Weight |
+|---|---|
+| Sole author | 1 |
+| First author (`IsFirstAuthor`, or `AuthorSequenceNumber = 1`) | 1 |
+| Last author (`IsLastAuthor`, or the highest `AuthorSequenceNumber` on that paper) | 1 |
+| Middle author | 0.25 |
+
+`PublicationAuthor` has `AuthorSequenceNumber`, `IsFirstAuthor`, and `IsLastAuthor`. Those are the order columns. There is no guessed position.
+
+Writes go only to `ocean-tech-adv-analytics-c-tfs.raw_citation_network_data_person`. Every table ends in `_person_{timestamp}`.
+
+| Table | Grain | Columns |
+|---|---|---|
+| `pubs_raw_person_{ts}` | author | `int_id`, `core_pub` |
+| `pub_metadata_raw_person_{ts}` | author | `int_id`, `author_id`, `name` |
+| `cit_links_raw_person_{ts}` | author pair | `int_id1`, `int_id2`, `weight` |
+| `classification_raw_person_{ts}` | author | `int_id`, `micro`, `meso`, `macro` |
+| `run_metadata_person_{ts}` | run | config, including `network_entity = person` |
+| `author_papers_person_{ts}` | author on a paper | `publication_id`, `author_id`, `int_id`, `role_weight` |
+
+`author_papers_person_{ts}` records which papers produced the edges. It does not assign a cluster to a paper. Join `pub_metadata_raw_person_{ts}.author_id` to `classification_raw_person_{ts}` on `int_id` to see which macro, meso, and micro an author landed in.
+
+`largest_component_only` is false for `seed` and `country` runs, so a separate component around the requested authors is kept. Other person runs keep the largest component only.
 
 Disclaimer: This page was created with AI assistance.

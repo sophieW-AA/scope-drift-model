@@ -18,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import gc
 from pathlib import Path
 
 import pandas as pd
@@ -29,16 +30,42 @@ from google.cloud import bigquery
 DATA_TIMESTAMP = "20260818_090851"  # global run 2023-2026
 
 # --- Parameters ---
-params = {
-    "largest_component_only": "true",
-    "iterations": "1000",
-    "micro_resolution": "1e-5",
-    "micro_min_cluster_size": "500",
-    "meso_resolution": "2e-6",
-    "meso_min_cluster_size": "5000",
-    "macro_resolution": "2e-7",
-    "macro_min_cluster_size": "100000",
-}
+# paper is the default. Set NETWORK_ENTITY=person to use the person block.
+# Edit the numbers in that block; they are not copied from the paper block.
+run_type = (os.environ.get("NETWORK_ENTITY") or "paper").strip().lower()
+if run_type == "person":
+    seeded_person_run = bool(
+        (os.environ.get("PERSON_SEED_AUTHOR_IDS") or "").strip()
+        or (os.environ.get("PERSON_SEED_COUNTRIES") or "").strip()
+    )
+    params = {
+        # A seeded run may contain a separate field around each seed. Retaining
+        # every component guarantees that no requested seed is discarded.
+        "largest_component_only": "false" if seeded_person_run else "true",
+        "iterations": "1000",
+        "micro_resolution": "6e-5",
+        "micro_min_cluster_size": "500",
+        "meso_resolution": "1e-5",
+        "meso_min_cluster_size": "1000",
+        # Author graph is ~21x smaller than the paper graph. 2e-7 found 2
+        # macros and the 100000 minimum left 1. 4e-6 and 5000 scale those
+        # paper macro settings so this run can land near the paper's 19 macros.
+        "macro_resolution": "2e-6",
+        "macro_min_cluster_size": "5000",
+    }
+elif run_type == "paper":
+    params = {
+        "largest_component_only": "true",
+        "iterations": "1000",
+        "micro_resolution": "1e-5",
+        "micro_min_cluster_size": "500",
+        "meso_resolution": "2e-6",
+        "meso_min_cluster_size": "5000",
+        "macro_resolution": "2e-7",
+        "macro_min_cluster_size": "100000",
+    }
+else:
+    raise SystemExit(f"NETWORK_ENTITY must be paper or person, got {run_type!r}")
 
 run_timestamp = (os.environ.get("RUN_TIMESTAMP") or "").strip() or DATA_TIMESTAMP
 
@@ -70,29 +97,40 @@ log = logging.getLogger(__name__)
 log.info("CWTS Publication Classification Run")
 log.info("=" * 50)
 log.info("Timestamp : %s", run_timestamp)
+log.info("Run type : %s", run_type)
 log.info("Parameters")
 log.info("-" * 30)
 for k, v in params.items():
     log.info("  %-26s: %s", k, v)
 
-# --- Source: BigQuery tables written by cwts_export.py ---
+# --- Source: BigQuery tables written by cwts_export.py or person_network_export.py ---
 BQ_PROJECT = os.environ.get("BQ_PROJECT", "ocean-tech-adv-analytics-c-tfs")
-BQ_DATASET = os.environ.get("BQ_DATASET", "raw_citation_network_data")
+if run_type == "person":
+    BQ_DATASET = "raw_citation_network_data_person"
+    table_mark = "_person_"
+else:
+    BQ_DATASET = os.environ.get("BQ_DATASET", "raw_citation_network_data")
+    table_mark = "_"
+pubs_table = f"pubs_raw{table_mark}{run_timestamp}"
+links_table = f"cit_links_raw{table_mark}{run_timestamp}"
+class_table = f"classification_raw{table_mark}{run_timestamp}"
 
 log.info("  BQ_PROJECT              : %s", BQ_PROJECT)
 log.info("  BQ_DATASET              : %s", BQ_DATASET)
+log.info("  PUBS_TABLE              : %s", pubs_table)
+log.info("  LINKS_TABLE             : %s", links_table)
 
 client = bigquery.Client(project=BQ_PROJECT)
 
 pubs_df = client.query(
-    f"SELECT int_id, core_pub FROM `{BQ_PROJECT}.{BQ_DATASET}.pubs_raw_{run_timestamp}` "
+    f"SELECT int_id, core_pub FROM `{BQ_PROJECT}.{BQ_DATASET}.{pubs_table}` "
     f"ORDER BY int_id"
 ).to_dataframe()
 
 log.info("pubs_df loaded successfully")
 
 cit_links_df = client.query(
-    f"SELECT int_id1, int_id2, weight FROM `{BQ_PROJECT}.{BQ_DATASET}.cit_links_raw_{run_timestamp}` "
+    f"SELECT int_id1, int_id2, weight FROM `{BQ_PROJECT}.{BQ_DATASET}.{links_table}` "
     f"ORDER BY int_id1, int_id2"
 ).to_dataframe()
 
@@ -110,6 +148,14 @@ cit_links_df.to_csv(
 )
 
 log.info("temp files created for leiden")
+
+# The Java process needs the memory used by these frames. Keeping hundreds of
+# millions of links alive in Python can otherwise force Java into the paging
+# file even after the input text has been written.
+del pubs_df
+del cit_links_df
+gc.collect()
+log.info("released BigQuery dataframes before starting leiden")
 
 jar_path = Path(__file__).resolve().parent / "publicationclassification.jar"
 if not jar_path.exists():
@@ -153,16 +199,23 @@ classification = pd.read_csv(
     header=None,
     names=["int_id", "micro", "meso", "macro"],
 )
+if len(classification) > 1 and classification["int_id"].nunique() == 1:
+    preview = Path(classification_path).read_text(encoding="utf-8")[:500]
+    log.error("Classification file does not contain publication ids:\n%s", preview)
+    raise SystemExit(
+        "Classification publication ids collapsed to one value. "
+        "The file was left in leiden_input and was not uploaded."
+    )
 
 print(f"Log written to: {LOG_DIR}")
 
 pandas_gbq.to_gbq(
     classification,
-    f"{BQ_DATASET}.classification_raw_{run_timestamp}",
+    f"{BQ_DATASET}.{class_table}",
     project_id=BQ_PROJECT,
     if_exists="replace",
 )
-print(f"  → BigQuery: {BQ_DATASET}.classification_raw_{run_timestamp}")
+print(f"  → BigQuery: {BQ_DATASET}.{class_table}")
 
 shutil.rmtree("leiden_input", ignore_errors=True)
 log.info("leiden_input files removed")

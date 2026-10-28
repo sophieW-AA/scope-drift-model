@@ -18,6 +18,9 @@ Examples:
 
   # Re-cluster an existing export, then dashboards
   python main.py -t 20260828_120000
+
+  # Re-cluster an existing author export with the person parameter block
+  python main.py --network-entity person -t 20261016_150236
 """
 
 from __future__ import annotations
@@ -59,7 +62,9 @@ def load_dotenv(path: Path) -> None:
         os.environ[key] = value.strip().strip('"').strip("'")
 
 
-def run_step(name: str, script: Path, env: dict[str, str], extra_args: list[str] | None = None) -> None:
+def run_step(
+    name: str, script: Path, env: dict[str, str], extra_args: list[str] | None = None
+) -> None:
     if not script.exists():
         raise SystemExit(f"[{name}] missing script: {script}")
     cmd = [sys.executable, str(script), *(extra_args or [])]
@@ -90,7 +95,9 @@ def parse_args() -> argparse.Namespace:
             "Required when not using --export (the usual path)."
         ),
     )
-    p.add_argument("--cluster-level", default="macro", choices=["micro", "meso", "macro"])
+    p.add_argument(
+        "--cluster-level", default="macro", choices=["micro", "meso", "macro"]
+    )
     p.add_argument(
         "--journals",
         default=",".join(DEFAULT_JOURNALS),
@@ -102,7 +109,65 @@ def parse_args() -> argparse.Namespace:
         "--network-mode",
         default="full",
         choices=["ego", "full", "global"],
-        help="Used with --export.",
+        help=(
+            "Paper export: ego, full, or global. "
+            "Person export: pass global for every citation in the year window. "
+            "Omitting it on a person run keeps the Frontiers journal window."
+        ),
+    )
+    p.add_argument(
+        "--first-last-only",
+        action="store_true",
+        help=(
+            "Person export only. Drop middle authors, so links join a first or "
+            "last author to a first or last author. A sole author counts as both."
+        ),
+    )
+    p.add_argument(
+        "--person-seed-author-ids",
+        default="",
+        help=(
+            "Comma-separated AIRAK AuthorIds. A person export becomes a seeded "
+            "citation-neighbourhood network and always keeps these authors."
+        ),
+    )
+    p.add_argument(
+        "--person-citation-hops",
+        type=int,
+        default=2,
+        choices=[1, 2, 3],
+        help=(
+            "Citation hops around the starting papers. Each hop adds papers "
+            "cited by the current set and papers that cite it."
+        ),
+    )
+    p.add_argument(
+        "--person-seed-all-years",
+        action="store_true",
+        help=(
+            "Person seed export only. Keep every paper by the seed authors, "
+            "then walk --person-citation-hops with no year cutoff. "
+            "--end-year is only the decay reference."
+        ),
+    )
+    p.add_argument(
+        "--person-seed-countries",
+        default="",
+        help=(
+            "Comma-separated ISO alpha-3 country codes, such as BEL,USA,ESP,ITA. "
+            "A person export starts from papers with an organization in those "
+            "countries, then expands by --person-citation-hops. All authors are "
+            "kept unless --first-last-only is also set."
+        ),
+    )
+    p.add_argument(
+        "--network-entity",
+        default="paper",
+        choices=["paper", "person"],
+        help=(
+            "paper uses the paper Leiden block. "
+            "person uses the person Leiden block and stops after Leiden."
+        ),
     )
 
     p.add_argument(
@@ -172,6 +237,77 @@ def base_env(args: argparse.Namespace, timestamp: str) -> dict[str, str]:
     return env
 
 
+def run_person(args: argparse.Namespace, env: dict[str, str], timestamp: str) -> None:
+    """Author network and Leiden. The person parameter block is selected here."""
+    env = env.copy()
+    if args.network_mode == "ego":
+        raise SystemExit(
+            "A person network does not support --network-mode ego. "
+            "Use --network-mode global, or omit the flag for the Frontiers journal window."
+        )
+    env["NETWORK_ENTITY"] = "person"
+    if args.person_seed_all_years and not args.person_seed_author_ids:
+        raise SystemExit(
+            "--person-seed-all-years needs --person-seed-author-ids."
+        )
+    if args.person_seed_author_ids and args.person_seed_countries:
+        raise SystemExit(
+            "Pass either --person-seed-author-ids or --person-seed-countries, not both."
+        )
+    if args.person_seed_author_ids:
+        env["NETWORK_MODE"] = "seed"
+        env["PERSON_SEED_AUTHOR_IDS"] = args.person_seed_author_ids
+        env.pop("PERSON_SEED_COUNTRIES", None)
+        env["PERSON_CITATION_HOPS"] = str(args.person_citation_hops)
+        if args.person_seed_all_years:
+            env["PERSON_SEED_ALL_YEARS"] = "1"
+        else:
+            env.pop("PERSON_SEED_ALL_YEARS", None)
+    elif args.person_seed_countries:
+        env["NETWORK_MODE"] = "country"
+        env["PERSON_SEED_COUNTRIES"] = args.person_seed_countries
+        env.pop("PERSON_SEED_AUTHOR_IDS", None)
+        env["PERSON_CITATION_HOPS"] = str(args.person_citation_hops)
+    else:
+        env["NETWORK_MODE"] = (
+            "global" if args.network_mode == "global" else "journal_window"
+        )
+    env["PERSON_AUTHOR_ROLES"] = "first_last" if args.first_last_only else "all"
+    env["START_YEAR"] = args.start_year
+    env["END_YEAR"] = args.end_year
+    env["RUN_TIMESTAMP"] = timestamp
+    env["BQ_PROJECT"] = "ocean-tech-adv-analytics-c-tfs"
+
+    print("Mode:         person network")
+    print(f"Network mode: {env['NETWORK_MODE']}")
+    print(f"Authors:      {env['PERSON_AUTHOR_ROLES']}")
+    if env["NETWORK_MODE"] == "country":
+        print(f"Countries:    {env['PERSON_SEED_COUNTRIES']}")
+        print(f"Citation hops:{env['PERSON_CITATION_HOPS']}")
+    elif env["NETWORK_MODE"] == "seed":
+        print(f"Citation hops:{env['PERSON_CITATION_HOPS']}")
+        if args.person_seed_all_years:
+            print("Years:        all papers by the seed authors, then the citation steps")
+            print(f"Decay year:   {args.end_year}")
+    if not (env["NETWORK_MODE"] == "seed" and args.person_seed_all_years):
+        print(f"Years:        {args.start_year}-{args.end_year}")
+    print(f"RUN_TIMESTAMP={timestamp}")
+    print("Dataset:      ocean-tech-adv-analytics-c-tfs.raw_citation_network_data_person")
+    print("Stops after Leiden. Taxonomy, dashboard, read model, and PDF are not run.")
+    if not args.export and args.skip_leiden:
+        raise SystemExit(
+            "Nothing to do: pass --export, or drop --skip-leiden to cluster an existing person export."
+        )
+
+    if args.export:
+        run_step("person-export", REPO / "src" / "person_network_export.py", env)
+    if not args.skip_leiden:
+        run_step("leiden", REPO / "src" / "subprocess_leiden.py", env)
+
+    print(f"\nPerson network finished for RUN_TIMESTAMP={timestamp}")
+    print(f"  Clusters: classification_raw_person_{timestamp}")
+
+
 def main() -> None:
     os.chdir(REPO)
     load_dotenv(REPO / ".env")
@@ -187,6 +323,10 @@ def main() -> None:
         )
 
     env = base_env(args, timestamp)
+    if args.network_entity == "person":
+        run_person(args, env, timestamp)
+        return
+    env["NETWORK_ENTITY"] = "paper"
     parts = []
     if args.export:
         parts.append("export")
