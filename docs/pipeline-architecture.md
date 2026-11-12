@@ -82,7 +82,7 @@ Its market phase is deliberately independent of the export corpus:
 | **2 Leiden** | on by default, `--skip-leiden` | `src/subprocess_leiden.py` + `publicationclassification.jar` | `pubs_raw_{ts}`, `cit_links_raw_{ts}` | `classification_raw_{ts}` |
 | **2b Taxonomy assignment** | `--taxonomy-enrichment` (off by default) | `src/taxonomy_assignment.py` | `classification_raw_{ts}`, `pub_metadata_raw_{ts}`, AIRAK, `fw_taxonomy` v6 | rows appended to `classification_raw_{ts}` with `assignment_method` |
 | **3 Taxonomy** | on by default, `--skip-taxonomy` | `src/taxonomy_naming.py` | Leiden rows of `classification_raw_{ts}` ⋈ `pub_metadata_raw_{ts}`, Frontiers taxonomy, OpenAI | `cluster_labels_{level}_{ts}`, `cluster_taxonomy_labels_{level}_{ts}` |
-| **4 Dashboard** | on by default, `--skip-dashboard` | `src/build_unified_dashboard.py` | `classification_raw`, `pub_metadata_raw`, `cit_links_raw`, `run_metadata`, labels, OpenAI | 6 HTML dashboards, `paper_scope_{ts}` |
+| **4 Dashboard** | on by default, `--skip-dashboard` | `src/build_unified_dashboard.py` | `classification_raw`, `pub_metadata_raw`, `cit_links_raw`, `run_metadata`, labels, OpenAI | `paper_scope_{ts}`, `journal_summary_{ts}`, `scope_*_{ts}`; HTML only with `--html` |
 | **5 GT map** | `--gt` (off by default) | `scripts/build_gt_network_map.py` | `manual_scope_check_truth.ods`, `classification_raw`, `pub_metadata_raw` | `output/gt_network_map.html` |
 | **6 PDF** | on by default, `--skip-pdf` | `src/build_scope_drift_report_pdf.py` | `scope_dashboard.html` + `drift_dashboard.html` (embedded JS constants) | `Scope_Drift_Report.pdf` |
 
@@ -160,9 +160,11 @@ The analytical heart of the pipeline. For each journal in `JOURNALS` it determin
 
 It consumes step 3's labels via `load_gpt_labels_single` / `load_gpt_labels_all`, which read `cluster_id`, `short_label`, `long_label`, `keywords` and `summary` from `taxonomy_labelling.cluster_labels_{level}_{ts}`. This is a soft dependency — missing labels fall back to `Cluster {id}` placeholders — but it is not only cosmetic: the hard-negative pass compares label tokens between in-scope and candidate communities, so unlabelled clusters weaken the scope classification itself, not just the display.
 
-Outputs six HTML files — `scope_dashboard`, `drift_dashboard`, `clusters`, `network_maps`, `paper_examples` and the `combined_dashboard` wrapper — plus the one BigQuery table the mapper depends on, `paper_scope_{ts}` (`int_id`, `journal`, `scope_code`, `is_oos`, `is_borderline`). Set `PAPER_SCOPE_TO_BQ=0` to suppress that write.
+Writes everything it computes to BigQuery (`raw_citation_network_data`, suffix `_{ts}`): `paper_scope`, `journal_summary`, `scope_journal_communities`, `scope_journal_drift_yearly`, `scope_example_papers`, `scope_communities`, `scope_community_edges`, `scope_cluster_profiles`, `scope_cluster_keywords` and `scope_run_config` (see the README table for columns). The LLM verdicts and reasons that used to live only in the local caches are in `scope_journal_communities` (borderline) and `paper_scope` (paper LLM). Set `PAPER_SCOPE_TO_BQ=0` to suppress the writes.
 
-> **Note:** `paper_scope` only covers journals passed in `JOURNALS`, because the write happens inside the per-journal loop. `main.py` defaults to eight titles.
+The six HTML files — `scope_dashboard`, `drift_dashboard`, `clusters`, `network_maps`, `paper_examples` and the `combined_dashboard` wrapper — are only built with `SCOPE_HTML_ENABLED=1` (`main.py --html`). The HTML keeps its old caps (top 100 communities, 50/100/200 cluster profiles, top 30 keywords); the BigQuery tables are uncapped.
+
+> **Note:** the journal tables only cover journals passed in `JOURNALS` / `JOURNALS_FILE`. `main.py` defaults to eight titles.
 
 ### 5. GT network map — `scripts/build_gt_network_map.py`
 

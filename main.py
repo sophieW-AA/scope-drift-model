@@ -1,7 +1,8 @@
 """
 Scope drift pipeline orchestrator.
 
-Default: Leiden + taxonomy + dashboard + read model + PDF. Pass --timestamp
+Default: Leiden + taxonomy + scope scoring to BigQuery + read model.
+HTML dashboards and the PDF are off unless --html is passed. Pass --timestamp
 to reuse an existing BigQuery export (or --export to build a new network first).
 
 Optional: --export (new CWTS network), --gt (GT map). Use --skip-leiden to
@@ -18,15 +19,20 @@ Examples:
 
   # Re-cluster an existing export, then dashboards
   python main.py -t 20260828_120000
+
+  # Quarterly update: copy the previous run, add papers through its end year,
+  # keep its community labels, and reuse its LLM verdicts.
+  python main.py -t 20260827_081311 --skip-leiden --citation-enrichment
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent
@@ -94,10 +100,23 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--journals",
         default=",".join(DEFAULT_JOURNALS),
-        help="Comma-separated journal names for dashboard / PDF steps.",
+        help="Comma-separated journal names for the scope step.",
+    )
+    p.add_argument(
+        "--journals-file",
+        default="",
+        help="Text file of journal names, one per line. Overrides --journals.",
     )
     p.add_argument("--start-year", default="2023", help="Used with --export.")
-    p.add_argument("--end-year", default="2026", help="Used with --export.")
+    p.add_argument(
+        "--end-year",
+        default="",
+        help=(
+            "Last publication year. Export defaults to 2026 when this is omitted. "
+            "Citation enrichment defaults to the source run's end year, and this "
+            "flag is how you extend that year."
+        ),
+    )
     p.add_argument(
         "--network-mode",
         default="full",
@@ -124,6 +143,24 @@ def parse_args() -> argparse.Namespace:
         help="Skip clustering; reuse existing classification_raw_{timestamp}.",
     )
     p.add_argument(
+        "--citation-enrichment",
+        action="store_true",
+        help=(
+            "Copy this run and place new Frontiers papers into the existing "
+            "communities by the papers they cite. Papers with fewer than two "
+            "in-network citations are then placed by taxonomy. Does not "
+            "re-cluster. Off unless this flag is set. Later steps use the copy."
+        ),
+    )
+    p.add_argument(
+        "--citation-dest",
+        default="",
+        help=(
+            "Run id for the citation-enrichment copy. "
+            "Default: a new timestamp. The source run is left as it is."
+        ),
+    )
+    p.add_argument(
         "--taxonomy-enrichment",
         action="store_true",
         help=(
@@ -139,12 +176,48 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--skip-taxonomy", action="store_true")
     p.add_argument("--skip-dashboard", action="store_true")
     p.add_argument(
+        "--html",
+        action="store_true",
+        help="Also write the HTML dashboards and the PDF. Off by default.",
+    )
+    p.add_argument(
         "--skip-read-model",
         action="store_true",
         help="Skip publishing leiden_output.papers, communities, and journals.",
     )
     p.add_argument("--skip-pdf", action="store_true")
     return p.parse_args()
+
+
+CACHE_DIR = Path(r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\cache")
+LLM_CACHE_PREFIXES = ("scope_llm_borderline", "scope_paper_llm")
+
+
+def carry_scope_llm_caches(source: str, dest: str) -> int:
+    """Copy borderline and paper-LLM verdicts onto the new run id.
+
+    The dashboard keys these files by run id. A copied verdict is reused only
+    when that journal's community set still matches, so a changed journal is
+    judged again and the others keep the previous call.
+    """
+    if not CACHE_DIR.exists():
+        print(f"LLM caches: no cache directory at {CACHE_DIR}")
+        return 0
+    copied = 0
+    for prefix in LLM_CACHE_PREFIXES:
+        for src in CACHE_DIR.glob(f"{prefix}_{source}_*.json"):
+            dest_path = CACHE_DIR / src.name.replace(
+                f"{prefix}_{source}_", f"{prefix}_{dest}_", 1
+            )
+            if dest_path.exists():
+                print(f"LLM cache already present: {dest_path.name}")
+                continue
+            shutil.copy2(src, dest_path)
+            copied += 1
+            print(f"LLM cache copied: {src.name} -> {dest_path.name}")
+    if copied == 0:
+        print(f"LLM caches: none found for {source}")
+    return copied
 
 
 def base_env(args: argparse.Namespace, timestamp: str) -> dict[str, str]:
@@ -157,7 +230,10 @@ def base_env(args: argparse.Namespace, timestamp: str) -> dict[str, str]:
 
     env["RUN_TIMESTAMP"] = timestamp
     env["CLUSTER_LEVEL"] = args.cluster_level
-    if args.journals:
+    if args.journals_file:
+        env["JOURNALS_FILE"] = args.journals_file
+        env.pop("JOURNALS", None)
+    elif args.journals:
         env["JOURNALS"] = args.journals
 
     # Unified dashboard scope defaults (match run_pipeline.ipynb Step 3)
@@ -169,6 +245,8 @@ def base_env(args: argparse.Namespace, timestamp: str) -> dict[str, str]:
     env.setdefault("SCOPE_PAPER_LLM_ENABLED", "1")
     env.setdefault("SCOPE_PAPER_LLM_MODEL", "gpt-4o-mini")
     env.setdefault("LAYOUT_SEED", "42")
+    if args.html:
+        env["SCOPE_HTML_ENABLED"] = "1"
     return env
 
 
@@ -186,21 +264,61 @@ def main() -> None:
             "Or pass --export to create a new run (optionally with -t)."
         )
 
+    citation_dest = ""
+    if args.citation_enrichment:
+        citation_dest = (args.citation_dest or "").strip()
+        if not citation_dest:
+            citation_dest = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if citation_dest == timestamp:
+                citation_dest = (
+                    datetime.strptime(timestamp, "%Y%m%d_%H%M%S") + timedelta(seconds=1)
+                ).strftime("%Y%m%d_%H%M%S")
+        if not citation_dest or citation_dest == timestamp:
+            raise SystemExit(
+                "--citation-dest must be a different run id from --timestamp. "
+                f"Both are {timestamp}."
+            )
+
     env = base_env(args, timestamp)
     parts = []
     if args.export:
         parts.append("export")
     if not args.skip_leiden:
         parts.append("leiden")
+    if args.citation_enrichment:
+        parts.append("citation-enrichment")
+        if not args.skip_taxonomy_enrichment:
+            parts.append("taxonomy-few-citations")
+    elif args.taxonomy_enrichment and not args.skip_taxonomy_enrichment:
+        parts.append("taxonomy-enrichment")
     print(f"Mode:         {' + '.join(parts) + ' + ' if parts else ''}pipeline")
     print(f"RUN_TIMESTAMP={timestamp}")
     print(f"CLUSTER_LEVEL={args.cluster_level}")
-    print(f"JOURNALS={env.get('JOURNALS', '')}")
+    if args.citation_enrichment:
+        through = args.end_year or "the source run's end year"
+        print(
+            f"Citation enrichment: {timestamp} -> {citation_dest} "
+            f"(papers through {through}; source run stays as it is)"
+        )
+        print("Taxonomy naming: skipped so the copied community labels stay")
+        if not args.skip_taxonomy_enrichment:
+            print(
+                "Taxonomy fallback: papers with fewer than 2 in-network citations"
+            )
+    else:
+        print(
+            "Citation enrichment: off "
+            "(pass --citation-enrichment to add papers by what they cite)"
+        )
+    if args.journals_file:
+        print(f"JOURNALS_FILE={args.journals_file}")
+    else:
+        print(f"JOURNALS={env.get('JOURNALS', '')}")
 
     if args.export:
         export_env = env.copy()
         export_env["START_YEAR"] = args.start_year
-        export_env["END_YEAR"] = args.end_year
+        export_env["END_YEAR"] = args.end_year or "2026"
         export_env["NETWORK_MODE"] = args.network_mode
         export_env["RUN_TIMESTAMP"] = timestamp
         run_step("export", REPO / "src" / "cwts_export.py", export_env)
@@ -208,7 +326,48 @@ def main() -> None:
     if not args.skip_leiden:
         run_step("leiden", REPO / "src" / "subprocess_leiden.py", env)
 
-    if args.taxonomy_enrichment and not args.skip_taxonomy_enrichment:
+    if args.citation_enrichment:
+        citation_args = [
+            "--timestamp",
+            timestamp,
+            "--dest",
+            citation_dest,
+            "--write",
+        ]
+        if args.end_year:
+            citation_args.extend(["--through-year", str(args.end_year)])
+        run_step(
+            "citation-enrichment",
+            REPO / "src" / "citation_assignment.py",
+            env,
+            extra_args=citation_args,
+        )
+        print(
+            f"\nCitation enrichment kept {timestamp} unchanged. "
+            f"Later steps use {citation_dest}.\n",
+            flush=True,
+        )
+        carry_scope_llm_caches(timestamp, citation_dest)
+        timestamp = citation_dest
+        env = base_env(args, timestamp)
+        if not args.skip_taxonomy_enrichment:
+            run_step(
+                "taxonomy-few-citations",
+                REPO / "src" / "taxonomy_assignment.py",
+                env,
+                extra_args=[
+                    "--timestamp",
+                    timestamp,
+                    "--few-citations",
+                    "--write",
+                ],
+            )
+
+    if (
+        args.taxonomy_enrichment
+        and not args.citation_enrichment
+        and not args.skip_taxonomy_enrichment
+    ):
         run_step(
             "taxonomy-enrichment",
             REPO / "src" / "taxonomy_assignment.py",
@@ -216,7 +375,7 @@ def main() -> None:
             extra_args=["--timestamp", timestamp, "--write"],
         )
 
-    if not args.skip_taxonomy:
+    if not args.skip_taxonomy and not args.citation_enrichment:
         run_step(
             "taxonomy",
             REPO / "src" / "taxonomy_naming.py",
@@ -235,18 +394,27 @@ def main() -> None:
             extra_args=["--timestamp", timestamp],
         )
 
-    if args.gt:
+    if args.gt and args.html:
         run_step("gt_map", REPO / "scripts" / "build_gt_network_map.py", env)
 
-    if not args.skip_pdf:
+    if args.html and not args.skip_pdf:
         run_step("pdf", REPO / "src" / "build_scope_drift_report_pdf.py", env)
 
     out = Path(r"C:\Users\sophie.wilson\Documents\scope_drift_outputs\dashboards")
     print(f"\nPipeline finished for RUN_TIMESTAMP={timestamp}")
-    print(f"  Dashboards: {out / 'combined_dashboard.html'}")
-    if args.gt:
+    print(
+        "  BigQuery (raw_citation_network_data, "
+        f"suffix _{timestamp}): paper_scope, journal_summary, "
+        "scope_journal_communities, scope_journal_drift_yearly, "
+        "scope_example_papers, scope_communities, scope_community_edges, "
+        "scope_cluster_profiles, scope_cluster_keywords, scope_run_config. "
+        "Scope tables hold macro and meso; filter on cluster_level."
+    )
+    if args.html:
+        print(f"  Dashboards: {out / 'combined_dashboard.html'}")
+    if args.gt and args.html:
         print("  GT map:     (see scripts/build_gt_network_map.py OUT_HTML)")
-    if not args.skip_pdf:
+    if args.html and not args.skip_pdf:
         print(f"  PDF:        {out / 'Scope_Drift_Report.pdf'}")
     if not args.skip_read_model:
         read_dataset = os.environ.get("BQ_READ_DATASET", "leiden_output")

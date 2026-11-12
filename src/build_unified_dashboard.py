@@ -1,17 +1,27 @@
 """
 build_unified_dashboard.py
 ==========================
-Generates all dashboards from BigQuery data and combines them.
+Scores journal scope from BigQuery and writes the scope tables.
 
 Reads from BigQuery tables:
     - {BQ_DATASET}.classification_raw_{RUN_TIMESTAMP}
     - {BQ_DATASET}.pub_metadata_raw_{RUN_TIMESTAMP}
     - {BQ_DATASET}.cit_links_raw_{RUN_TIMESTAMP}
 
-Output:
-    - output/combined_dashboard.html
-    - {BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}
-    - {BQ_DATASET}.journal_summary_{RUN_TIMESTAMP}
+Output (all in {BQ_DATASET}, suffixed _{RUN_TIMESTAMP}):
+    - paper_scope                  one row per journal paper: scope flags, override
+                                   source/reason, paper-LLM verdict, map x/y
+    - journal_summary              one row per journal: OOS, primary/borderline ids,
+                                   LLM/rule run stats, primary shift, latest drift
+    - scope_journal_communities    journal × community: share, role, LLM verdict/reason
+    - scope_journal_drift_yearly   journal × year: JSD, new-community %, entropy delta
+    - scope_example_papers         sampled in-scope / OOS titles per journal and level
+    - scope_communities            community composition at macro and meso + map centre
+    - scope_community_edges        citation weight between communities (map edges)
+    - scope_cluster_profiles       macro/meso/micro profiles (journals, years, examples)
+    - scope_cluster_keywords       paper-weighted keyword distribution per level
+    - scope_run_config             one row per cluster level: run settings and network totals
+    - HTML dashboards only when SCOPE_HTML_ENABLED=1
 
 Usage:
     python scripts/build_unified_dashboard.py
@@ -38,6 +48,9 @@ Environment variables (optional):
     SCOPE_DISTANCE_FACTOR : multiply primary radius for distance threshold (default: 1.25)
     SCOPE_DISTANCE_PERCENTILE : percentile of primary-paper radii used for threshold (default: 95)
     LAYOUT_SEED : seed for Fruchterman-Reingold + paper jitter (default: 42)
+    SCOPE_HTML_ENABLED : 1/0 — write HTML dashboards (default: 0). Scoring and the
+        BigQuery writes always run.
+    PAPER_SCOPE_TO_BQ : 1/0 — write the BigQuery tables above (default: 1)
 """
 
 import json
@@ -70,6 +83,8 @@ BQ_PROJECT = os.environ.get("BQ_PROJECT", "ocean-tech-adv-analytics-c-tfs")
 BQ_DATASET = os.environ.get("BQ_DATASET", "raw_citation_network_data")
 RUN_TIMESTAMP = os.environ.get("RUN_TIMESTAMP", "")
 CLUSTER_LEVEL = os.environ.get("CLUSTER_LEVEL", "macro")
+# Every dashboard run stores both so a query can pick one with cluster_level.
+SCOPE_STORE_LEVELS = ("macro", "meso")
 
 PRIMARY_COVERAGE = float(os.environ.get("PRIMARY_COVERAGE", "0.8"))
 BASELINE_YEARS = [2018, 2019, 2020]
@@ -101,6 +116,7 @@ def _env_flag(name: str, default: str = "1") -> bool:
     )
 
 
+SCOPE_HTML_ENABLED = _env_flag("SCOPE_HTML_ENABLED", "0")
 SCOPE_HARD_NEGATIVES_ENABLED = _env_flag("SCOPE_HARD_NEGATIVES_ENABLED", "1")
 SCOPE_HARD_NEGATIVES_PATH = os.environ.get(
     "SCOPE_HARD_NEGATIVES_PATH", "config/journal_hard_negatives.json"
@@ -133,7 +149,8 @@ SCOPE_DISTANCE_FACTOR = float(os.environ.get("SCOPE_DISTANCE_FACTOR", "1.25"))
 SCOPE_DISTANCE_PERCENTILE = float(os.environ.get("SCOPE_DISTANCE_PERCENTILE", "95"))
 LAYOUT_SEED = int(os.environ.get("LAYOUT_SEED", "42"))
 
-# Default journals (can be overridden via JOURNALS env var, comma-separated)
+# Default journals. JOURNALS_FILE (one name per line) wins over JOURNALS
+# (comma-separated). A file is required when a name itself contains a comma.
 _DEFAULT_JOURNALS = [
     "Frontiers in Immunology",
     "Frontiers in Public Health",
@@ -141,12 +158,33 @@ _DEFAULT_JOURNALS = [
     "Frontiers in Oncology",
     "Frontiers in Psychology",
 ]
-_JOURNALS_OVERRIDE = os.environ.get("JOURNALS", "").strip()
-JOURNALS = (
-    [j.strip() for j in _JOURNALS_OVERRIDE.split(",") if j.strip()]
-    if _JOURNALS_OVERRIDE
-    else _DEFAULT_JOURNALS
-)
+
+
+def _load_journals() -> list[str]:
+    path = os.environ.get("JOURNALS_FILE", "").strip()
+    if path:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+        names = [line.strip() for line in lines if line.strip()]
+        if not names:
+            raise SystemExit(f"JOURNALS_FILE is empty: {path}")
+        return names
+    override = os.environ.get("JOURNALS", "").strip()
+    if override:
+        return [name.strip() for name in override.split(",") if name.strip()]
+    return list(_DEFAULT_JOURNALS)
+
+
+def _journal_query_config():
+    from google.cloud import bigquery
+
+    return bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ArrayQueryParameter("journals", "STRING", JOURNALS)
+        ]
+    )
+
+
+JOURNALS = _load_journals()
 
 # Windows consoles / redirected pipes default to cp1252, which cannot encode the
 # arrows and box characters used in log messages.
@@ -167,21 +205,35 @@ GPT_LABELS_ALL = {"macro": {}, "meso": {}, "micro": {}}
 # ══════════════════════════════════════════════════════════════════════════════
 # BIGQUERY DATA LOADING
 # ══════════════════════════════════════════════════════════════════════════════
-def classification_assignment_sql(client, table: str, alias: str = "c") -> tuple[str, str]:
-    """Return (assignment_method select, Leiden-only filter).
+def classification_assignment_sql(
+    client, table: str, alias: str = "c", level: str | None = None
+) -> tuple[str, str, str]:
+    """Return (assignment_method select, Leiden-only filter, placed filter).
 
     Tables written before taxonomy assignment have no assignment_method column.
+    The placed filter keeps Leiden rows, citation-vote rows, and taxonomy rows
+    that received a community at `level`. Unassigned taxonomy rows stay out.
     """
     names = {field.name for field in client.get_table(table).schema}
     if "assignment_method" not in names:
-        return "'leiden'", ""
+        return "'leiden'", "", ""
     select_expr = (
         f"COALESCE(NULLIF(CAST({alias}.assignment_method AS STRING), ''), 'leiden')"
     )
     leiden_filter = (
         f"AND ({alias}.assignment_method IS NULL OR {alias}.assignment_method = 'leiden')"
     )
-    return select_expr, leiden_filter
+    taxonomy_clause = ""
+    if level in {"micro", "meso", "macro"}:
+        taxonomy_clause = (
+            f" OR ({alias}.assignment_method = 'taxonomy' AND {alias}.{level} IS NOT NULL)"
+        )
+    placed_filter = (
+        f"AND ({alias}.assignment_method IS NULL "
+        f"OR {alias}.assignment_method IN ('leiden', 'citation')"
+        f"{taxonomy_clause})"
+    )
+    return select_expr, leiden_filter, placed_filter
 
 
 def load_merged_data() -> pd.DataFrame:
@@ -198,10 +250,10 @@ def load_merged_data() -> pd.DataFrame:
     log.info(f"       Classification: {tbl_classif}")
     log.info(f"       Pub metadata: {tbl_pub_meta}")
 
-    journals_str = ", ".join(f"'{j}'" for j in JOURNALS)
-
     client = bigquery.Client(project=BQ_PROJECT, location="EU")
-    _, leiden_filter = classification_assignment_sql(client, tbl_classif)
+    _, _, placed_filter = classification_assignment_sql(
+        client, tbl_classif, level=CLUSTER_LEVEL
+    )
 
     query = f"""
     SELECT 
@@ -216,11 +268,11 @@ def load_merged_data() -> pd.DataFrame:
         m.title
     FROM `{tbl_classif}` c
     JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
-    WHERE m.journal IN ({journals_str})
-      {leiden_filter}
+    WHERE m.journal IN UNNEST(@journals)
+      {placed_filter}
     """
 
-    df = client.query(query).to_dataframe()
+    df = client.query(query, job_config=_journal_query_config()).to_dataframe()
     log.info(f"       Loaded {len(df):,} rows from BigQuery")
 
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -232,73 +284,151 @@ def load_merged_data() -> pd.DataFrame:
 
 
 def load_all_papers() -> pd.DataFrame:
-    """Load ALL papers (including external) from BigQuery for community composition."""
+    """Cluster size and dominant journal for communities the target journals touch.
+
+    The classification table is tens of millions of rows. Community stats only
+    need each cluster's size and its largest journal, so this aggregates in
+    BigQuery instead of downloading every paper.
+    """
     from google.cloud import bigquery
 
     tbl_classif = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_{RUN_TIMESTAMP}"
     tbl_pub_meta = f"{BQ_PROJECT}.{BQ_DATASET}.pub_metadata_raw_{RUN_TIMESTAMP}"
+    level = CLUSTER_LEVEL
 
-    log.info(f"       Loading ALL papers for community composition...")
+    log.info("       Aggregating community composition in BigQuery...")
 
     client = bigquery.Client(project=BQ_PROJECT, location="EU")
-    assignment_sql, _ = classification_assignment_sql(client, tbl_classif)
+    _, _, placed_filter = classification_assignment_sql(
+        client, tbl_classif, level=CLUSTER_LEVEL
+    )
+
+    totals = client.query(
+        f"""
+        SELECT
+          COUNT(*) AS n_papers,
+          SUM(CAST(m.is_frontiers AS INT64)) AS n_frontiers
+        FROM `{tbl_classif}` c
+        JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
+        """
+    ).to_dataframe()
 
     query = f"""
-    SELECT 
-        c.int_id,
-        c.micro,
-        c.meso,
-        c.macro,
-        m.is_frontiers,
-        m.journal,
-        {assignment_sql} AS assignment_method
-    FROM `{tbl_classif}` c
-    JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
+    WITH journal_clusters AS (
+      SELECT DISTINCT c.{level} AS community_id
+      FROM `{tbl_classif}` c
+      JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
+      WHERE m.journal IN UNNEST(@journals)
+        {placed_filter}
+    ),
+    sized AS (
+      SELECT
+        c.{level} AS community_id,
+        COUNT(*) AS total_size,
+        SUM(CAST(m.is_frontiers AS INT64)) AS frontiers_count
+      FROM `{tbl_classif}` c
+      JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
+      JOIN journal_clusters jc ON c.{level} = jc.community_id
+      GROUP BY c.{level}
+    ),
+    ranked AS (
+      SELECT
+        c.{level} AS community_id,
+        m.journal AS dominant_journal,
+        COUNT(*) AS dominant_n,
+        ROW_NUMBER() OVER (
+          PARTITION BY c.{level}
+          ORDER BY COUNT(*) DESC, m.journal
+        ) AS rn
+      FROM `{tbl_classif}` c
+      JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
+      JOIN journal_clusters jc ON c.{level} = jc.community_id
+      GROUP BY c.{level}, m.journal
+    )
+    SELECT
+      s.community_id AS {level},
+      s.total_size,
+      s.frontiers_count,
+      r.dominant_journal,
+      r.dominant_n
+    FROM sized s
+    JOIN ranked r
+      ON s.community_id = r.community_id
+     AND r.rn = 1
     """
 
-    df = client.query(query).to_dataframe()
-    log.info(f"       Loaded {len(df):,} total papers (Frontiers + external)")
-
+    df = client.query(query, job_config=_journal_query_config()).to_dataframe()
+    n_papers = int(totals["n_papers"].iloc[0]) if not totals.empty else 0
+    n_frontiers = int(totals["n_frontiers"].iloc[0] or 0) if not totals.empty else 0
+    df.attrs["n_papers"] = n_papers
+    df.attrs["n_frontiers"] = n_frontiers
+    log.info(
+        f"       Aggregated {len(df):,} {level} communities "
+        f"from {n_papers:,} papers"
+    )
     return df
 
 
-def load_citations() -> pd.DataFrame:
-    """Load citation links from BigQuery, filtered to relevant papers only."""
+def load_community_edges() -> tuple[pd.DataFrame, int]:
+    """Citation weight between CLUSTER_LEVEL communities, among target-journal papers.
+
+    The layout only needs community-to-community weights, so the paper-level
+    links are aggregated in BigQuery. Returns (edges, n_paper_edges) where edges
+    has src_cluster, tgt_cluster, total_weight, n_links.
+    """
     from google.cloud import bigquery
 
     tbl_cit_links = f"{BQ_PROJECT}.{BQ_DATASET}.cit_links_raw_{RUN_TIMESTAMP}"
     tbl_classif = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_{RUN_TIMESTAMP}"
     tbl_pub_meta = f"{BQ_PROJECT}.{BQ_DATASET}.pub_metadata_raw_{RUN_TIMESTAMP}"
+    level = CLUSTER_LEVEL
 
     log.info(f"       Citation links: {tbl_cit_links}")
 
     client = bigquery.Client(project=BQ_PROJECT, location="EU")
-    _, leiden_filter = classification_assignment_sql(client, tbl_classif)
-
-    journals_str = ", ".join(f"'{j}'" for j in JOURNALS)
+    _, _, placed_filter = classification_assignment_sql(
+        client, tbl_classif, level=CLUSTER_LEVEL
+    )
 
     query = f"""
     WITH journal_papers AS (
-        SELECT c.int_id
+        SELECT c.int_id, ANY_VALUE(c.{level}) AS community_id
         FROM `{tbl_classif}` c
         JOIN `{tbl_pub_meta}` m ON c.int_id = m.int_id
-        WHERE m.journal IN ({journals_str})
-          {leiden_filter}
+        WHERE m.journal IN UNNEST(@journals)
+          {placed_filter}
+        GROUP BY c.int_id
+    ),
+    links AS (
+        SELECT s.community_id AS src_cluster, t.community_id AS tgt_cluster, cl.weight
+        FROM `{tbl_cit_links}` cl
+        JOIN journal_papers s ON cl.int_id1 = s.int_id
+        JOIN journal_papers t ON cl.int_id2 = t.int_id
     )
-    SELECT cl.int_id1, cl.int_id2, cl.weight
-    FROM `{tbl_cit_links}` cl
-    WHERE cl.int_id1 IN (SELECT int_id FROM journal_papers)
-      AND cl.int_id2 IN (SELECT int_id FROM journal_papers)
+    SELECT
+        src_cluster,
+        tgt_cluster,
+        SUM(weight) AS total_weight,
+        COUNT(*) AS n_links
+    FROM links
+    GROUP BY src_cluster, tgt_cluster
     """
 
     try:
-        df = client.query(query).to_dataframe()
-        log.info(f"       Loaded {len(df):,} citation edges")
+        df = client.query(query, job_config=_journal_query_config()).to_dataframe()
     except Exception as e:
         log.warning(f"       Citation query failed: {e}")
-        df = pd.DataFrame(columns=["int_id1", "int_id2", "weight"])
+        return (
+            pd.DataFrame(columns=["src_cluster", "tgt_cluster", "total_weight", "n_links"]),
+            0,
+        )
 
-    return df
+    n_paper_edges = int(df["n_links"].sum()) if not df.empty else 0
+    df = df[df["src_cluster"] != df["tgt_cluster"]].reset_index(drop=True)
+    log.info(
+        f"       {n_paper_edges:,} citation links → {len(df):,} community pairs"
+    )
+    return df, n_paper_edges
 
 
 def load_run_metadata() -> dict:
@@ -411,11 +541,15 @@ def _circular_layout(n: int) -> np.ndarray:
     return np.column_stack([np.cos(angles), np.sin(angles)])
 
 
-def compute_scatter_positions(df: pd.DataFrame, df_cit: pd.DataFrame) -> dict:
+def compute_scatter_positions(
+    df: pd.DataFrame, df_edges: pd.DataFrame
+) -> tuple[dict, dict]:
     """Compute x,y positions for papers using citation-based force-directed layout.
 
+    df_edges is the community-pair aggregate from load_community_edges.
     Community order and Fruchterman-Reingold are seeded so distance-rescue
     (and thus OOS %) is stable across regenerations of the same run.
+    Returns (paper positions by int_id, community centres by community id).
     """
     import random
 
@@ -426,25 +560,11 @@ def compute_scatter_positions(df: pd.DataFrame, df_cit: pd.DataFrame) -> dict:
     n_comm = len(communities)
     cluster_to_idx = {c: i for i, c in enumerate(communities)}
 
-    paper_to_cluster = df.set_index("int_id")[CLUSTER_LEVEL].to_dict()
-    valid_ids = set(paper_to_cluster.keys())
-
-    df_cit_filtered = df_cit[
-        df_cit["int_id1"].isin(valid_ids) & df_cit["int_id2"].isin(valid_ids)
-    ].copy()
-
-    df_cit_filtered["src_cluster"] = df_cit_filtered["int_id1"].map(paper_to_cluster)
-    df_cit_filtered["tgt_cluster"] = df_cit_filtered["int_id2"].map(paper_to_cluster)
-    df_cit_filtered = df_cit_filtered[
-        df_cit_filtered["src_cluster"] != df_cit_filtered["tgt_cluster"]
-    ]
-
-    df_edges = (
-        df_cit_filtered.groupby(["src_cluster", "tgt_cluster"])
-        .agg(total_weight=("weight", "sum"))
-        .reset_index()
-        .sort_values(["src_cluster", "tgt_cluster"])
-    )
+    df_edges = df_edges[
+        df_edges["src_cluster"].isin(cluster_to_idx)
+        & df_edges["tgt_cluster"].isin(cluster_to_idx)
+        & (df_edges["src_cluster"] != df_edges["tgt_cluster"])
+    ].sort_values(["src_cluster", "tgt_cluster"])
 
     g = ig.Graph(n=n_comm)
     edges = []
@@ -482,18 +602,22 @@ def compute_scatter_positions(df: pd.DataFrame, df_cit: pd.DataFrame) -> dict:
         c: (float(coords[i, 0]), float(coords[i, 1])) for c, i in cluster_to_idx.items()
     }
 
-    positions = {}
-    # Deterministic paper iteration + jitter
+    # Deterministic paper order + jitter (one x, y draw per paper, in int_id order)
     np.random.seed(LAYOUT_SEED)
     jdf_sorted = df.sort_values("int_id")
-    for _, row in jdf_sorted.iterrows():
-        cx, cy = comm_positions.get(row[CLUSTER_LEVEL], (0.5, 0.5))
-        jitter = 0.06
-        x = cx + np.random.uniform(-jitter, jitter)
-        y = cy + np.random.uniform(-jitter, jitter)
-        positions[row["int_id"]] = (float(x), float(y))
+    jitter = 0.06
+    draws = np.random.uniform(-jitter, jitter, size=(len(jdf_sorted), 2))
+    centres = np.array(
+        [comm_positions.get(c, (0.5, 0.5)) for c in jdf_sorted[CLUSTER_LEVEL]],
+        dtype=float,
+    ).reshape(-1, 2)
+    xy = centres + draws
+    positions = {
+        iid: (float(x), float(y))
+        for iid, x, y in zip(jdf_sorted["int_id"].to_numpy(), xy[:, 0], xy[:, 1])
+    }
 
-    return positions
+    return positions, comm_positions
 
 
 def compute_primary_clusters(df: pd.DataFrame, journal: str) -> set:
@@ -806,6 +930,7 @@ def sample_example_papers(
         comm_id = int(row[CLUSTER_LEVEL])
         example_papers.append(
             {
+                "int_id": int(row["int_id"]),
                 "title": str(row["title"] or "Untitled"),
                 "year": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
                 "is_in_scope": True,
@@ -823,6 +948,7 @@ def sample_example_papers(
         tokens = {t for t in re.split(r"\W+", lab) if len(t) >= 4}
         example_papers.append(
             {
+                "int_id": int(row["int_id"]),
                 "title": title,
                 "year": int(row["pub_year"]) if pd.notna(row["pub_year"]) else None,
                 "is_in_scope": False,
@@ -1136,6 +1262,7 @@ def compute_llm_borderline_clusters(
     ]
     if not candidates_for_llm:
         candidates_for_llm = candidates[:15]
+    meta["candidate_ids"] = [c["comm_id"] for c in candidates_for_llm]
 
     primary_payload = []
     for comm in sorted(primary_clusters, key=lambda x: int(x)):
@@ -1297,15 +1424,18 @@ def apply_hard_negatives(journal: str, jdf: pd.DataFrame) -> tuple[pd.Series, di
     unless_re = [re.compile(p) for p in unless_pats]
 
     examples = []
+    matched: dict[int, str] = {}
     for idx, row in jdf.iterrows():
         title = str(row.get("title") or "")
         if not title:
             continue
-        if not any(r.search(title) for r in force_re):
+        hit = next((r for r in force_re if r.search(title)), None)
+        if hit is None:
             continue
         if unless_re and any(r.search(title) for r in unless_re):
             continue
         mask.at[idx] = True
+        matched[int(row["int_id"])] = hit.pattern
         if len(examples) < 8:
             examples.append(
                 {
@@ -1317,6 +1447,7 @@ def apply_hard_negatives(journal: str, jdf: pd.DataFrame) -> tuple[pd.Series, di
 
     meta["n_flagged"] = int(mask.sum())
     meta["examples"] = examples
+    meta["matched_patterns"] = matched
     if meta["n_flagged"]:
         log.info(
             "       %s: hard-negatives flagged %s paper(s)",
@@ -1588,6 +1719,7 @@ def compute_paper_scope_overrides(
     meta["decisions"] = [
         d for d in decisions_out if d.get("verdict") == "out_of_scope"
     ][:40]
+    meta["all_decisions"] = decisions_out
 
     cache[journal] = journal_cache
     try:
@@ -1608,74 +1740,199 @@ def compute_paper_scope_overrides(
     return demotions, meta
 
 
-def write_paper_scope_to_bq(
-    scope: pd.DataFrame,
-    journal_summary: pd.DataFrame | None = None,
-) -> None:
-    """Persist per-paper scope flags and the journal summary for the read model.
+def _ids_csv(ids) -> str:
+    return ",".join(str(int(c)) for c in sorted(ids, key=int))
 
-    Written to `{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}` and
-    `{BQ_DATASET}.journal_summary_{RUN_TIMESTAMP}`. The opportunity mapper
-    reads the paper table instead of `output/network_maps.html`. Set
-    PAPER_SCOPE_TO_BQ=0 to skip both writes.
+
+def _bq_ready(frame: pd.DataFrame) -> pd.DataFrame:
+    """Give nullable object columns a concrete dtype so BigQuery types them as
+    BOOL / INT64 / FLOAT64 instead of failing or falling back to STRING."""
+    frame = frame.copy()
+    for col in frame.columns:
+        if frame[col].dtype != object:
+            continue
+        vals = frame[col].dropna()
+        if vals.empty:
+            frame[col] = frame[col].astype("string")
+        elif vals.map(lambda v: isinstance(v, (bool, np.bool_))).all():
+            frame[col] = frame[col].astype("boolean")
+        elif vals.map(
+            lambda v: isinstance(v, (int, np.integer)) and not isinstance(v, bool)
+        ).all():
+            frame[col] = frame[col].astype("Int64")
+        elif vals.map(lambda v: isinstance(v, (int, float, np.number))).all():
+            frame[col] = frame[col].astype("float64")
+    return frame
+
+
+def _bq_column_type(series: pd.Series) -> str:
+    if pd.api.types.is_bool_dtype(series):
+        return "BOOL"
+    if pd.api.types.is_integer_dtype(series):
+        return "INT64"
+    if pd.api.types.is_float_dtype(series):
+        return "FLOAT64"
+    return "STRING"
+
+
+def _scope_levels(frame: pd.DataFrame) -> list[str]:
+    allowed = {"macro", "meso", "micro"}
+    levels = []
+    for value in frame["cluster_level"].dropna().unique():
+        level = str(value)
+        if level not in allowed:
+            raise ValueError(f"unexpected cluster_level {level}")
+        if level not in levels:
+            levels.append(level)
+    return levels
+
+
+def write_scope_tables_to_bq(tables: dict[str, pd.DataFrame]) -> list[str]:
+    """Add each frame to `{BQ_DATASET}.{name}_{RUN_TIMESTAMP}`.
+
+    Rows for the cluster levels in the frame are replaced. Rows for other
+    levels on that timestamp stay. A missing table is created. Nested values
+    (lists, dicts) must already be JSON strings or CSV id lists.
+    Set PAPER_SCOPE_TO_BQ=0 to skip all writes. Returns the tables written.
     """
     if os.environ.get("PAPER_SCOPE_TO_BQ", "1").strip() in ("0", "false", "False", "no"):
-        return
+        return []
     if not RUN_TIMESTAMP:
-        log.warning("paper scope not written to BigQuery: RUN_TIMESTAMP is unset")
-        return
+        log.warning("scope tables not written to BigQuery: RUN_TIMESTAMP is unset")
+        return []
+    if not re.fullmatch(r"\d{8}_\d{6}", RUN_TIMESTAMP):
+        log.warning("scope tables not written: RUN_TIMESTAMP is not YYYYMMDD_HHMMSS")
+        return []
     try:
         import pandas_gbq
+        from google.api_core.exceptions import NotFound
     except Exception as exc:
-        log.warning("paper scope BigQuery write failed: %s", exc)
-        return
+        log.warning("scope BigQuery write failed: %s", exc)
+        return []
 
-    if scope is not None and not scope.empty:
+    client = bigquery.Client(project=BQ_PROJECT)
+    written = []
+    for name, frame in tables.items():
+        if frame is None or frame.empty:
+            log.info("  → BigQuery: %s skipped (no rows)", name)
+            continue
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            log.warning("  → BigQuery: skipped unsafe table name %s", name)
+            continue
+        if "cluster_level" not in frame.columns:
+            log.warning(
+                "  → BigQuery: %s skipped (no cluster_level, so the table was left intact)",
+                name,
+            )
+            continue
+        ready = _bq_ready(frame)
+        levels = _scope_levels(ready)
+        if not levels:
+            log.info("  → BigQuery: %s skipped (no cluster_level values)", name)
+            continue
+        dest_name = f"{name}_{RUN_TIMESTAMP}"
+        dest = f"{BQ_PROJECT}.{BQ_DATASET}.{dest_name}"
+        stage_name = f"_scope_stage_{name}_{RUN_TIMESTAMP}"
+        stage = f"{BQ_PROJECT}.{BQ_DATASET}.{stage_name}"
         try:
-            dest = f"{BQ_DATASET}.paper_scope_{RUN_TIMESTAMP}"
+            try:
+                table = client.get_table(dest)
+                exists = True
+            except NotFound:
+                table = None
+                exists = False
+            if not exists:
+                pandas_gbq.to_gbq(
+                    ready,
+                    f"{BQ_DATASET}.{dest_name}",
+                    project_id=BQ_PROJECT,
+                    if_exists="fail",
+                    location="EU",
+                )
+                written.append(f"{BQ_DATASET}.{dest_name}")
+                log.info(
+                    "  → BigQuery: %s created (%s rows, %s)",
+                    dest,
+                    f"{len(ready):,}",
+                    ",".join(levels),
+                )
+                continue
+
+            existing = {field.name for field in table.schema}
+            alters = []
+            if "cluster_level" not in existing:
+                alters.append("ADD COLUMN IF NOT EXISTS cluster_level STRING")
+            for column in ready.columns:
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", column):
+                    raise ValueError(f"unsafe column name {column}")
+                if column not in existing and column != "cluster_level":
+                    alters.append(
+                        f"ADD COLUMN IF NOT EXISTS {column} {_bq_column_type(ready[column])}"
+                    )
+            if alters:
+                client.query(
+                    f"ALTER TABLE `{dest}` " + ", ".join(alters),
+                    location="EU",
+                ).result()
+            if "macro" in levels:
+                client.query(
+                    f"UPDATE `{dest}` SET cluster_level = 'macro' "
+                    "WHERE cluster_level IS NULL",
+                    location="EU",
+                ).result()
+
             pandas_gbq.to_gbq(
-                scope,
-                dest,
+                ready,
+                f"{BQ_DATASET}.{stage_name}",
                 project_id=BQ_PROJECT,
                 if_exists="replace",
                 location="EU",
             )
+            quoted = ", ".join(f"'{level}'" for level in levels)
+            columns = ", ".join(ready.columns)
+            client.query(
+                f"""
+                BEGIN TRANSACTION;
+                DELETE FROM `{dest}`
+                WHERE CAST(cluster_level AS STRING) IN ({quoted});
+                INSERT INTO `{dest}` ({columns})
+                SELECT {columns} FROM `{stage}`;
+                COMMIT TRANSACTION;
+                """,
+                location="EU",
+            ).result()
+            written.append(f"{BQ_DATASET}.{dest_name}")
             log.info(
-                "  → BigQuery: %s.%s (%s papers, %s journals)",
-                BQ_PROJECT,
+                "  → BigQuery: %s added %s rows at %s (other levels kept)",
                 dest,
-                f"{len(scope):,}",
-                scope["journal"].nunique(),
+                f"{len(ready):,}",
+                ",".join(levels),
             )
         except Exception as exc:
-            log.warning("paper scope BigQuery write failed: %s", exc)
-
-    if journal_summary is None or journal_summary.empty:
-        return
-    try:
-        dest_summary = f"{BQ_DATASET}.journal_summary_{RUN_TIMESTAMP}"
-        pandas_gbq.to_gbq(
-            journal_summary,
-            dest_summary,
-            project_id=BQ_PROJECT,
-            if_exists="replace",
-            location="EU",
-        )
-        log.info(
-            "  → BigQuery: %s.%s (%s journals)",
-            BQ_PROJECT,
-            dest_summary,
-            f"{len(journal_summary):,}",
-        )
-    except Exception as exc:
-        log.warning("journal summary BigQuery write failed: %s", exc)
+            log.warning("%s BigQuery write failed: %s", dest, exc)
+        finally:
+            try:
+                client.query(
+                    f"DROP TABLE IF EXISTS `{stage}`", location="EU"
+                ).result()
+            except Exception as exc:
+                log.warning("could not drop staging table %s: %s", stage, exc)
+    return written
 
 
-def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
-    """Compute statistics for each journal."""
+def compute_journal_stats(
+    df: pd.DataFrame, positions: dict
+) -> tuple[list, dict[str, pd.DataFrame]]:
+    """Score each journal.
+
+    Returns (journals_data for the HTML, BigQuery frames: paper_scope,
+    journal_summary, scope_journal_communities, scope_example_papers).
+    """
     journals_data = []
     scope_rows = []
     summary_rows = []
+    community_rows = []
+    example_rows = []
     years = sorted(df["pub_year"].unique())
 
     for journal in JOURNALS:
@@ -1716,6 +1973,7 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
 
         # Title hard-negatives: force OOS even inside primary/borderline communities
         hn_mask, hn_meta = apply_hard_negatives(journal, jdf)
+        hn_patterns = hn_meta.pop("matched_patterns", {})
         if hn_mask.any():
             jdf.loc[hn_mask, "is_oos"] = True
             jdf.loc[hn_mask, "is_borderline"] = False
@@ -1725,6 +1983,9 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
         paper_demotions, paper_meta = compute_paper_scope_overrides(
             journal, jdf, primary_clusters, already_oos_mask=jdf["is_oos"]
         )
+        paper_llm_all = {
+            int(d["int_id"]): d for d in paper_meta.pop("all_decisions", [])
+        }
         if paper_demotions:
             demote_ids = set(paper_demotions.keys())
             demote_mask = jdf["int_id"].isin(demote_ids)
@@ -1750,13 +2011,32 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                 "community_id": entry.get("community_id"),
             }
 
+        ids = jdf["int_id"].astype(int).to_numpy()
+        override_source = np.where(
+            jdf["hard_negative"].to_numpy(),
+            "hard_negative",
+            np.where(jdf["paper_demoted"].to_numpy(), "paper_llm", None),
+        )
+        override_reason = [
+            (
+                f"hard_negative title rule: {hn_patterns.get(int(i), '')}"
+                if src == "hard_negative"
+                else (paper_llm_all.get(int(i), {}).get("reason") if src else None)
+            )
+            for i, src in zip(ids, override_source)
+        ]
+        xy = [positions.get(i) for i in jdf["int_id"]]
         scope_rows.append(
             pd.DataFrame(
                 {
-                    "int_id": jdf["int_id"].astype(int).to_numpy(),
+                    "int_id": ids,
                     "journal": journal,
+                    "pub_year": jdf["pub_year"].astype(int).to_numpy(),
                     "community_id": jdf[CLUSTER_LEVEL].astype(int).to_numpy(),
                     "cluster_level": CLUSTER_LEVEL,
+                    "is_primary_community": jdf[CLUSTER_LEVEL]
+                    .isin(primary_clusters)
+                    .to_numpy(),
                     "scope_code": np.where(
                         jdf["is_oos"].to_numpy(),
                         0,
@@ -1765,7 +2045,18 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                     "is_oos": jdf["is_oos"].astype(bool).to_numpy(),
                     "is_borderline": jdf["is_borderline"].astype(bool).to_numpy(),
                     "hard_negative": jdf["hard_negative"].astype(bool).to_numpy(),
+                    "hard_negative_pattern": [hn_patterns.get(int(i)) for i in ids],
                     "paper_demoted": jdf["paper_demoted"].astype(bool).to_numpy(),
+                    "override_source": override_source,
+                    "override_reason": override_reason,
+                    "paper_llm_verdict": [
+                        paper_llm_all.get(int(i), {}).get("verdict") for i in ids
+                    ],
+                    "paper_llm_reason": [
+                        paper_llm_all.get(int(i), {}).get("reason") for i in ids
+                    ],
+                    "layout_x": [p[0] if p else None for p in xy],
+                    "layout_y": [p[1] if p else None for p in xy],
                 }
             )
         )
@@ -1823,8 +2114,58 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                 }
             )
 
+        llm_by_comm = {
+            int(d["comm_id"]): d
+            for d in border_meta.get("decisions") or []
+            if isinstance(d, dict) and d.get("comm_id") is not None
+        }
+        llm_candidates = {int(c) for c in border_meta.get("candidate_ids") or []}
+        risky_ids = {int(c) for c in paper_meta.get("risky_primary_ids") or []}
+        comm_flags = jdf.groupby(CLUSTER_LEVEL).agg(
+            n_oos=("is_oos", "sum"),
+            n_borderline=("is_borderline", "sum"),
+            n_hard_negative=("hard_negative", "sum"),
+            n_paper_demoted=("paper_demoted", "sum"),
+        )
+        for rank, (comm, count) in enumerate(comm_counts.items(), start=1):
+            cid = int(comm)
+            decision = llm_by_comm.get(cid) or {}
+            flags = comm_flags.loc[comm]
+            if comm in primary_clusters:
+                role = "primary"
+            elif comm in borderline_clusters:
+                role = "borderline"
+            else:
+                role = "out_of_scope"
+            community_rows.append(
+                {
+                    "journal": journal,
+                    "community_id": cid,
+                    "cluster_level": CLUSTER_LEVEL,
+                    "community_label": GPT_LABELS.get(cid, f"Cluster {cid}"),
+                    "rank_in_journal": rank,
+                    "papers_in_journal": int(count),
+                    "share_of_journal_pct": round(count / n_articles * 100, 2),
+                    "community_role": role,
+                    "is_primary": comm in primary_clusters,
+                    "is_borderline": comm in borderline_clusters,
+                    "is_in_scope": comm in soft_in_scope,
+                    "is_risky_primary": cid in risky_ids,
+                    "sent_to_borderline_llm": cid in llm_candidates,
+                    "borderline_source": (
+                        border_meta.get("source") if cid in llm_candidates else None
+                    ),
+                    "borderline_verdict": decision.get("verdict"),
+                    "borderline_reason": decision.get("reason"),
+                    "n_oos_papers": int(flags["n_oos"]),
+                    "n_borderline_papers": int(flags["n_borderline"]),
+                    "n_hard_negative_papers": int(flags["n_hard_negative"]),
+                    "n_paper_demoted": int(flags["n_paper_demoted"]),
+                }
+            )
+
         scatter = []
-        for _, row in jdf.iterrows():
+        for _, row in (jdf.iterrows() if SCOPE_HTML_ENABLED else ()):
             if row["int_id"] in positions:
                 x, y = positions[row["int_id"]]
                 # s: 2=primary-ish in-scope, 1=borderline, 0=oos (after demotions)
@@ -1871,8 +2212,77 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
                 "primary_community_ids": ",".join(str(c) for c in primary_ids),
                 "borderline_community_ids": ",".join(str(c) for c in borderline_ids),
                 "oos_by_year": json.dumps(oos_by_year),
+                "n_communities": int(len(comm_counts)),
+                "n_primary_clusters": len(primary_clusters),
+                "n_borderline_clusters": len(borderline_clusters),
+                "in_scope_community_ids": _ids_csv(soft_in_scope),
+                "borderline_enabled": bool(border_meta.get("enabled")),
+                "borderline_source": border_meta.get("source"),
+                "borderline_model": border_meta.get("model"),
+                "borderline_prompt_version": border_meta.get("prompt_version"),
+                "borderline_cached": bool(border_meta.get("cached")),
+                "borderline_error": border_meta.get("error"),
+                "borderline_candidate_ids": _ids_csv(
+                    border_meta.get("candidate_ids") or []
+                ),
+                "hard_negatives_enabled": bool(hn_meta.get("enabled")),
+                "paper_llm_enabled": bool(paper_meta.get("enabled")),
+                "paper_llm_model": paper_meta.get("model"),
+                "paper_llm_risky_primary_ids": _ids_csv(
+                    paper_meta.get("risky_primary_ids") or []
+                ),
+                "paper_llm_n_candidates": int(paper_meta.get("n_candidates") or 0),
+                "paper_llm_n_scored": int(paper_meta.get("n_scored") or 0),
+                "paper_llm_n_cached": int(paper_meta.get("n_cached") or 0),
+                "paper_llm_n_demoted": int(paper_meta.get("n_demoted") or 0),
+                "paper_llm_error": paper_meta.get("error"),
+                "distance_meta": json.dumps(dist_meta, default=str),
+                "primary_shift_baseline_year": primary_shift.get("baseline_year"),
+                "primary_shift_latest_year": primary_shift.get("latest_year"),
+                "primary_shift_changed": primary_shift.get("changed"),
+                "primary_shift_insufficient_data": bool(
+                    primary_shift.get("insufficient_data", False)
+                ),
+                "primary_shift_baseline_ids": _ids_csv(
+                    primary_shift.get("baseline_primary_ids") or []
+                ),
+                "primary_shift_latest_ids": _ids_csv(
+                    primary_shift.get("latest_primary_ids") or []
+                ),
+                "primary_shift_gained_labels": json.dumps(
+                    primary_shift.get("gained_labels") or []
+                ),
+                "primary_shift_lost_labels": json.dumps(
+                    primary_shift.get("lost_labels") or []
+                ),
+                "primary_shift_baseline_top": json.dumps(
+                    primary_shift.get("baseline_top") or []
+                ),
+                "primary_shift_latest_top": json.dumps(
+                    primary_shift.get("latest_top") or []
+                ),
             }
         )
+        for sample_rank, ex in enumerate(example_papers, start=1):
+            example_rows.append(
+                {
+                    "journal": journal,
+                    "cluster_level": CLUSTER_LEVEL,
+                    "sample_type": "in_scope" if ex["is_in_scope"] else "out_of_scope",
+                    "sample_rank": sample_rank,
+                    "int_id": ex["int_id"],
+                    "title": ex["title"],
+                    "pub_year": ex["year"],
+                    "community_id": ex["community_id"],
+                    "community_label": ex["community_label"],
+                    "is_borderline": bool(ex.get("is_borderline")),
+                    "hard_negative": bool(ex.get("hard_negative")),
+                    "paper_demoted": bool(ex.get("paper_demoted")),
+                    "clear_oos": bool(ex.get("clear_oos")),
+                    "title_on_scope": ex.get("title_on_scope"),
+                    "foreign_community": ex.get("foreign_community"),
+                }
+            )
         journals_data.append(
             {
                 "name": journal,
@@ -1905,33 +2315,48 @@ def compute_journal_stats(df: pd.DataFrame, positions: dict) -> list:
             }
         )
 
-    scope_df = (
-        pd.concat(scope_rows, ignore_index=True) if scope_rows else pd.DataFrame()
-    )
-    summary_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame()
-    if not scope_df.empty or not summary_df.empty:
-        write_paper_scope_to_bq(scope_df, summary_df)
-
-    return journals_data
+    tables = {
+        "paper_scope": (
+            pd.concat(scope_rows, ignore_index=True) if scope_rows else pd.DataFrame()
+        ),
+        "journal_summary": pd.DataFrame(summary_rows),
+        "scope_journal_communities": pd.DataFrame(community_rows),
+        "scope_example_papers": pd.DataFrame(example_rows),
+    }
+    return journals_data, tables
 
 
 def compute_community_stats_scope(
-    df: pd.DataFrame, df_all: pd.DataFrame = None
+    df: pd.DataFrame,
+    df_all: pd.DataFrame = None,
+    limit: int | None = 100,
+    comm_positions: dict | None = None,
 ) -> list:
     """Compute statistics for each community (scope dashboard version).
 
     Args:
         df: DataFrame with only target Frontiers journals
         df_all: DataFrame with ALL papers (including external) for true cluster sizes
+        limit: keep the largest N communities (None = all)
+        comm_positions: community map centres from compute_scatter_positions
     """
     communities = []
 
     # Get clusters that have papers from our target journals
     target_clusters = df[CLUSTER_LEVEL].unique()
 
-    # Use all papers if available, otherwise just use df
+    # Use all papers if available, otherwise just use df.
+    # load_all_papers returns one row per community (size + dominant journal).
     taxonomy_counts = None
-    if df_all is not None and "assignment_method" in df_all.columns:
+    aggregated = (
+        df_all is not None
+        and not df_all.empty
+        and "dominant_journal" in df_all.columns
+    )
+    size_frame = None
+    if aggregated:
+        all_comm_counts = df_all
+    elif df_all is not None and "assignment_method" in df_all.columns:
         method = df_all["assignment_method"].fillna("leiden")
         size_frame = df_all[method.eq("leiden")]
         taxonomy_counts = (
@@ -1952,6 +2377,10 @@ def compute_community_stats_scope(
         all_comm_counts = all_comm_counts[
             all_comm_counts[CLUSTER_LEVEL].isin(target_clusters)
         ]
+    elif aggregated:
+        all_comm_counts = all_comm_counts[
+            all_comm_counts[CLUSTER_LEVEL].isin(target_clusters)
+        ]
     else:
         all_comm_counts = None
 
@@ -1960,7 +2389,13 @@ def compute_community_stats_scope(
         df.groupby(CLUSTER_LEVEL).agg(size=("int_id", "count")).reset_index()
     )
 
-    for _, row in frontiers_comm_counts.nlargest(100, "size").iterrows():
+    ranked = (
+        frontiers_comm_counts.nlargest(limit, "size")
+        if limit
+        else frontiers_comm_counts.sort_values("size", ascending=False)
+    )
+    comm_positions = comm_positions or {}
+    for _, row in ranked.iterrows():
         comm_id = row[CLUSTER_LEVEL]
         cdf = df[df[CLUSTER_LEVEL] == comm_id]
         frontiers_size = int(row["size"])
@@ -1981,7 +2416,16 @@ def compute_community_stats_scope(
         # Get TRUE dominant journal from ALL papers in cluster
         true_dominant_journal = "Unknown"
         true_dominant_pct = 0.0
-        if size_frame is not None:
+        if aggregated:
+            cluster_row = all_comm_counts[all_comm_counts[CLUSTER_LEVEL] == comm_id]
+            if not cluster_row.empty and total_size:
+                true_dominant_journal = (
+                    str(cluster_row["dominant_journal"].iloc[0] or "Unknown")
+                )
+                true_dominant_pct = round(
+                    float(cluster_row["dominant_n"].iloc[0]) / total_size * 100, 1
+                )
+        elif size_frame is not None:
             cluster_all = size_frame[size_frame[CLUSTER_LEVEL] == comm_id]
             if len(cluster_all) > 0:
                 all_journal_counts = cluster_all["journal"].value_counts()
@@ -2039,12 +2483,14 @@ def compute_community_stats_scope(
                 "top_frontiers_journal": top_frontiers_journal,
                 "top_frontiers_pct": top_frontiers_pct,
                 "top_journals": top_journals,
+                "n_target_journals": int(cdf["journal"].nunique()),
+                "layout": comm_positions.get(comm_id),
             }
         )
 
     # Sort by total size descending
     communities.sort(key=lambda x: x["size"], reverse=True)
-    return communities[:100]
+    return communities[:limit] if limit else communities
 
 
 SCOPE_HTML_TEMPLATE = """<!DOCTYPE html>
@@ -2190,28 +2636,15 @@ __RENDER_SCRIPT__
 
 def build_scope_dashboard(
     df: pd.DataFrame,
-    df_cit: pd.DataFrame,
+    journals: list,
+    communities: list,
     run_metadata: dict = None,
-    df_all: pd.DataFrame = None,
 ) -> dict:
-    """Build scope_dashboard.html. Returns scope data for Network Maps / Paper Examples."""
+    """Build scope_dashboard.html from scored journals and community stats.
+    Returns scope data for Network Maps / Paper Examples."""
     log.info("=" * 60)
     log.info("Building Scope Dashboard")
     log.info("=" * 60)
-
-    log.info("[1/4] Computing scatter positions …")
-    positions = compute_scatter_positions(df, df_cit)
-    log.info(f"       Positioned {len(positions):,} papers")
-
-    log.info("[2/4] Computing journal statistics …")
-    journals = compute_journal_stats(df, positions)
-    for j in journals:
-        log.info(
-            f"       {j['name']}: {j['articles']:,} papers, {j['out_of_scope_pct']:.1f}% OOS"
-        )
-
-    log.info("[3/4] Computing community statistics …")
-    communities = compute_community_stats_scope(df, df_all)
 
     years = sorted(df["pub_year"].unique())
     data = {
@@ -2226,7 +2659,7 @@ def build_scope_dashboard(
         "communities": communities,
     }
 
-    log.info("[4/4] Writing HTML …")
+    log.info("Writing HTML …")
     if RENDER_SCRIPT_PATH.exists():
         render_script = RENDER_SCRIPT_PATH.read_text(encoding="utf-8")
     else:
@@ -2414,14 +2847,17 @@ def compute_community_stats_drift(df: pd.DataFrame) -> list:
     return communities
 
 
-def build_drift_dashboard(df: pd.DataFrame, run_metadata: dict = None) -> None:
+def build_drift_dashboard(
+    df: pd.DataFrame, run_metadata: dict = None, metrics: dict | None = None
+) -> None:
     """Build drift_dashboard.html"""
     log.info("=" * 60)
     log.info("Building Drift Dashboard")
     log.info("=" * 60)
 
     log.info("[1/3] Computing drift metrics …")
-    metrics = compute_drift_metrics(df)
+    if metrics is None:
+        metrics = compute_drift_metrics(df)
 
     log.info("[2/3] Computing community statistics …")
     communities = compute_community_stats_drift(df)
@@ -2597,16 +3033,21 @@ Plotly.newPlot('entropy',eT,{{
 # ══════════════════════════════════════════════════════════════════════════════
 # CLUSTERS DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
-def build_cluster_profiles(df: pd.DataFrame) -> dict:
-    """Build cluster profiles for each level."""
+def build_cluster_profiles(df: pd.DataFrame, limits: dict | None = MAX_COMMUNITIES) -> dict:
+    """Build cluster profiles for each level, largest first.
+
+    limits caps clusters per level (None = every cluster).
+    """
     profiles = {"macro": [], "meso": [], "micro": []}
 
     for level in ["macro", "meso", "micro"]:
         cluster_counts = df.groupby(level).size().sort_values(ascending=False)
-        max_clusters = MAX_COMMUNITIES[level]
+        if limits:
+            cluster_counts = cluster_counts.head(limits[level])
+        groups = {k: g for k, g in df.groupby(level)}
 
-        for cluster_id in cluster_counts.head(max_clusters).index:
-            cdf = df[df[level] == cluster_id]
+        for cluster_id in cluster_counts.index:
+            cdf = groups[cluster_id]
             size = len(cdf)
 
             journal_counts = cdf["journal"].value_counts()
@@ -2676,8 +3117,8 @@ def build_cluster_profiles(df: pd.DataFrame) -> dict:
     return profiles
 
 
-def build_fos_global(df: pd.DataFrame) -> dict:
-    """Build global field of study distribution from labels."""
+def build_fos_global(df: pd.DataFrame, top_n: int | None = 30) -> dict:
+    """Build global field of study distribution from labels (top_n=None keeps all)."""
     fos_global = {"macro": {}, "meso": {}, "micro": {}}
 
     for level in ["macro", "meso", "micro"]:
@@ -2690,7 +3131,7 @@ def build_fos_global(df: pd.DataFrame) -> dict:
             for kw in keywords[:3]:
                 keyword_counts[kw] += size
 
-        fos_global[level] = dict(keyword_counts.most_common(30))
+        fos_global[level] = dict(keyword_counts.most_common(top_n))
 
     return fos_global
 
@@ -3011,19 +3452,31 @@ setTimeout(()=>{showDet('macro',0,'ma-det','meso')},100);
 </html>"""
 
 
-def build_clusters_dashboard(df: pd.DataFrame, n_edges: int) -> None:
-    """Build clusters.html"""
+def build_clusters_dashboard(
+    df: pd.DataFrame,
+    n_edges: int,
+    profiles: dict | None = None,
+    fos_global: dict | None = None,
+) -> None:
+    """Build clusters.html. Precomputed (uncapped) profiles / fos are trimmed to
+    the dashboard caps."""
     log.info("=" * 60)
     log.info("Building Clusters Dashboard")
     log.info("=" * 60)
 
     log.info("[1/3] Building cluster profiles …")
-    profiles = build_cluster_profiles(df)
+    if profiles is None:
+        profiles = build_cluster_profiles(df)
+    else:
+        profiles = {lv: p[: MAX_COMMUNITIES[lv]] for lv, p in profiles.items()}
     for level in ["macro", "meso", "micro"]:
         log.info(f"       {level}: {len(profiles[level])} clusters")
 
     log.info("[2/3] Building keyword distributions …")
-    fos_global = build_fos_global(df)
+    if fos_global is None:
+        fos_global = build_fos_global(df)
+    else:
+        fos_global = {lv: dict(list(kw.items())[:30]) for lv, kw in fos_global.items()}
 
     years = sorted(df["pub_year"].unique())
     year_range = f"{min(years)}–{max(years)}" if years else ""
@@ -4043,10 +4496,171 @@ def combine_dashboards() -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# BIGQUERY TABLES (non-journal)
+# ══════════════════════════════════════════════════════════════════════════════
+def build_run_tables(
+    df: pd.DataFrame,
+    communities: list,
+    df_edges: pd.DataFrame,
+    drift: dict,
+    profiles: dict,
+    fos_global: dict,
+    journal_summary: pd.DataFrame,
+    run_info: dict,
+) -> dict[str, pd.DataFrame]:
+    """Frames for community, drift, cluster-profile, keyword and run-config tables.
+    Also adds the latest-year drift columns to journal_summary."""
+    comm_rows = []
+    for c in communities:
+        layout = c.get("layout")
+        comm_rows.append(
+            {
+                "community_id": c["id"],
+                "cluster_level": CLUSTER_LEVEL,
+                "label": c["label"],
+                "long_label": c["long_label"],
+                "keywords": json.dumps(c["keywords"]),
+                "summary": c["summary"],
+                "total_size": c["size"],
+                "taxonomy_assigned": c["taxonomy_assigned"],
+                "frontiers_size": c["frontiers_size"],
+                "frontiers_pct": c["frontiers_pct"],
+                "true_dominant_journal": c["true_dominant_journal"],
+                "true_dominant_pct": c["true_dominant_pct"],
+                "top_frontiers_journal": c["top_frontiers_journal"],
+                "top_frontiers_pct": c["top_frontiers_pct"],
+                "top_journals": json.dumps(c["top_journals"]),
+                "n_target_journals": c["n_target_journals"],
+                "layout_x": layout[0] if layout else None,
+                "layout_y": layout[1] if layout else None,
+            }
+        )
+
+    edges = df_edges.rename(
+        columns={"src_cluster": "src_community_id", "tgt_cluster": "tgt_community_id"}
+    ).copy()
+    edges.insert(2, "cluster_level", CLUSTER_LEVEL)
+
+    drift_rows = []
+    baseline = ",".join(str(y) for y in drift["baseline_years"])
+    for journal, t in drift["jsd_trends"].items():
+        for i, year in enumerate(t["years"]):
+            drift_rows.append(
+                {
+                    "journal": journal,
+                    "pub_year": year,
+                    "cluster_level": CLUSTER_LEVEL,
+                    "baseline_years": baseline,
+                    "articles": t["articles"][i],
+                    "jsd": t["jsd"][i],
+                    "new_community_pct": t["new_comm"][i],
+                    "entropy_delta": t["entropy_delta"][i],
+                }
+            )
+
+    drift_latest = pd.DataFrame(
+        [
+            {
+                "journal": s["Journal"],
+                "drift_baseline_years": baseline,
+                "drift_latest_year": s["Year"],
+                "drift_jsd": s["JSD"],
+                "drift_new_community_frac": s["NewCommunityFrac"],
+                "drift_top5_jaccard": s["Top5Jaccard"],
+                "drift_entropy": s["Entropy"],
+                "drift_entropy_delta": s["EntropyDelta"],
+                "drift_article_count": s["ArticleCount"],
+                "drift_rank": rank,
+            }
+            for rank, s in enumerate(drift["summary"], start=1)
+        ]
+    )
+    if not journal_summary.empty and not drift_latest.empty:
+        journal_summary = journal_summary.merge(drift_latest, on="journal", how="left")
+
+    profile_rows = []
+    for level, items in profiles.items():
+        for rank, p in enumerate(items, start=1):
+            profile_rows.append(
+                {
+                    "cluster_level": level,
+                    "cluster_id": p["id"],
+                    "size_rank": rank,
+                    "label": p["label"],
+                    "size": p["size"],
+                    "dominant_journal": p["dominant"],
+                    "dominant_pct": p["dominant_pct"],
+                    "journal_share_pct": json.dumps(p["journals"]),
+                    "papers_by_year": json.dumps(
+                        {str(k): v for k, v in p["years"].items()}
+                    ),
+                    "keywords_top": json.dumps(p["fos"]),
+                    "keywords_specific": json.dumps(p["fos_specific"]),
+                    "example_papers": json.dumps(p["examples"]),
+                    "parent_macro": p.get("parent_macro"),
+                    "parent_meso": p.get("parent_meso"),
+                }
+            )
+
+    keyword_rows = [
+        {
+            "cluster_level": level,
+            "keyword": kw,
+            "weighted_papers": int(n),
+            "keyword_rank": rank,
+        }
+        for level, counts in fos_global.items()
+        for rank, (kw, n) in enumerate(counts.items(), start=1)
+    ]
+
+    years = sorted(int(y) for y in df["pub_year"].unique())
+    run_config = pd.DataFrame(
+        [
+            {
+                "run_timestamp": RUN_TIMESTAMP,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "cluster_level": CLUSTER_LEVEL,
+                "n_journals": int(df["journal"].nunique()),
+                "n_journal_papers": int(len(df)),
+                "year_min": years[0] if years else None,
+                "year_max": years[-1] if years else None,
+                "primary_coverage": PRIMARY_COVERAGE,
+                "baseline_years": baseline,
+                "min_papers_per_year": MIN_PAPERS_PER_YEAR,
+                "borderline_llm_enabled": SCOPE_LLM_BORDERLINE_ENABLED,
+                "borderline_llm_model": SCOPE_LLM_BORDERLINE_MODEL,
+                "borderline_prompt_version": BORDERLINE_PROMPT_VERSION,
+                "hard_negatives_enabled": SCOPE_HARD_NEGATIVES_ENABLED,
+                "hard_negatives_config": json.dumps(load_hard_negative_config()),
+                "paper_llm_enabled": SCOPE_PAPER_LLM_ENABLED,
+                "paper_llm_model": SCOPE_PAPER_LLM_MODEL,
+                "paper_llm_max_per_journal": SCOPE_PAPER_LLM_MAX_PER_JOURNAL,
+                "distance_enabled": SCOPE_DISTANCE_ENABLED,
+                "distance_mode": SCOPE_DISTANCE_MODE,
+                "distance_factor": SCOPE_DISTANCE_FACTOR,
+                "distance_percentile": SCOPE_DISTANCE_PERCENTILE,
+                "layout_seed": LAYOUT_SEED,
+                **run_info,
+            }
+        ]
+    )
+
+    return {
+        "journal_summary": journal_summary,
+        "scope_journal_drift_yearly": pd.DataFrame(drift_rows),
+        "scope_communities": pd.DataFrame(comm_rows),
+        "scope_community_edges": edges,
+        "scope_cluster_profiles": pd.DataFrame(profile_rows),
+        "scope_cluster_keywords": pd.DataFrame(keyword_rows),
+        "scope_run_config": run_config,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 def main():
-    global GPT_LABELS, GPT_LABELS_ALL
+    global GPT_LABELS, GPT_LABELS_ALL, CLUSTER_LEVEL
 
     log.info("=" * 60)
     log.info("Unified Dashboard Builder (BigQuery)")
@@ -4057,8 +4671,10 @@ def main():
         log.error("Example: RUN_TIMESTAMP=20260714_151745")
         return
 
+    html_level = CLUSTER_LEVEL if CLUSTER_LEVEL in SCOPE_STORE_LEVELS else "macro"
     log.info(f"RUN_TIMESTAMP: {RUN_TIMESTAMP}")
-    log.info(f"Cluster level: {CLUSTER_LEVEL}")
+    log.info("Scope levels stored: %s", ", ".join(SCOPE_STORE_LEVELS))
+    log.info(f"HTML level: {html_level}")
     log.info(f"Primary coverage: {PRIMARY_COVERAGE}")
     log.info(
         f"LLM borderline: enabled={SCOPE_LLM_BORDERLINE_ENABLED} "
@@ -4078,49 +4694,131 @@ def main():
         f"percentile={SCOPE_DISTANCE_PERCENTILE}"
     )
     log.info(f"Layout seed: {LAYOUT_SEED}")
-    log.info(f"Output dir: {OUTPUT_DIR}")
+    log.info(f"HTML dashboards: {SCOPE_HTML_ENABLED}")
+    if SCOPE_HTML_ENABLED:
+        log.info(f"Output dir: {OUTPUT_DIR}")
 
-    # Load data from BigQuery
-    log.info("\n[LOAD] Loading data from BigQuery …")
-    df = load_merged_data()
-    log.info(f"       {len(df):,} papers")
-    log.info(f"       Journals: {df['journal'].nunique()}")
-    log.info(f"       Years: {df['pub_year'].min()}–{df['pub_year'].max()}")
-
-    log.info("\n[LOAD] Loading ALL papers for community composition …")
-    df_all = load_all_papers()
-    log.info(f"       {len(df_all):,} total papers in network")
-    log.info(
-        f"       {df_all['is_frontiers'].sum():,} Frontiers papers ({df_all['is_frontiers'].mean()*100:.1f}%)"
-    )
-
-    log.info("\n[LOAD] Loading citations from BigQuery …")
-    df_cit = load_citations()
-
-    # Load run metadata
-    run_metadata = load_run_metadata()
-
-    # Load GPT labels (from local files)
     log.info("\n[LOAD] Loading GPT labels …")
-    GPT_LABELS = load_gpt_labels_single(CLUSTER_LEVEL)
-    log.info(f"       {len(GPT_LABELS)} labels for {CLUSTER_LEVEL} level")
     GPT_LABELS_ALL = load_gpt_labels_all()
+    run_metadata = load_run_metadata()
+    profile_frames = []
+    html_bundle = None
 
-    # Build all dashboards
-    print()
-    scope_data = build_scope_dashboard(df, df_cit, run_metadata, df_all)
-    print()
-    build_network_maps_dashboard(scope_data)
-    print()
-    build_paper_examples_dashboard(scope_data.get("journals", []))
-    print()
-    build_drift_dashboard(df, run_metadata)
-    print()
-    build_clusters_dashboard(df, len(df_cit))
+    for level in SCOPE_STORE_LEVELS:
+        CLUSTER_LEVEL = level
+        log.info("\n%s", "=" * 60)
+        log.info("Scoring %s", level)
+        log.info("%s", "=" * 60)
 
-    # Combine dashboards
-    print()
-    combine_dashboards()
+        log.info("\n[LOAD] Loading data from BigQuery …")
+        df = load_merged_data()
+        log.info(f"       {len(df):,} papers")
+        log.info(f"       Journals: {df['journal'].nunique()}")
+        log.info(f"       Years: {df['pub_year'].min()}–{df['pub_year'].max()}")
+        profile_frames.append(df)
+
+        GPT_LABELS = load_gpt_labels_single(level)
+        log.info(f"       {len(GPT_LABELS)} labels for {level}")
+
+        log.info("\n[LOAD] Loading ALL papers for community composition …")
+        df_all = load_all_papers()
+        n_papers = int(df_all.attrs.get("n_papers", 0))
+        n_frontiers = int(df_all.attrs.get("n_frontiers", 0))
+        frontiers_pct = (n_frontiers / n_papers * 100) if n_papers else 0
+        log.info(f"       {n_papers:,} total papers in network")
+        log.info(f"       {n_frontiers:,} Frontiers papers ({frontiers_pct:.1f}%)")
+
+        log.info("\n[LOAD] Aggregating citations between communities …")
+        df_edges, n_paper_edges = load_community_edges()
+
+        log.info("\n[1/4] Computing map layout …")
+        positions, comm_positions = compute_scatter_positions(df, df_edges)
+        log.info(f"       Positioned {len(positions):,} papers")
+
+        log.info("[2/4] Scoring journals …")
+        journals, tables = compute_journal_stats(df, positions)
+        for journal in journals:
+            log.info(
+                "       %s: %s papers, %.1f%% OOS",
+                journal["name"],
+                f"{journal['articles']:,}",
+                journal["out_of_scope_pct"],
+            )
+
+        log.info("[3/4] Computing community statistics …")
+        communities = compute_community_stats_scope(
+            df, df_all, limit=None, comm_positions=comm_positions
+        )
+
+        log.info("[4/4] Computing drift metrics …")
+        drift = compute_drift_metrics(df)
+
+        tables.update(
+            build_run_tables(
+                df,
+                communities,
+                df_edges,
+                drift,
+                {"macro": [], "meso": [], "micro": []},
+                {"macro": {}, "meso": {}, "micro": {}},
+                tables["journal_summary"],
+                {
+                    "n_network_papers": n_papers,
+                    "n_network_frontiers": n_frontiers,
+                    "n_citation_links": n_paper_edges,
+                    "run_metadata": json.dumps(run_metadata or {}, default=str),
+                },
+            )
+        )
+        tables.pop("scope_cluster_profiles", None)
+        tables.pop("scope_cluster_keywords", None)
+
+        log.info("\n[BQ] Writing %s scope tables …", level)
+        write_scope_tables_to_bq(tables)
+        if SCOPE_HTML_ENABLED and level == html_level:
+            html_bundle = (df, journals, communities, drift, n_paper_edges)
+
+    profiles = {"macro": [], "meso": [], "micro": []}
+    fos_global = {"macro": {}, "meso": {}, "micro": {}}
+    if profile_frames:
+        log.info("\n[5] Building cluster profiles and keyword distributions …")
+        profile_df = pd.concat(profile_frames, ignore_index=True).drop_duplicates(
+            "int_id"
+        )
+        profiles = build_cluster_profiles(profile_df, limits=None)
+        fos_global = build_fos_global(profile_df, top_n=None)
+        bundled = build_run_tables(
+            profile_df,
+            [],
+            pd.DataFrame(columns=["src_cluster", "tgt_cluster", "weight"]),
+            {"baseline_years": [], "jsd_trends": {}, "summary": []},
+            profiles,
+            fos_global,
+            pd.DataFrame(),
+            {},
+        )
+        log.info("[BQ] Writing cluster profiles and keywords …")
+        write_scope_tables_to_bq(
+            {
+                "scope_cluster_profiles": bundled["scope_cluster_profiles"],
+                "scope_cluster_keywords": bundled["scope_cluster_keywords"],
+            }
+        )
+
+    if SCOPE_HTML_ENABLED and html_bundle is not None:
+        df, journals, communities, drift, n_paper_edges = html_bundle
+        print()
+        scope_data = build_scope_dashboard(df, journals, communities[:100], run_metadata)
+        print()
+        build_network_maps_dashboard(scope_data)
+        print()
+        build_paper_examples_dashboard(scope_data.get("journals", []))
+        print()
+        build_drift_dashboard(df, run_metadata, metrics=drift)
+        print()
+        build_clusters_dashboard(df, n_paper_edges, profiles, fos_global)
+        print()
+        combine_dashboards()
 
     log.info("\n" + "=" * 60)
     log.info("Done!")

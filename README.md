@@ -168,12 +168,20 @@ Dashboards load labels from these BigQuery tables.
 
 #### From the dashboard
 
-Writes into `raw_citation_network_data`:
+Writes into `raw_citation_network_data`, every table suffixed `_{timestamp}`. HTML is off by default (`--html` to build it); these tables are always written.
 
-| BigQuery table |
-|----------------|
-| `raw_citation_network_data.paper_scope_{timestamp}` |
-| `raw_citation_network_data.journal_summary_{timestamp}` |
+| BigQuery table | Grain | What it holds |
+|----------------|-------|----------------|
+| `paper_scope` | journal paper | `scope_code`, `is_oos`, `is_borderline`, `is_primary_community`, `pub_year`, `community_id`; `override_source` / `override_reason` (hard-negative pattern or paper-LLM reason); `paper_llm_verdict` / `paper_llm_reason` for every scored title; `layout_x` / `layout_y` map position |
+| `journal_summary` | journal | OOS counts and %, `oos_by_year` (JSON), primary / borderline / in-scope community ids, borderline LLM model, prompt version, cache flag, candidate ids, paper-LLM counts, primary shift vs 2020, latest-year drift (`drift_jsd`, `drift_rank`, …) |
+| `scope_journal_communities` | journal × community | papers and share, rank, `community_role` (primary / borderline / out_of_scope), `sent_to_borderline_llm`, `borderline_verdict`, `borderline_reason`, OOS / hard-negative / demoted counts |
+| `scope_journal_drift_yearly` | journal × year | `jsd` vs baseline years, `new_community_pct`, `entropy_delta`, `articles` |
+| `scope_example_papers` | sampled paper | in-scope and OOS example titles per journal with the flags behind each pick |
+| `scope_communities` | community (`CLUSTER_LEVEL`) | label, keywords, total size, Frontiers share, dominant journal, top journals (JSON), map centre |
+| `scope_community_edges` | community pair | citation `total_weight` and `n_links` between communities (map edges) |
+| `scope_cluster_profiles` | cluster at macro / meso / micro | size, dominant journal, journal share and papers by year (JSON), keywords, example papers, parent cluster |
+| `scope_cluster_keywords` | level × keyword | paper-weighted keyword distribution |
+| `scope_run_config` | one row | scoring settings, models, hard-negative config, network totals, `run_metadata` |
 
 #### Read model (`src/read_model.py`)
 

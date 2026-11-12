@@ -10,13 +10,15 @@ Profiles are fit on Leiden papers only, using Frontiers taxonomy v6
 (CORE_TOPIC, score level 3). A paper is placed at micro, then meso, then
 macro, and only as deep as the calibrated similarity and margin allow.
 
-Nothing is written unless --write is passed. main.py only does that when
---taxonomy-enrichment is set.
+Nothing is written unless --write is passed. main.py does that for
+--taxonomy-enrichment, and for the few-citation fallback after
+--citation-enrichment.
 
     python src/taxonomy_assignment.py --timestamp 20260827_081311 --audit
     python src/taxonomy_assignment.py --timestamp 20260827_081311 --calibrate
     python src/taxonomy_assignment.py --timestamp 20260827_081311
     python src/taxonomy_assignment.py --timestamp 20260827_081311 --write
+    python src/taxonomy_assignment.py --timestamp 20260827_081311 --few-citations
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ BQ_DATASET = "raw_citation_network_data"
 BQ_LOCATION = "EU"
 AIRAK_PUBLICATION = "ocean-breeze-tier-1.airak.Publication"
 AIRAK_JOURNAL = "ocean-breeze-tier-1.airak.Journal"
+AIRAK_CITATION = "ocean-breeze-tier-1.airak.PublicationCitation"
 TAXONOMY_DATASET = "ocean-tech-adv-analytics-c-esf.fw_taxonomy"
 # Base table, not the current view. The view hides the publication_id cluster,
 # so a join through it scans every score row.
@@ -730,7 +733,59 @@ def candidate_sql(ts: dict[str, str], leiden_sql: str) -> str:
     """
 
 
-def assign(bq: bigquery.Client, timestamp: str, write: bool) -> pd.DataFrame:
+def few_citation_ceiling() -> int:
+    """Papers at or below this many in-network citations are a taxonomy case.
+
+    The citation vote requires more than this. Keep the two cutoffs equal.
+    """
+    src = str(Path(__file__).resolve().parent)
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from citation_assignment import MIN_CITATIONS
+
+    return MIN_CITATIONS - 1
+
+
+def few_citation_sql(ts: dict[str, str], leiden_sql: str, max_citations: int) -> str:
+    """Drop candidates the citation vote should handle, and mark the rest."""
+    leiden_on = leiden_sql.replace("c.", "cl.")
+    return f"""
+    CREATE TEMP TABLE network_pubs AS
+    SELECT
+      SAFE_CAST(m.pub_id AS INT64) AS pub_id,
+      CAST(m.int_id AS INT64) AS int_id
+    FROM `{ts["meta"]}` m
+    JOIN `{ts["classif"]}` cl ON CAST(cl.int_id AS INT64) = CAST(m.int_id AS INT64)
+    WHERE SAFE_CAST(m.pub_id AS INT64) IS NOT NULL
+      {leiden_on};
+
+    CREATE TEMP TABLE cite_counts AS
+    SELECT c.pub_id, COUNT(DISTINCT net.int_id) AS n_citations
+    FROM candidates c
+    JOIN `{AIRAK_CITATION}` pc ON pc.PublicationId = c.pub_id
+    JOIN network_pubs net ON net.pub_id = pc.CitedPublicationId
+    WHERE pc.CitedPublicationId != c.pub_id
+    GROUP BY c.pub_id;
+
+    DELETE FROM candidates
+    WHERE pub_id IN (
+      SELECT pub_id FROM cite_counts WHERE n_citations > {max_citations}
+    );
+
+    UPDATE candidates
+    SET exclusion_reason = 'few_citations'
+    WHERE pub_id IN (
+      SELECT pub_id FROM cite_counts WHERE n_citations > 0
+    );
+    """
+
+
+def assign(
+    bq: bigquery.Client,
+    timestamp: str,
+    write: bool,
+    few_citations: bool = False,
+) -> pd.DataFrame:
     """Score excluded Frontiers papers. Write only when `write` is true."""
     ts = tables(timestamp)
     id_type = score_id_type(bq)
@@ -738,8 +793,16 @@ def assign(bq: bigquery.Client, timestamp: str, write: bool) -> pd.DataFrame:
     # Profiles for a real assignment must include every Leiden paper, so the
     # calibration holdout table is absent. An empty hidden table keeps the
     # same SQL and excludes nobody.
-    script = _assignment_script(ts, id_type, leiden_sql, write)
+    max_citations = few_citation_ceiling() if few_citations else None
+    script = _assignment_script(
+        ts, id_type, leiden_sql, write, max_citations=max_citations
+    )
     log.info("%s assignment for %s", "Writing" if write else "Dry run", timestamp)
+    if max_citations is not None:
+        log.info(
+            "  few-citation fallback: at most %s in-network citation(s)",
+            max_citations,
+        )
     for level, rule in THRESHOLDS.items():
         log.info(
             "  %s similarity >= %.2f, margin >= %.2f",
@@ -761,7 +824,13 @@ def assign(bq: bigquery.Client, timestamp: str, write: bool) -> pd.DataFrame:
     return summary
 
 
-def _assignment_script(ts: dict[str, str], id_type: str, leiden_sql: str, write: bool) -> str:
+def _assignment_script(
+    ts: dict[str, str],
+    id_type: str,
+    leiden_sql: str,
+    write: bool,
+    max_citations: int | None = None,
+) -> str:
     write_sql = ""
     if write:
         write_sql = f"""
@@ -799,7 +868,12 @@ def _assignment_script(ts: dict[str, str], id_type: str, leiden_sql: str, write:
         WHERE assignment_method IS NULL OR assignment_method = 'leiden';
 
         DELETE FROM `{ts["classif"]}`
-        WHERE assignment_method IN ('taxonomy', 'unassigned');
+        WHERE assignment_method IN ('taxonomy', 'unassigned')
+          {"" if max_citations is None else f'''AND CAST(int_id AS INT64) IN (
+            SELECT CAST(m.int_id AS INT64)
+            FROM `{ts["meta"]}` m
+            JOIN candidates c ON SAFE_CAST(m.pub_id AS INT64) = c.pub_id
+          )'''};
 
         INSERT INTO `{ts["classif"]}` (
           int_id, macro, meso, micro, assignment_method, assignment_level,
@@ -823,6 +897,7 @@ def _assignment_script(ts: dict[str, str], id_type: str, leiden_sql: str, write:
     SELECT CAST(NULL AS INT64) AS pub_id FROM (SELECT 1) WHERE FALSE;
 
     {candidate_sql(ts, leiden_sql)}
+    {few_citation_sql(ts, leiden_sql, max_citations) if max_citations is not None else ""}
     {paper_topic_sql(id_type, "candidates", "paper_topics")}
     {profile_sql("macro", ts, id_type, leiden_sql)}
     {profile_sql("meso", ts, id_type, leiden_sql)}
@@ -970,6 +1045,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Append taxonomy and unassigned rows to classification_raw_{timestamp}.",
     )
+    parser.add_argument(
+        "--few-citations",
+        action="store_true",
+        help=(
+            "Only papers with fewer in-network citations than the citation vote "
+            "requires. Papers the vote can place, and papers whose vote was split, "
+            "are left out."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -988,7 +1072,12 @@ def main(argv: list[str] | None = None) -> None:
         log.info("Write is on: classification_raw_%s will gain taxonomy rows", timestamp)
     else:
         log.info("Dry run: no BigQuery tables will be changed")
-    assign(bq, timestamp, write=args.write)
+    if args.few_citations:
+        log.info(
+            "Few-citation mode: at most %s citation(s) into this run",
+            few_citation_ceiling(),
+        )
+    assign(bq, timestamp, write=args.write, few_citations=args.few_citations)
 
 
 if __name__ == "__main__":
