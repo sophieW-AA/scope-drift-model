@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frontiers journals · 20260827_081311</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root {
+  --bg: #f6f8fa;
+  --card: #ffffff;
+  --text: #1a1f36;
+  --muted: #5f6b7c;
+  --border: #e3e7ee;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+header {
+  background: var(--card);
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; }
+header p { color: var(--muted); font-size: 0.84rem; max-width: 980px; }
+.toolbar, .macro-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.label { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+.filter-btn, .search input {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.search input { border-radius: 8px; min-width: 220px; cursor: text; padding: 6px 10px; }
+.filter-btn.active { background: #1a1f36; color: #fff; border-color: #1a1f36; }
+.swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.hint { color: var(--muted); font-size: 0.75rem; }
+.main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.plot-card { flex: 1; padding: 6px; }
+.plot-wrap { flex: 1; min-height: 520px; position: relative; }
+#plot { position: absolute; inset: 0; }
+.detail {
+  width: 340px;
+  flex-shrink: 0;
+  padding: 16px 16px 12px;
+  overflow: auto;
+}
+.detail h2 { font-size: 1rem; line-height: 1.3; margin-bottom: 4px; }
+.detail .meta { color: var(--muted); font-size: 0.8rem; margin-bottom: 12px; }
+.detail h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 14px 0 6px; }
+.detail ul { list-style: none; }
+.detail li, .near-btn {
+  font-size: 0.84rem;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.near-btn {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 0;
+}
+.near-btn:hover { color: #003BDE; }
+.share { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tag { color: var(--muted); font-size: 0.7rem; margin-left: 4px; }
+.near-btn:disabled { cursor: default; }
+.near-btn:disabled:hover { color: var(--text); }
+.empty { color: var(--muted); font-size: 0.86rem; }
+.vslider { display:inline-flex; align-items:center; gap:8px; padding:3px 10px; border:1px solid var(--border); border-radius:999px; background:#fff; }
+.vslider input { width:44px; accent-color:#1a1f36; cursor:pointer; }
+.vlab { font-size:0.75rem; color:var(--muted); cursor:pointer; user-select:none; }
+.vlab.on { color:var(--text); font-weight:700; }
+.searchbox { position:relative; }
+.results { position:absolute; top:100%; left:0; z-index:20; width:380px; max-height:340px; overflow:auto; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(26,31,54,.15); margin-top:4px; }
+.res { display:flex; justify-content:space-between; gap:10px; padding:7px 10px; font-size:0.8rem; cursor:pointer; border-bottom:1px solid var(--border); }
+.res:last-child { border-bottom:0; }
+.res.act, .res:hover { background:#eef2ff; }
+.res small { color:var(--muted); white-space:nowrap; }
+.res mark { background:#fff1a8; color:inherit; padding:0; }
+.nores { padding:8px 10px; font-size:0.8rem; color:var(--muted); }
+.commctl { display:inline-flex; align-items:center; gap:8px; padding:3px 10px; border:1px solid var(--border); border-radius:999px; background:#fff; }
+.commctl input[type=range] { width:240px; accent-color:#1a1f36; cursor:pointer; }
+.yearlab { font-size:0.8rem; min-width:62px; font-variant-numeric:tabular-nums; }
+.yt { margin-top:6px; }
+.yr { display:grid; grid-template-columns:38px 1fr 76px; gap:6px; align-items:center; font-size:0.74rem; padding:2px 4px; border-radius:4px; cursor:pointer; font-variant-numeric:tabular-nums; }
+.yr.on { background:#eef2ff; font-weight:700; }
+.yr .bar { height:7px; background:#e9ecf2; border-radius:4px; overflow:hidden; display:flex; }
+.yr .bar i { display:block; height:100%; }
+.yr .v { text-align:right; color:var(--muted); }
+[hidden] { display:none !important; }
+.detail { transition: width .25s ease, padding .25s ease, margin .25s ease, opacity .2s ease; }
+.detail.collapsed { width:0; padding-left:0; padding-right:0; margin-left:-12px; border-width:0; opacity:0; overflow:hidden; pointer-events:none; }
+.plot-card { position:relative; }
+.panel-tab { position:absolute; top:10px; right:10px; z-index:5; border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:0.75rem; cursor:pointer; color:var(--muted); }
+.panel-tab:hover { color:var(--text); }
+.ov { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; flex-direction:column; }
+.ovhead { display:flex; align-items:center; gap:14px; padding:12px 20px; background:#fff; border-bottom:1px solid var(--border); }
+.ovhead h2 { font-size:1.15rem; }
+.ovbody { flex:1; overflow:auto; padding:16px 20px 40px; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin-bottom:14px; }
+.kpi { background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+.kpi b { display:block; font-size:1.25rem; }
+.kpi span { font-size:0.74rem; color:var(--muted); }
+.sec { background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:14px; }
+.sec h3 { font-size:0.8rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px; }
+.sec .note { font-size:0.78rem; color:var(--muted); margin:2px 0 8px; max-width:900px; }
+.chg { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+.chg h4 { font-size:0.82rem; margin-bottom:4px; }
+.chg ul { list-style:none; }
+.chg li { font-size:0.8rem; padding:3px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; gap:8px; }
+.up { color:#0072B2; } .dn { color:#D55E00; }
+.ovtabs { margin-left:auto; display:flex; gap:6px; }
+.rpt { max-width:1100px; margin:0 auto; }
+.rpt p { font-size:0.9rem; line-height:1.5; margin:0 0 10px; }
+.rpgrid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media (max-width:900px) { .rpgrid { grid-template-columns:1fr; } }
+table.rt { width:100%; border-collapse:collapse; font-size:0.84rem; }
+table.rt th { text-align:left; color:var(--muted); font-weight:600; padding:6px 8px; background:#f3f5f9; }
+table.rt td { padding:6px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+table.rt td.r, table.rt th.r { text-align:right; font-variant-numeric:tabular-nums; }
+.tin { color:#0072B2; font-weight:700; } .tout { color:#D55E00; font-weight:700; }
+.ex h4 { font-size:0.85rem; margin-bottom:6px; } .ex ul { padding-left:18px; } .ex li { font-size:0.8rem; margin-bottom:5px; }
+.rnote { background:#fff7e6; border:1px solid #e6b800; border-radius:8px; padding:9px 12px; font-size:0.76rem; color:#5b4a14; margin-top:6px; }
+.src { color:var(--muted); font-size:0.72rem; margin-top:6px; }
+.pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+.pill.in { background:#dceaf6; color:#00507d; } .pill.out { background:#fbe3d6; color:#9a3d00; } .pill.bd { background:#e3f3fb; color:#1b6f9e; }
+.why { font-size:0.74rem; color:var(--muted); display:block; margin-top:2px; }
+.rpbar2 { background:#dceaf6; border-radius:6px; overflow:hidden; height:26px; margin-bottom:10px; }
+.rpbar2 div { background:#D55E00; color:#fff; font-size:0.78rem; font-weight:700; padding:5px 10px; height:100%; white-space:nowrap; min-width:max-content; }
+.cmx td.cell { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.cin { background:#dceaf6; color:#00507d; font-weight:700; } .cjoin { background:#e3f3fb; color:#1b6f9e; font-weight:700; } .cleft { background:#fbe3d6; color:#9a3d00; font-weight:700; } .cnone { color:#9aa3b2; }
+.chg { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; } .chg span { font-size:0.76rem; padding:2px 8px; border-radius:999px; }
+[hidden] { display:none !important; }
+.howto { margin:6px 0 2px; font-size:0.82rem; max-width:1100px; }
+.howto summary { cursor:pointer; font-weight:600; color:#1a1f36; }
+.howto-body { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px 18px; margin-top:8px; padding:10px 12px; background:#f6f8fb; border:1px solid var(--border); border-radius:8px; color:#3a4456; line-height:1.45; }
+.sw { display:inline-block; width:10px; height:10px; border-radius:50%; margin:0 4px 0 6px; vertical-align:middle; }
+.srcline { color:var(--muted); font-size:0.72rem; margin-top:6px; }
+.headline { font-size:1.02rem; line-height:1.45; color:#1a1f36; margin:6px 0 10px; }
+.warn { color:#9a3d00; font-weight:600; }
+.qcard { border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin:10px 0; background:#fff; }
+.qcard h4 { margin:0 0 4px; font-size:0.9rem; } .qmeta { color:var(--muted); font-size:0.76rem; margin:2px 0 6px; }
+.qcard pre { background:#f6f8fb; border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:0.74rem; white-space:pre-wrap; word-break:break-word; margin:6px 0 0; }
+.qcopy { float:right; font-size:0.72rem; padding:2px 8px; }
+.qnote { background:#fff7e6; border:1px solid #f0d9a8; border-radius:8px; padding:10px 12px; font-size:0.82rem; margin:8px 0; }
+.tophead { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+.nav { display:flex; gap:4px; margin-top:10px; border-bottom:1px solid var(--border); }
+.navtab { border:1px solid transparent; border-bottom:none; background:transparent; padding:8px 16px; font-size:0.88rem; font-weight:600; color:var(--muted); cursor:pointer; border-radius:8px 8px 0 0; margin-bottom:-1px; }
+.navtab:hover { color:var(--text); background:#f6f8fb; }
+.navtab.active { color:var(--text); background:#fff; border-color:var(--border); border-bottom:1px solid #fff; }
+.navj { font-weight:400; color:#1a1f36; margin-left:6px; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
+.intro { margin-top:8px; }
+.ov { position:static; inset:auto; z-index:auto; flex:1; min-height:0; }
+.mk-kpis { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:6px 0 4px; }
+.mk-kpis div { background:#f6f8fb; border:1px solid var(--border); border-radius:8px; padding:8px; }
+.mk-kpis b { display:block; font-size:1.05rem; } .mk-kpis span { font-size:0.72rem; color:var(--muted); }
+.mk-list button { display:flex; justify-content:space-between; gap:8px; width:100%; text-align:left; border:none; background:none; padding:5px 4px; font-size:0.8rem; cursor:pointer; border-bottom:1px solid #eef0f4; color:var(--text); }
+.mk-list button:hover { background:#f6f8fb; }
+.mk-sel { font-size:0.75rem; margin-bottom:4px; }
+.legend-f { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:0.74rem; color:#3a4456; }
+.legend-f span { white-space:nowrap; }
+.navgroup { display:inline-flex; align-items:flex-end; border:1px dashed #9aa8c2; border-bottom:none; border-radius:10px 10px 0 0; padding:3px 3px 0; margin-bottom:-1px; background:#fafbfd; transition:border-color .2s, box-shadow .2s; }
+.navgroup .navtab { margin-bottom:0; }
+.navsub { font-size:0.8rem; font-weight:600; padding:6px 12px 7px; border-left:1px dotted #9aa8c2 !important; border-radius:0 8px 0 0; }
+.navsub .sublink { color:#9aa8c2; margin-right:5px; font-weight:400; }
+.navsub.active .sublink { color:#1a1f36; }
+.navgroup #navJournal { color:#1a1f36; }
+.navgroup .navtab.active { border-top:1.5px solid #1a1f36; border-right:1.5px solid #1a1f36; background:#fff; }
+.navgroup #navJournal.active { border-left:1.5px solid #1a1f36; }
+.navgroup .navsub.active { border-left:1px dotted #9aa8c2 !important; }
+.navgroup.pop { animation:navpop .9s ease; }
+.navgroup.pop .navsub { animation:subslide .5s ease; }
+@keyframes navpop { 0% { box-shadow:0 0 0 0 rgba(0,114,178,.55); } 70% { box-shadow:0 0 0 8px rgba(0,114,178,0); } 100% { box-shadow:none; } }
+@keyframes subslide { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:none; } }
+.crumb { border:none; background:none; padding:0; font:inherit; color:#0072B2; cursor:pointer; text-decoration:underline dotted; }
+.crumbsep { color:var(--muted); margin:0 6px; font-weight:400; }
+.crumbsub { font-weight:400; color:var(--muted); font-size:0.9rem; margin-left:8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="tophead"><h1>Frontiers journals: how their topics are changing</h1><span class="hint">209 journals · 282,689 Frontiers papers, 2023&ndash;2026</span></div>
+  <nav class="nav" role="tablist">
+    <button type="button" class="navtab active" id="navMarket" role="tab">Frontiers view</button>
+    <span class="navgroup" id="navGroup" title="Linked tabs: Scope details always belongs to the journal shown in the Journal tab">
+      <button type="button" class="navtab" id="navJournal" role="tab">Journal<span class="navj" id="navJName"></span></button>
+      <button type="button" class="navtab navsub" id="navScope" role="tab"><span class="sublink" aria-hidden="true">&#8627;</span>Scope details</button>
+    </span>
+    <button type="button" class="navtab" id="navData" role="tab">Data &amp; queries</button>
+  </nav>
+  <p class="intro" id="viewIntro"></p>
+  <details class="howto" id="howto"><summary>How to read this</summary>
+    <div class="howto-body">
+      <div><b>All journals view</b><br>Each bubble is a journal. <b>Size</b> = number of papers. <b>Colour</b> = the broad field most of its papers belong to. <b>Position</b> = journals that publish on similar topics sit close together (the layout is an estimate, so distance is a rough guide only).</div>
+      <div><b>One journal</b><br>Each bubble is a topic the journal publishes in. <b>Size</b> = the journal's papers in that topic (in the chosen year, if you pick one). <b>Position</b> = topics whose papers cite each other sit closer together.</div>
+      <div><b>Colour: Core status</b><br><span class="sw" style="background:#0072B2"></span>Core: inside the journal's core fields. <span class="sw" style="background:#56B4E9"></span>Borderline: reviewed and judged close to the core. <span class="sw" style="background:#D55E00"></span>Outside the core. The share outside the core is the headline figure for each journal.</div>
+      <div><b>Colour: Broad field</b><br>Each topic is coloured by the broad field it belongs to.</div>
+      <div><b>Years</b><br>Use the year slider to see one year at a time. Years marked &#9888; have far fewer papers than the journal's busiest year, so changes look bigger than they are. The run is dated August 2026, so 2026 is a part year.</div>
+      <div><b>Tabs</b><br><b>Frontiers view</b> shows every journal. Click one to open it in the <b>Journal</b> tab. <b>Scope details</b> is joined to the Journal tab by a dotted outline: it is the full report for the same journal, and changes whenever the journal does. <b>Data &amp; queries</b> lists every BigQuery query behind the page.</div>
+    </div>
+  </details>
+  <div class="toolbar" id="toolbar">
+    <button type="button" class="filter-btn" id="backBtn" hidden>All journals</button>
+    <span class="label" hidden>View:</span>
+    <span class="vslider" hidden><span id="vMacro" class="vlab on">Macro</span><input type="range" id="viewSlider" min="0" max="1" step="1" value="0" aria-label="Colour by macro or by journal community"><span id="vComm" class="vlab">Journal community</span></span>
+    <span class="label">Find:</span>
+    <span class="searchbox"><input id="search" class="search" type="search" autocomplete="off" placeholder="Find a journal, e.g. Energy Research" aria-label="Find a journal" /><div id="results" class="results" hidden></div></span>
+    <span id="commCtl" class="commctl" hidden>
+      <span class="label">Colour by:</span>
+      <button type="button" class="filter-btn active" id="cScope">Core status</button>
+      <button type="button" class="filter-btn" hidden id="cDrift" title="Stored flags: was the community in the journal's 2023-2025 core, and is it in the latest core?">Drift</button>
+      <button type="button" class="filter-btn" id="cMacro">Broad field</button>
+    </span>
+    <span class="commctl" id="yearCtl">
+      <span class="label">Year:</span>
+      <button type="button" class="filter-btn" hidden id="yearPlay" title="Play year by year">&#9654;</button>
+      <input type="range" id="yearSlider" min="0" max="0" step="1" value="0" aria-label="Year">
+      <strong id="yearLab" class="yearlab">All years</strong>
+    </span>
+    <span class="hint" id="stats"></span>
+    <button type="button" class="filter-btn" hidden id="dataBtn" title="Every BigQuery query behind this page">Data &amp; queries</button>
+  </div>
+  <p class="srcline" id="srcline"></p>
+</header>
+<div class="main" id="mainView">
+  <div class="card plot-card"><button type="button" class="panel-tab" id="panelTab" hidden>Details &#8250;</button><div class="plot-wrap"><div id="plot"></div></div></div>
+  <aside class="card detail collapsed" id="detail">
+    <p class="empty">Search for a journal, or click one, to see its topics.</p>
+  </aside>
+</div>
+<div id="ov" class="ov" hidden>
+  <div class="ovhead"><button type="button" class="filter-btn active" hidden id="ovBack">&#8249; Back to map</button><h2 id="ovTitle"></h2><span class="ovtabs"><button type="button" class="filter-btn active" id="tabRep">Summary report</button><button type="button" class="filter-btn" id="tabTime">Over time</button><button type="button" class="filter-btn" id="tabCore">Main topics by year</button><button type="button" class="filter-btn" id="tabMeso">Topic mix</button><button type="button" class="filter-btn" hidden id="tabData">Data</button></span></div>
+  <div class="ovbody" id="ovBody"></div>
+</div>
+<script>
+const DATA = 
