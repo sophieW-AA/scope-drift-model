@@ -222,7 +222,29 @@ def publish_papers(bq: bigquery.Client, run_timestamp: str) -> None:
     scope = f"{BQ_PROJECT}.{BQ_DATASET}.paper_scope_{run_timestamp}"
     has_scope = table_exists(bq, scope)
     if has_scope:
-        scope_join = f"LEFT JOIN `{scope}` s ON CAST(c.int_id AS INT64) = CAST(s.int_id AS INT64)"
+        preferred = os.environ.get("CLUSTER_LEVEL", "macro")
+        if preferred not in ("macro", "meso"):
+            preferred = "macro"
+        # One scope row per paper. Prefer the requested level when both are stored.
+        scope_join = f"""LEFT JOIN (
+          SELECT * EXCEPT(scope_pick)
+          FROM (
+            SELECT
+              s.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY CAST(s.int_id AS INT64)
+                ORDER BY CASE CAST(s.cluster_level AS STRING)
+                  WHEN '{preferred}' THEN 0
+                  WHEN 'macro' THEN 1
+                  WHEN 'meso' THEN 2
+                  ELSE 3
+                END
+              ) AS scope_pick
+            FROM `{scope}` s
+          )
+          WHERE scope_pick = 1
+        ) s ON CAST(c.int_id AS INT64) = CAST(s.int_id AS INT64)"""
+        log.info("  paper scope level: %s (both levels stay in the scope table)", preferred)
         oos = _flag("s", "is_oos")
         borderline = _flag("s", "is_borderline")
         demoted = _flag("s", "paper_demoted")
@@ -414,7 +436,7 @@ def fetch_topic_rollup(bq: bigquery.Client, run_timestamp: str, level: str) -> p
 def _attach_enriched_counts(
     bq: bigquery.Client, communities: pd.DataFrame, run_timestamp: str
 ) -> pd.DataFrame:
-    """n_papers stays the Leiden count. n_papers_enriched adds taxonomy rows."""
+    """n_papers stays the Leiden count. n_papers_enriched adds taxonomy and citation rows."""
     if communities.empty:
         return communities
     classification = f"{BQ_PROJECT}.{BQ_DATASET}.classification_raw_{run_timestamp}"
@@ -432,7 +454,7 @@ def _attach_enriched_counts(
               CAST({level} AS INT64) AS community_id,
               COUNTIF(
                 assignment_method IS NULL
-                OR assignment_method IN ('leiden', 'taxonomy')
+                OR assignment_method IN ('leiden', 'taxonomy', 'citation')
               ) AS n_papers_enriched
             FROM `{classification}`
             WHERE {level} IS NOT NULL
