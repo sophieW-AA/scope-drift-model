@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frontiers author citation network</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;font-size:14px;color:#222;background:#f9fafb}
+.wrap{width:100%;max-width:100%;padding:12px 18px}
+a{color:#0b3fd9;cursor:pointer;text-decoration:none}a:hover{text-decoration:underline}
+.muted{color:#888}
+.scope{background:#fff8e6;border:1px solid #f0d9a0;border-radius:6px;padding:8px 12px;margin:0 0 10px;font-size:13px;color:#444}
+.scope code{background:#f3ead2;padding:0 4px;border-radius:3px}
+.scope .pill{display:inline-block;background:#fff;border:1px solid #e8d4a2;border-radius:12px;padding:1px 9px;margin:2px 3px}
+.scope>a{margin-left:6px;white-space:nowrap}
+#scopeMore{display:none}#scopeMore.open{display:block}#scopeMore ul{margin:6px 0 2px;padding-left:20px}#scopeMore li{margin:3px 0}
+#status{border:1px solid #c9d6ff;background:#eef3ff;border-radius:6px;padding:8px 12px;margin:0 0 8px;font-size:14px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #dfe2e8}
+.tab{padding:9px 18px;cursor:pointer;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;color:#555;font-size:15px}
+.tab.on{background:#fff;border-color:#dfe2e8;color:#0a2a8a;font-weight:600;margin-bottom:-1px}
+.view{display:none;background:#fff;border:1px solid #dfe2e8;border-top:none;min-height:600px}.view.on{display:block}
+.crumbs{padding:10px 18px;border-bottom:1px solid #eef0f3;font-size:15px;color:#444}
+.crumbs .sep{color:#bbb;margin:0 8px}
+.cols{display:flex;min-height:640px}
+.left{width:330px;flex:none;border-right:1px solid #eef0f3;padding:10px 12px;display:flex;flex-direction:column}
+.right{flex:1;min-width:0;padding:10px 16px}
+.filters select{width:100%;padding:8px;font-size:14px;border:1px solid #c8ccd4;border-radius:5px;background:#fff}
+.filters select:disabled{background:#f3f4f6;color:#999}
+.flab{font-size:12px;color:#666;font-weight:600;margin:8px 0 3px}
+.fhelp{font-size:12px;color:#777;margin:10px 0 4px;line-height:1.4}
+.lhead{font-size:13px;font-weight:600;color:#0a2a8a;margin-top:8px;padding-top:8px;border-top:1px solid #eee}
+.list{overflow-y:auto;flex:1;max-height:640px;margin-top:6px}
+.item{padding:8px 8px;border-bottom:1px solid #f1f2f4;cursor:pointer}.item:hover{background:#f5f7fc}.item.sel{background:#e8eefc}
+.item .t{font-weight:600}.item .s{font-size:12px;color:#666}
+.item .bar{height:4px;background:#eef0f3;border-radius:2px;margin-top:4px}.item .bar i{display:block;height:4px;background:#6b8cf0;border-radius:2px}
+.info{font-size:14px;color:#444;margin:2px 0 4px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}td,th{padding:4px 6px;border-bottom:1px solid #f0f0f0;text-align:left}th{color:#666;font-weight:600}
+.legend{display:inline-block;border:1px solid #e6e6e6;padding:8px 12px;font-size:13px;margin-top:6px;color:#444}
+.legend i{display:inline-block;width:22px;height:4px;vertical-align:middle;margin-right:6px}
+.tip{position:fixed;pointer-events:none;background:#fff;border:1px solid #ccc;border-radius:4px;padding:6px 9px;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.15);display:none;max-width:340px;z-index:20}
+svg text{font-size:9px;fill:#333;pointer-events:none}
+.gchip{display:inline-block;margin:2px 4px;padding:1px 8px;border-radius:10px;border:1px solid #ddd}
+.gchip i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.chip{display:inline-block;padding:4px 10px;background:#f0f1f4;border-radius:14px;margin:6px 6px 0 0;font-size:14px}
+.chip.l{cursor:pointer;color:#0b3fd9}.chip.l:hover{background:#e3e8f7}
+.search{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid #eef0f3}
+.search input{flex:1;padding:9px;font-size:15px;border:1px solid #bbb;border-radius:5px}
+.search button{padding:9px 18px;font-size:15px;background:#0b3fd9;color:#fff;border:none;border-radius:5px;cursor:pointer}
+.results{padding:0 16px}.results div{padding:6px 2px;border-bottom:1px solid #f0f0f0}
+.side{width:440px;flex:none;padding:14px 16px;border-left:1px solid #eef0f3}
+.side h2{color:#0a2a8a;margin:0 0 4px;font-size:24px;font-weight:500}
+.sech{margin-top:16px;color:#666;font-weight:600;border-bottom:1px solid #eee;padding-bottom:6px}
+.paper{padding:10px 0;border-bottom:1px solid #eee}.paper b{font-size:15px}.paper small{color:#666}
+.mc{border:1px solid #e3e5ea;border-radius:8px;padding:12px 14px;background:#fff}
+.mc h3{margin:0 0 2px;font-size:18px;font-weight:600;color:#0a2a8a;display:flex;align-items:center;gap:8px}
+.mc h3 i{width:14px;height:14px;border-radius:50%;display:inline-block;flex:none}
+.mc .sub{color:#666;font-size:13px;margin-bottom:8px}
+.mc .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
+.mc .stats div{background:#f5f6f8;border-radius:6px;padding:6px 8px}.mc .stats b{display:block;font-size:16px}.mc .stats small{color:#666;font-size:12px}
+.mc .sec{color:#666;font-size:12px;font-weight:600;margin-top:8px;text-transform:uppercase}
+.mc .btns{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+.mc button{padding:6px 12px;border:1px solid #0b3fd9;background:#fff;color:#0b3fd9;border-radius:5px;cursor:pointer;font-size:13px}
+.mc button.p{background:#0b3fd9;color:#fff}
+.mc.flash{box-shadow:0 0 0 3px #d79a1e}
+.zb{width:34px;height:34px;font-size:20px;line-height:1;border:1px solid #cfd4dc;background:#fff;border-radius:6px;cursor:pointer;color:#0a2a8a;box-shadow:0 1px 3px rgba(0,0,0,.08)}.zb:hover{background:#f0f3fb}
+.dh{margin:20px 0 8px;font-size:17px;color:#0a2a8a}
+.qcard{border:1px solid #e3e5ea;border-radius:8px;padding:10px 12px;margin:10px 0;background:#fff}
+.qh{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.qm{font-size:13px;color:#555;margin-top:4px}
+.qcard pre{background:#f6f8fa;border:1px solid #eceef1;border-radius:6px;padding:10px;font-size:12px;overflow-x:auto;margin:8px 0 0;white-space:pre}
+.qcopy{padding:4px 10px;border:1px solid #0b3fd9;background:#fff;color:#0b3fd9;border-radius:5px;cursor:pointer;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="scope">
+  <b>About this network.</b> Built from run <code>20261016_150236</code> of the AIRA author citation network.
+  <span class="pill">Frontiers journals only</span><span class="pill">Published 2023–2026</span><span class="pill">817,257 authors</span><span class="pill">173,075 papers · 207 journals</span><span class="pill">9.2M author links</span>
+  <a onclick="document.getElementById('scopeMore').classList.toggle('open')">What this does and does not include ▾</a>
+  <div id="scopeMore"><ul>
+    <li><b>Papers:</b> only articles in the run's 215 journal IDs. In AIRA these resolve to 209 Frontiers titles, 2 Frontiers Partnerships titles (Advances in Drug and Alcohol Research, Journal of Abdominal Wall Surgery) and one unexpected title (The Female Patient, about 170 papers, likely an ID mismatch); 3 IDs did not resolve. 207 journals have papers in the window. Papers from other publishers are not in the network.</li>
+    <li><b>Authors:</b> anyone who wrote at least one of those papers. Paper counts and lists cover only their 2023–2026 Frontiers papers, not their full career.</li>
+    <li><b>Links:</b> two authors are linked when one's paper cites the other's and <i>both</i> papers are in this set. Citations to or from other publishers, or before 2023, are ignored. A link is citation-based, not coauthorship; teal lines mark pairs who are also coauthors.</li>
+    <li><b>Weights:</b> first and last authors count 1.0, middle authors 0.25. Older citations count for less (temporal decay, τ = 5 years). Link counts depend on how often a person's papers are cited, not on how many they wrote.</li>
+    <li><b>Communities:</b> Leiden clustering of the author network into 27 macro, 250 meso and 777 micro communities. They have no topic labels; the top journal is shown instead.</li>
+    <li><b>Community map:</b> positions come only from citation between macro communities. Use the lines, not the gaps, to judge how related two groups are.</li>
+    <li><b>Details:</b> __NEMB__ authors (anyone in the top 40 of their micro, meso or macro community) have a details page with their 50 strongest links. Other people appear greyed out and cannot be opened.</li>
+  </ul></div>
+</div>
+<div id="status">Loading data…</div>
+<div class="tabs">
+  <div class="tab on" data-v="map">Community map</div>
+  <div class="tab" data-v="net">Network</div>
+  <div class="tab" data-v="det">Details</div>
+  <div class="tab" data-v="data">Data</div>
+</div>
+
+<div class="view on" id="map">
+  <div class="crumbs"><b>Communities of Frontiers authors</b> (papers in Frontiers journals, 2023–2026). Each bubble is one of 27 groups of authors who cite each other. Linked groups sit closer together, but use the lines, not the gaps, to judge how related they are.</div>
+  <div style="padding:10px 18px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <label style="font-size:13px"><input type="checkbox" id="mlinks" checked> Show links</label>
+    <span style="font-size:13px;display:inline-flex;gap:14px;align-items:center;border:1px solid #e3e5ea;border-radius:6px;padding:3px 10px;background:#fff">
+      <span><svg width="30" height="8" style="vertical-align:middle"><line x1="2" y1="4" x2="28" y2="4" stroke="#777" stroke-width="3" stroke-linecap="round"/></svg> Above 0.9×</span>
+      <span><svg width="30" height="8" style="vertical-align:middle"><line x1="2" y1="4" x2="28" y2="4" stroke="#777" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 7"/></svg> Top 3 neighbors</span>
+      <span class="muted">Thickness = strength · Size = authors</span>
+    </span>
+    <span class="muted">Hover a bubble to highlight its links. Click to open its network. Drag to pan; use + / − to zoom.</span>
+  </div>
+  <div style="position:relative;padding:6px 18px">
+    <svg id="msvg" width="100%" height="760" style="display:block;cursor:grab;border:1px solid #eef0f3;border-radius:6px;background:#fff"></svg>
+    <div style="position:absolute;top:16px;right:28px;display:flex;flex-direction:column;gap:4px">
+      <button class="zb" id="zin" title="Zoom in">+</button><button class="zb" id="zout" title="Zoom out">−</button><button class="zb" id="zfit" title="Reset view" style="font-size:12px">Fit</button>
+    </div>
+  </div>
+</div>
+
+<div class="view" id="net">
+  <div class="crumbs" id="crumbs"></div>
+  <div class="cols">
+    <div class="left">
+      <div class="filters">
+        <div class="flab">Large group (macro)</div>
+        <select id="fmacro"></select>
+        <div class="flab">Sub-group (meso)</div>
+        <select id="fmeso"></select>
+        <div class="fhelp">Authors are grouped in 3 levels: 27 large groups (macro) split into 250 sub-groups (meso), which split into 777 small groups (micro). Pick a group to see what's inside it.</div>
+        <div class="lhead" id="lhead"></div>
+      </div>
+      <div class="list" id="list"></div>
+    </div>
+    <div class="right">
+      <div id="macov" style="display:none">
+        <div class="info">The 27 large groups (macro) of Frontiers authors. Click a card's <b>Open network</b>, or a group in the list, to see inside it.</div>
+        <div style="padding:6px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="msort" style="padding:7px;font-size:14px"><option value="n">Sort by authors</option><option value="np">Sort by papers</option><option value="intra">Sort by internal citation share</option><option value="id">Sort by macro number</option></select>
+          <input id="mfilt" placeholder="Filter by journal, e.g. psychology" style="padding:7px;font-size:14px;width:260px;border:1px solid #bbb;border-radius:5px">
+          <span class="muted" id="msum"></span>
+        </div>
+        <svg id="mbar" width="100%" height="230"></svg>
+        <div id="mcards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;padding:12px 0 24px"></div>
+      </div>
+      <div id="netpane">
+        <div class="info" id="cinfo"></div>
+        <div class="muted" id="cjr" style="font-size:13px"></div>
+        <div id="cgroups" style="font-size:13px;margin:4px 0"></div>
+        <svg id="csvg" width="100%" height="820"></svg>
+        <div class="legend"><i style="background:#0b3fd9"></i>Citation only &nbsp; <i style="background:#2a9d8f"></i>Citation and coauthorship<br>Macro: every small group (micro), grouped by sub-group. Sub-group: top authors grouped by small group. Small group: top authors grouped by who links to whom. Links are bundled between groups; thickness is connection weight. Faded, grey-labeled authors have no details page.</div>
+        <table id="ctab"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="view" id="det">
+  <div class="search"><input id="q" placeholder="Search an author name, e.g. ruth lanius"><button id="go">Search</button></div>
+  <div class="results" id="res"></div>
+  <div class="cols">
+    <div class="right">
+      <div class="info" id="einfo">Search for an author to see their links.</div>
+      <div style="display:flex;gap:14px;align-items:center;margin:4px 0;font-size:13px">
+        <label>Show top <select id="ecount" style="padding:4px"><option>25</option><option selected>50</option></select> links</label>
+        <label><input type="checkbox" id="ecross" checked> Links between these people (grey)</label>
+      </div>
+      <div id="egroups" style="font-size:13px;margin:2px 0 4px"></div>
+      <svg id="esvg" width="100%" height="720"></svg>
+      <div class="legend"><i style="background:#0b3fd9"></i>Citation only &nbsp; <i style="background:#2a9d8f"></i>Citation and coauthorship &nbsp; <i style="background:#999"></i>Link between two of the people shown<br>The author is in the center. The people they link to are grouped around the edge by small group (micro). Thickness and dot size show connection weight. Faded, grey-labeled people have no details page.</div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+</div>
+
+__DATATAB__
+</div>
+<div class="tip" id="tip"></div>
+<script>window.__BLOB="__BLOB__";</script>
+<script>
+const BLUE="#0b3fd9", TEAL="#2a9d8f";
+let DATA, META;
+const tip=d3.select("#tip");
+const showTip=(e,h)=>tip.style("display","block").html(h).style("left",Math.min(e.clientX+12,window.innerWidth-350)+"px").style("top",(e.clientY+12)+"px");
+const hideTip=()=>tip.style("display","none");
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=n=>Number(n).toLocaleString();
+function setStatus(m,err){const s=document.getElementById("status");if(!m){s.style.display="none";return;}s.style.display="block";s.style.background=err?"#fdecea":"#eef3ff";s.style.borderColor=err?"#f5c2c0":"#c9d6ff";s.innerHTML=m;}
+
+async function loadData(){
+  setStatus("Loading data (this can take a few seconds)…");
+  await new Promise(r=>setTimeout(r,30));
+  const s64=window.__BLOB, CH=4*262144, parts=[];
+  for(let i=0;i<s64.length;i+=CH){const bin=atob(s64.slice(i,i+CH)); const u=new Uint8Array(bin.length); for(let k=0;k<bin.length;k++)u[k]=bin.charCodeAt(k); parts.push(u);}
+  window.__BLOB=null;
+  const st=new Blob(parts).stream().pipeThrough(new DecompressionStream("gzip"));
+  DATA=JSON.parse(await new Response(st).text());
+}
+
+let MCOL;
+function macroCol(id){
+  if(!MCOL){const ids=META.macro.map(d=>d.id).sort((a,b)=>a-b);
+    MCOL=d3.scaleOrdinal().domain(ids).range(d3.quantize(t=>d3.interpolateRainbow(t*0.92),ids.length).map((c,i)=>i%2?d3.color(c).darker(0.6)+"":c));}
+  return MCOL(id);
+}
+const hasD=id=>!!DATA.ego[id];
+const nbName=id=>(DATA.nb[id]&&DATA.nb[id][0])||(DATA.ego[id]&&DATA.ego[id][0])||String(id);
+const nbMic=id=>DATA.nb[id]?DATA.nb[id][1]:(DATA.ego[id]?DATA.ego[id][4]:-1);
+const topJ=c=>c&&c.j&&c.j[0]?c.j[0][0]:"";
+
+let _rz;
+window.addEventListener("resize",()=>{clearTimeout(_rz);_rz=setTimeout(()=>{if(document.getElementById("map").classList.contains("on")&&mapDone)renderMap();},200);});
+function show(v){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.v===v));
+  document.querySelectorAll(".view").forEach(x=>x.classList.toggle("on",x.id===v));
+  hideTip();
+  if(v==="map"){if(!mapDone)drawMap();else{const s=document.getElementById("msvg");if(s.clientWidth!==+s.dataset.w)renderMap();}}
+}
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>show(t.dataset.v));
+
+/* ---------- Network tab ---------- */
+const L={macro:"Macro",meso:"Meso",micro:"Micro"};
+let cur={lvl:"macro",id:null};
+function init(){
+  META=DATA.meta;
+  const fm=d3.select("#fmacro"); fm.append("option").attr("value","").text("All 27 large groups");
+  META.macro.slice().sort((a,b)=>a.id-b.id).forEach(m=>fm.append("option").attr("value",m.id).text(`Macro ${m.id} · ${fmt(m.n)} authors`));
+  fillMeso();
+  document.getElementById("fmacro").onchange=e=>{fillMeso();const v=e.target.value;if(v!=="")openComm("macro",+v,true);else resetComm();};
+  document.getElementById("fmeso").onchange=e=>{const v=e.target.value,mac=document.getElementById("fmacro").value;if(v!=="")openComm("meso",+v,true);else if(mac!=="")openComm("macro",+mac,true);};
+  document.getElementById("msort").onchange=renderMacros;
+  document.getElementById("mfilt").oninput=renderMacros;
+  document.getElementById("ecount").onchange=renderEgo;
+  document.getElementById("ecross").onchange=renderEgo;
+  document.getElementById("go").onclick=search;
+  document.getElementById("q").onkeydown=e=>{if(e.key==="Enter")search();};
+  document.querySelectorAll(".qcopy").forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(document.getElementById(b.dataset.q).textContent).then(()=>{b.textContent="Copied";setTimeout(()=>b.textContent="Copy SQL",1200);});});
+  showMacroOverview();
+  show("map");
+}
+function fillMeso(){
+  const mac=document.getElementById("fmacro").value, fs=d3.select("#fmeso"); fs.selectAll("*").remove();
+  fs.property("disabled",mac==="");
+  fs.append("option").attr("value","").text(mac===""?"Pick a large group first":"All sub-groups in this macro");
+  META.meso.filter(m=>mac!==""&&m.macro==+mac).sort((a,b)=>b.n-a.n).forEach(m=>fs.append("option").attr("value",m.id).text(`Meso ${m.id} · ${fmt(m.n)} authors`));
+}
+function renderList(){
+  const mac=document.getElementById("fmacro").value, mes=document.getElementById("fmeso").value;
+  const lv=mes!==""?"micro":mac!==""?"meso":"macro";
+  let a=META[lv].filter(c=>lv==="macro"||(lv==="meso"?c.macro==+mac:c.meso==+mes)).slice().sort((x,y)=>y.n-x.n);
+  document.getElementById("lhead").textContent=lv==="macro"?`All ${a.length} large groups (macro), biggest first`:lv==="meso"?`${a.length} sub-groups (meso) in Macro ${mac}`:`${a.length} small groups (micro) in Meso ${mes}`;
+  const mx=d3.max(a,c=>c.n)||1;
+  d3.select("#list").selectAll(".item").data(a,c=>lv+c.id).join("div").attr("class","item")
+    .classed("sel",c=>cur.lvl===lv&&cur.id===c.id).on("click",(e,c)=>openComm(lv,c.id,true))
+    .html(c=>`<div class="t">${L[lv]} ${c.id}</div><div class="s">${fmt(c.n)} authors · ${(100*c.n/META.total).toFixed(1)}%${topJ(c)?" · "+esc(topJ(c)):""}</div><div class="bar"><i style="width:${Math.max(2,100*c.n/mx)}%"></i></div>`);
+}
+function paneNet(){document.getElementById("macov").style.display="none";document.getElementById("netpane").style.display="";}
+function resetComm(){document.getElementById("fmacro").value="";fillMeso();showMacroOverview();}
+function showMacroOverview(){
+  document.getElementById("fmacro").value=""; fillMeso();
+  cur={lvl:"macro",id:null}; renderList();
+  document.getElementById("crumbs").innerHTML='<a onclick="resetComm()">All large groups</a>';
+  document.getElementById("netpane").style.display="none"; document.getElementById("macov").style.display="";
+  renderMacros();
+}
+function openComm(lv,id,keep){
+  const c=META[lv].find(x=>x.id===id); if(!c) return;
+  const fm=document.getElementById("fmacro"),fs=document.getElementById("fmeso");
+  if(lv==="macro"){fm.value=String(id);fillMeso();}
+  else if(lv==="meso"){fm.value=String(c.macro);fillMeso();fs.value=String(id);}
+  else {fm.value=String(c.macro);fillMeso();fs.value=String(c.meso);}
+  cur={lvl:lv,id}; renderList(); show("net"); paneNet();
+  const cr=[`<a onclick="resetComm()">All large groups</a>`];
+  if(lv!=="macro") cr.push(`<a onclick="openComm('macro',${c.macro})">Macro ${c.macro}</a>`);
+  if(lv==="micro") cr.push(`<a onclick="openComm('meso',${c.meso})">Meso ${c.meso}</a>`);
+  cr.push(`<b>${L[lv]} ${id}</b>`);
+  document.getElementById("crumbs").innerHTML=cr.join('<span class="sep">/</span>');
+  document.getElementById("cjr").textContent="Top journals: "+c.j.map(j=>`${j[0]} (${fmt(j[1])})`).join(" · ");
+  if(lv==="macro"){
+    const ms=META.micro.filter(m=>m.macro===id), nm=new Set(ms.map(m=>m.meso));
+    document.getElementById("cinfo").textContent=`Whole group: all ${ms.length} small groups (micro), ${fmt(c.n)} authors, in ${nm.size} sub-groups (meso). Bubble size = authors. Click a bubble to open that small group.`;
+    drawGrouped({
+      nodes:ms.map(m=>({id:m.id,label:`Micro ${m.id}`,size:m.n,grp:m.meso,
+        tip:`<b>Micro ${m.id}</b> · Meso ${m.meso}<br>${fmt(m.n)} authors<br>${esc(topJ(m))}`,click:()=>openComm("micro",m.id)})),
+      edges:((DATA.mnet||{})[id]||[]).map(e=>[e[0],e[1],e[2],0]),
+      edgeTip:e=>`Micro ${e[0]} — Micro ${e[1]}<br>${e[2]}× the citation expected for their size`,
+      groupName:k=>`Meso ${k}`, groupClick:k=>openComm("meso",k), groupBy:"sub-group (meso)", unit:"small groups"});
+    d3.select("#ctab").html(`<tr><th>Small group</th><th>Sub-group</th><th>Authors</th><th>Top journal</th></tr>`+ms.sort((a,b)=>b.n-a.n).map(m=>`<tr><td><a onclick="openComm('micro',${m.id})">Micro ${m.id}</a></td><td><a onclick="openComm('meso',${m.meso})">Meso ${m.meso}</a></td><td>${fmt(m.n)}</td><td>${esc(topJ(m))}</td></tr>`).join(""));
+    return;
+  }
+  const g=DATA.comm2[`${lv}_${id}`]||{n:[],e:[]};
+  let grp={}, groupName=null, groupClick=null, groupBy;
+  if(lv==="meso"){
+    g.n.forEach(d=>grp[d[0]]=d[4]??-2); groupName=k=>k<0?"Other":`Micro ${k}`; groupClick=k=>openComm("micro",k); groupBy="small group (micro)";
+    const nsub=META.micro.filter(m=>m.meso===id).length, cov=new Set(g.n.map(d=>d[4])).size;
+    document.getElementById("cinfo").textContent=`Showing the ${g.n.length} most connected of ${fmt(c.n)} authors, covering ${cov} of ${nsub} small groups (the top 2 of each, then the strongest overall).`;
+  } else {
+    grp=louvain(g.n.map(d=>d[0]),g.e); groupBy="clustering these authors' links";
+    document.getElementById("cinfo").textContent=`Showing the ${g.n.length} most connected of ${fmt(c.n)} authors, grouped by who links to whom.`;
+  }
+  drawGrouped({
+    nodes:g.n.map(d=>({id:d[0],label:d[1],size:d[2],grp:grp[d[0]],dis:!hasD(d[0]),
+      tip:`<b>${esc(d[1])}</b><br>strength ${d[2]} · ${d[3]} links in this group${hasD(d[0])?"":"<br><span style='color:#888'>No details available</span>"}`,click:()=>openAuthor(d[0])})),
+    edges:g.e, edgeTip:null, groupName, groupClick, groupBy, unit:"authors", authors:true});
+  d3.select("#ctab").html(`<tr><th>#</th><th>Author</th><th>Strength in group</th><th>Links in group</th></tr>`+g.n.map((n,i)=>`<tr><td>${i+1}</td><td>${hasD(n[0])?`<a onclick="openAuthor(${n[0]})">${esc(n[1])}</a>`:`<span style="color:#aaa" title="No details available">${esc(n[1])}</span>`}</td><td>${n[2]}</td><td>${n[3]}</td></tr>`).join(""));
+}
+function goComm(lv,id){hideTip();openComm(lv,id);window.scrollTo(0,0);const s=document.querySelector("#list .item.sel");if(s)s.scrollIntoView({block:"center"});}
+
+function louvain(ids,E){
+  const n=ids.length, ix=new Map(ids.map((d,i)=>[d,i])), adj=ids.map(()=>new Map()); let m2=0;
+  E.forEach(([a,b,w])=>{const i=ix.get(a),j=ix.get(b); if(i==null||j==null||i===j) return;
+    adj[i].set(j,(adj[i].get(j)||0)+w); adj[j].set(i,(adj[j].get(i)||0)+w); m2+=2*w;});
+  const k=adj.map(m=>d3.sum([...m.values()])), c=ids.map((d,i)=>i), tot=k.slice();
+  for(let it=0;it<30;it++){ let mv=0;
+    for(let i=0;i<n;i++){ if(!k[i]) continue; const ci=c[i]; tot[ci]-=k[i]; const wc=new Map();
+      adj[i].forEach((w,j)=>wc.set(c[j],(wc.get(c[j])||0)+w));
+      let best=ci, bg=(wc.get(ci)||0)-tot[ci]*k[i]/m2;
+      wc.forEach((w,cc)=>{const gn=w-tot[cc]*k[i]/m2; if(gn>bg+1e-12){bg=gn;best=cc;}});
+      c[i]=best; tot[best]+=k[i]; if(best!==ci) mv++; }
+    if(!mv) break; }
+  const out={}; ids.forEach((d,i)=>out[d]=k[i]?c[i]:-1); return out;
+}
+const PAL=["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#86bcb6","#d37295","#a0cbe8","#8cd17d","#f1ce63","#499894","#e6a0c4","#79706e","#b6992d"];
+function drawGrouped(S){
+  const svg=d3.select("#csvg"); svg.selectAll("*").remove(); d3.select("#cgroups").html("");
+  if(!S.nodes.length) return;
+  const N=S.nodes, many=N.length>120;
+  svg.attr("height",many?900:820);
+  const W=svg.node().clientWidth||900, H=+svg.attr("height"), R=Math.max(150,Math.min(W,H)/2-(S.authors?135:95)), cx=W/2, cy=H/2;
+  let groups=d3.groups(N,d=>d.grp);
+  if(S.authors&&groups.length>14){const small=new Set(groups.filter(([k,a])=>a.length<2).map(([k])=>k)); N.forEach(d=>{if(small.has(d.grp))d.grp=-2;}); groups=d3.groups(N,d=>d.grp);}
+  groups=groups.map(([k,a])=>({k,a:a.sort((x,y)=>y.size-x.size),s:d3.sum(a,d=>d.size)})).sort((a,b)=>(a.k<0)-(b.k<0)||b.s-a.s);
+  groups.forEach(G=>G.name=G.k===-1?"Unlinked":G.k===-2?"Other":S.groupName?S.groupName(G.k):`Group ${groups.filter(x=>x.k>=0).indexOf(G)+1}`);
+  const root=d3.hierarchy({children:groups.map(G=>({G,children:G.a.map(d=>({d}))}))});
+  d3.cluster().size([2*Math.PI,R]).separation((a,b)=>a.parent===b.parent?1:(groups.length>30?1.6:2.6))(root);
+  root.children.forEach(c=>c.y=R*0.45);
+  const leaf=new Map(root.leaves().map(l=>[l.data.d.id,l]));
+  const gcol=G=>G.k<0?"#bbb":PAL[groups.indexOf(G)%PAL.length];
+  const gOf=new Map(); groups.forEach(G=>G.a.forEach(d=>gOf.set(d.id,G)));
+  const E=S.edges.filter(e=>leaf.has(e[0])&&leaf.has(e[1])).sort((a,b)=>a[2]-b[2]);
+  const ws=d3.scaleSqrt().domain([0,d3.max(E,e=>e[2])||1]).range([0.5,many?4:6]);
+  const rs=d3.scaleSqrt().domain([0,d3.max(N,d=>d.size)||1]).range(S.authors?[3,10]:[2.5,13]);
+  const pt=(a,r)=>[r*Math.sin(a),-r*Math.cos(a)];
+  const G0=svg.append("g").attr("transform",`translate(${cx},${cy})`);
+  const arc=d3.arc().innerRadius(R+14).outerRadius(R+20);
+  G0.append("g").selectAll("path").data(root.children).join("path")
+    .attr("d",c=>{const xs=c.leaves().map(l=>l.x);return arc({startAngle:d3.min(xs)-0.02,endAngle:d3.max(xs)+0.02});})
+    .attr("fill",c=>gcol(c.data.G)).style("cursor",c=>S.groupClick&&c.data.G.k>=0?"pointer":"default")
+    .on("mouseover",(e,c)=>hl(new Set(c.data.G.a.map(d=>d.id))))
+    .on("mousemove",(e,c)=>showTip(e,`<b>${esc(c.data.G.name)}</b><br>${c.data.G.a.length} ${S.unit}${S.groupClick&&c.data.G.k>=0?"<br>Click to open":""}`))
+    .on("mouseout",()=>{hl(null);hideTip();})
+    .on("click",(e,c)=>{if(S.groupClick&&c.data.G.k>=0){hideTip();S.groupClick(c.data.G.k);}});
+  const line=d3.lineRadial().curve(d3.curveBundle.beta(0.85)).radius(d=>d.y).angle(d=>d.x);
+  const op=many?.25:.4;
+  const ed=G0.append("g").attr("fill","none").selectAll("path").data(E).join("path")
+    .attr("d",e=>line(leaf.get(e[0]).path(leaf.get(e[1]))))
+    .attr("stroke",e=>e[3]?TEAL:BLUE).attr("stroke-width",e=>ws(e[2])).attr("stroke-opacity",op)
+    .on("mousemove",(ev,e)=>showTip(ev,S.edgeTip?S.edgeTip(e):`${esc(leaf.get(e[0]).data.d.label)} — ${esc(leaf.get(e[1]).data.d.label)}<br>weight ${e[2]}${e[3]?" · coauthors":""}`)).on("mouseout",hideTip);
+  const lblSet=new Set(N.slice().sort((a,b)=>b.size-a.size).slice(0,S.authors?150:70).map(d=>d.id));
+  let nd,tx;
+  function hl(set){
+    if(!set){ed.attr("stroke-opacity",op);nd.style("opacity",1);tx.style("display",l=>lblSet.has(l.data.d.id)?null:"none");return;}
+    ed.attr("stroke-opacity",e=>set.has(e[0])||set.has(e[1])?.95:.03);
+    const on=new Set(set); E.forEach(e=>{if(set.has(e[0])||set.has(e[1])){on.add(e[0]);on.add(e[1]);}});
+    nd.style("opacity",l=>on.has(l.data.d.id)?1:.2); tx.style("display",l=>on.has(l.data.d.id)||lblSet.has(l.data.d.id)?null:"none");
+  }
+  nd=G0.append("g").selectAll("g").data(root.leaves()).join("g")
+    .attr("transform",l=>`translate(${pt(l.x,l.y)})`).style("cursor",l=>l.data.d.dis?"default":"pointer")
+    .on("click",(ev,l)=>{if(!l.data.d.dis){hideTip();l.data.d.click();}})
+    .on("mouseover",(ev,l)=>hl(new Set([l.data.d.id])))
+    .on("mousemove",(ev,l)=>showTip(ev,l.data.d.tip+`<br><span style="color:#888">${esc(gOf.get(l.data.d.id).name)}</span>`))
+    .on("mouseout",()=>{hl(null);hideTip();});
+  nd.append("circle").attr("r",l=>rs(l.data.d.size)).attr("fill",l=>gcol(gOf.get(l.data.d.id))).attr("fill-opacity",l=>l.data.d.dis?.3:1).attr("stroke","#fff").attr("stroke-width",1);
+  tx=nd.append("text").text(l=>l.data.d.label).attr("dy","0.32em").style("fill",l=>l.data.d.dis?"#aaa":null)
+    .attr("transform",l=>{const deg=l.x*180/Math.PI-90, off=R+24-l.y; return `rotate(${deg}) translate(${off},0)${l.x>Math.PI?" rotate(180)":""}`;})
+    .attr("text-anchor",l=>l.x>Math.PI?"end":"start").style("font-size",N.length>80?"8px":"10px")
+    .style("display",l=>lblSet.has(l.data.d.id)?null:"none");
+  const shown=groups.slice(0,24);
+  d3.select("#cgroups").html(`<span class="muted">${groups.length} groups, by ${S.groupBy}:</span> `+
+      shown.map((G,i)=>`<span class="gchip" data-i="${i}" style="cursor:${S.groupClick&&G.k>=0?"pointer":"default"}"><i style="background:${gcol(G)}"></i>${esc(G.name)} <span class="muted">(${G.a.length})</span></span>`).join("")+
+      (groups.length>shown.length?` <span class="muted">+${groups.length-shown.length} smaller groups</span>`:""));
+  d3.select("#cgroups").selectAll(".gchip").on("mouseover",function(){hl(new Set(groups[+this.dataset.i].a.map(d=>d.id)));})
+    .on("mouseout",()=>hl(null)).on("click",function(){const G=groups[+this.dataset.i];if(S.groupClick&&G.k>=0)S.groupClick(G.k);});
+}
+
+/* ---------- Macro overview ---------- */
+function macroRows(){
+  const S=DATA.mstats, links={};
+  DATA.mall.forEach(([a,b,s])=>{(links[a]=links[a]||[]).push([b,s]);(links[b]=links[b]||[]).push([a,s]);});
+  return META.macro.map(m=>({id:m.id,n:m.n,j:m.j,np:(S[m.id]||{}).np||0,intra:(S[m.id]||{}).intra||0,
+    nmeso:META.meso.filter(x=>x.macro===m.id).length,nmicro:META.micro.filter(x=>x.macro===m.id).length,
+    top:(DATA.mtop[m.id]||[]),lk:(links[m.id]||[]).sort((x,y)=>y[1]-x[1])}));
+}
+function renderMacros(){
+  const so=document.getElementById("msort").value, f=document.getElementById("mfilt").value.trim().toLowerCase();
+  let rows=macroRows();
+  if(f) rows=rows.filter(r=>r.j.some(j=>j[0].toLowerCase().includes(f)));
+  rows.sort((a,b)=>so==="id"?a.id-b.id:b[so]-a[so]);
+  document.getElementById("msum").textContent=`${rows.length} of ${META.macro.length} groups · ${fmt(d3.sum(rows,r=>r.n))} authors`;
+  const svg=d3.select("#mbar"); svg.selectAll("*").remove();
+  const W=svg.node().clientWidth||1000,H=230,m={l:44,r:10,t:10,b:40};
+  const x=d3.scaleBand().domain(rows.map(r=>r.id)).range([m.l,W-m.r]).padding(.15);
+  const key=so==="id"?"n":so, y=d3.scaleLinear().domain([0,d3.max(rows,r=>r[key])||1]).nice().range([H-m.b,m.t]);
+  svg.append("g").attr("transform",`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(key==="intra"?d=>d+"%":d3.format("~s")));
+  svg.append("g").attr("transform",`translate(0,${H-m.b})`).call(d3.axisBottom(x).tickFormat(d=>d)).selectAll("text").style("font-size","10px");
+  svg.append("text").attr("x",m.l).attr("y",H-6).style("font-size","11px").attr("fill","#666").text(`Macro number · bar = ${key==="np"?"papers":key==="intra"?"internal citation share":"authors"}`);
+  svg.append("g").selectAll("rect").data(rows).join("rect").attr("x",r=>x(r.id)).attr("width",x.bandwidth())
+    .attr("y",r=>y(r[key])).attr("height",r=>y(0)-y(r[key])).attr("fill",r=>macroCol(r.id)).style("cursor","pointer")
+    .on("mousemove",(e,r)=>showTip(e,`<b>Macro ${r.id}</b> · ${esc(r.j[0]?r.j[0][0]:"")}<br>${fmt(r.n)} authors · ${fmt(r.np)} papers<br>${r.intra}% of citation stays inside`))
+    .on("mouseout",hideTip).on("click",(e,r)=>flashCard(r.id));
+  d3.select("#mcards").selectAll(".mc").data(rows,r=>r.id).join("div").attr("class","mc").attr("id",r=>"mc"+r.id).html(r=>`
+    <h3><i style="background:${macroCol(r.id)}"></i>Macro ${r.id}</h3>
+    <div class="sub">${esc(r.j[0]?r.j[0][0]:"No journal data")}</div>
+    <div class="stats">
+      <div><b>${fmt(r.n)}</b><small>authors · ${(100*r.n/META.total).toFixed(1)}%</small></div>
+      <div><b>${fmt(r.np)}</b><small>papers</small></div>
+      <div><b>${r.intra}%</b><small>citation kept inside</small></div>
+      <div><b>${r.nmeso}</b><small>sub-groups (meso)</small></div>
+      <div><b>${r.nmicro}</b><small>small groups (micro)</small></div>
+      <div><b>${(r.np/Math.max(r.n,1)).toFixed(2)}</b><small>papers per author</small></div>
+    </div>
+    <div class="sec">Top journals</div>
+    <div>${r.j.map(j=>`${esc(j[0])} <span class="muted">(${fmt(j[1])})</span>`).join("<br>")}</div>
+    <div class="sec">Most connected authors</div>
+    <div>${r.top.map(i=>hasD(i)?`<a onclick="openAuthor(${i})">${esc(nbName(i))}</a>`:esc(nbName(i))).join(" · ")||'<span class="muted">none</span>'}</div>
+    <div class="sec">Most linked groups (size-adjusted)</div>
+    <div>${r.lk.slice(0,5).map(t=>`<a onclick="flashCard(${t[0]})">Macro ${t[0]}</a> <span class="muted">${t[1]}×</span>`).join(" · ")}</div>
+    <div class="btns"><button class="p" onclick="openComm('macro',${r.id})">Open network</button><button onclick="show('map')">Show on map</button></div>`);
+}
+function flashCard(id){
+  let el=document.getElementById("mc"+id);
+  if(!el){document.getElementById("mfilt").value="";renderMacros();el=document.getElementById("mc"+id);}
+  if(!el) return;
+  el.scrollIntoView({behavior:"smooth",block:"center"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),1500);
+}
+
+/* ---------- Details ---------- */
+const toks=s=>(String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").match(/[a-z0-9]+/g)||[]);
+function search(){
+  const t=toks(document.getElementById("q").value), out=d3.select("#res"); if(!t.length){out.html("");return;}
+  const hits=[]; for(const [k,v] of Object.entries(DATA.ego)){const nt=toks(v[0]); if(t.every(q=>nt.some(x=>x.startsWith(q)))){hits.push([+k,v]); if(hits.length>=25) break;}}
+  if(hits.length===1){out.html("");return openAuthor(hits[0][0]);}
+  out.html(hits.length?hits.map(([k,v])=>`<div><a onclick="openAuthor(${k});document.getElementById('res').innerHTML=''">${esc(v[0])}</a> <small class="muted">· Micro ${v[4]} · ${v[5]} links</small></div>`).join(""):'<div class="muted">No match among the authors with a details page.</div>');
+}
+let EGO=null;
+function openAuthor(i){
+  const v=DATA.ego[i]; if(!v) return;
+  show("det");
+  const Lk=DATA.e50[i]||[[],[],""];
+  EGO={i,n:v[0],a:v[1],ma:v[2],me:v[3],mi:v[4],d:v[5],np:v[6],p:v[7],
+    l:Lk[0].map((id,k)=>({id,w:Lk[1][k],co:Lk[2][k]==="1"?1:0,nm:nbName(id),mi:nbMic(id)}))};
+  renderEgo();
+  const a=EGO, p=a.p||[];
+  document.getElementById("side").innerHTML=`<h2>${esc(a.n)}</h2><div style="font-size:17px">AIRAK AuthorId ${a.a}</div>
+   <span class="chip l" onclick="openComm('macro',${a.ma})">Macro ${a.ma}</span><span class="chip l" onclick="openComm('meso',${a.me})">Meso ${a.me}</span><span class="chip l" onclick="openComm('micro',${a.mi})">Micro ${a.mi}</span><span class="chip">${fmt(a.d)} links</span><span class="chip">${a.np} papers</span>
+   <div class="sech">PAPERS${a.np>p.length?` (top ${p.length} of ${a.np})`:""}</div>
+   ${p.map(x=>`<div class="paper"><b>${esc(x[0]||"Untitled")}</b><br><small>${x[1]||""}${x[2]?" · "+esc(x[2]):""} · role weight ${x[4]}</small>${x[3]?`<br><a href="https://doi.org/${esc(x[3])}" target="_blank">${esc(x[3])}</a>`:""}</div>`).join("")||'<div class="muted">No papers recorded.</div>'}
+   <div class="sech">STRONGEST ${a.l.length} LINKS</div>
+   <div style="max-height:520px;overflow-y:auto"><table><tr><th>#</th><th>Author</th><th>Micro</th><th>Weight</th></tr>
+   ${a.l.map((x,k)=>`<tr><td>${k+1}</td><td>${hasD(x.id)?`<a onclick="openAuthor(${x.id})">${esc(x.nm)}</a>`:`<span style="color:#aaa" title="No details available">${esc(x.nm)}</span>`}${x.co?' <span title="also coauthors" style="color:#2a9d8f">●</span>':""}</td><td>${x.mi>=0?`<a onclick="openComm('micro',${x.mi})">${x.mi}</a>`:"–"}</td><td>${x.w}</td></tr>`).join("")}</table></div>`;
+  window.scrollTo(0,0);
+}
+function renderEgo(){
+  const a=EGO; if(!a) return;
+  const K=+document.getElementById("ecount").value, inner=a.l.slice(0,K), withX=document.getElementById("ecross").checked;
+  document.getElementById("einfo").textContent=`${a.n} · showing ${inner.length} of ${fmt(a.d)} links, grouped by the linked person's small group (micro)`;
+  const svg=d3.select("#esvg"); svg.selectAll("*").remove(); d3.select("#egroups").html("");
+  if(!inner.length){svg.append("text").attr("x",20).attr("y",30).style("font-size","14px").text("No links in this network.");return;}
+  const W=svg.node().clientWidth||800,H=+svg.attr("height"),R=Math.max(150,Math.min(W,H)/2-130),cx=W/2,cy=H/2;
+  let groups=d3.groups(inner,d=>d.mi);
+  if(groups.length>16){const small=new Set(groups.filter(([k,v])=>v.length<2).map(([k])=>k)); groups=d3.groups(inner,d=>small.has(d.mi)?-2:d.mi);}
+  groups=groups.map(([k,v])=>({k,a:v,s:d3.sum(v,d=>d.w)})).sort((x,y)=>(x.k===-2)-(y.k===-2)||(y.k===a.mi)-(x.k===a.mi)||y.s-x.s);
+  groups.forEach(G=>G.name=G.k===-2?"Other micros":G.k===a.mi?`Micro ${G.k} (own)`:`Micro ${G.k}`);
+  const root=d3.hierarchy({children:groups.map(G=>({G,children:G.a.map(d=>({d}))}))});
+  d3.cluster().size([2*Math.PI,R]).separation((p,q)=>p.parent===q.parent?1:2.2)(root);
+  root.children.forEach(c=>c.y=R*0.5);
+  const leaf=new Map(root.leaves().map(l=>[l.data.d.id,l]));
+  const gcol=G=>G.k===-2?"#bbb":PAL[groups.indexOf(G)%PAL.length];
+  const gOf=new Map(); groups.forEach(G=>G.a.forEach(d=>gOf.set(d.id,G)));
+  const pt=(t,r)=>[r*Math.sin(t),-r*Math.cos(t)];
+  const G0=svg.append("g").attr("transform",`translate(${cx},${cy})`);
+  const arc=d3.arc().innerRadius(R+12).outerRadius(R+18);
+  G0.append("g").selectAll("path").data(root.children).join("path")
+    .attr("d",c=>{const xs=c.leaves().map(l=>l.x);return arc({startAngle:d3.min(xs)-0.025,endAngle:d3.max(xs)+0.025});})
+    .attr("fill",c=>gcol(c.data.G)).style("cursor",c=>c.data.G.k>=0?"pointer":"default")
+    .on("mouseover",(e,c)=>hl(new Set(c.data.G.a.map(d=>d.id))))
+    .on("mousemove",(e,c)=>showTip(e,`<b>${esc(c.data.G.name)}</b><br>${c.data.G.a.length} linked people${c.data.G.k>=0?"<br>Click to open":""}`))
+    .on("mouseout",()=>{hl(null);hideTip();}).on("click",(e,c)=>{if(c.data.G.k>=0){hideTip();openComm("micro",c.data.G.k);}});
+  const X=[];
+  if(withX){const seen=new Set();
+    inner.forEach(x=>{const Lk=DATA.e50[x.id]; if(!Lk) return;
+      Lk[0].forEach((j,k)=>{if(j===a.i||!leaf.has(j)) return; const key=x.id<j?x.id+"_"+j:j+"_"+x.id; if(seen.has(key)) return; seen.add(key);
+        X.push({s:x.id,t:j,w:Lk[1][k],co:Lk[2][k]==="1"});});});}
+  const line=d3.lineRadial().curve(d3.curveBundle.beta(0.85)).radius(d=>d.y).angle(d=>d.x);
+  const wmax=d3.max(inner,d=>d.w)||1, ws=d3.scaleSqrt().domain([0,wmax]).range([0.6,7]);
+  const xg=G0.append("g").attr("fill","none").selectAll("path").data(X).join("path")
+    .attr("d",e=>line(leaf.get(e.s).path(leaf.get(e.t)))).attr("stroke","#999").attr("stroke-width",e=>Math.min(3,ws(e.w)*0.6)).attr("stroke-opacity",.22)
+    .on("mousemove",(ev,e)=>showTip(ev,`${esc(nbName(e.s))} — ${esc(nbName(e.t))}<br>weight ${e.w}${e.co?" · coauthors":""}`)).on("mouseout",hideTip);
+  const sp=G0.append("g").attr("fill","none").selectAll("path").data(inner.slice().reverse()).join("path")
+    .attr("d",d=>{const l=leaf.get(d.id);return line([{x:l.x,y:0},{x:l.x,y:l.parent.y*0.6},l.parent,l]);})
+    .attr("stroke",d=>d.co?TEAL:BLUE).attr("stroke-width",d=>ws(d.w)).attr("stroke-opacity",.5)
+    .on("mousemove",(ev,d)=>showTip(ev,`${esc(a.n)} — ${esc(d.nm)}<br>weight ${d.w}${d.co?" · coauthors":""}`)).on("mouseout",hideTip);
+  let nd;
+  function hl(set){
+    if(!set){sp.attr("stroke-opacity",.5);xg.attr("stroke-opacity",.22);nd.style("opacity",1);return;}
+    sp.attr("stroke-opacity",d=>set.has(d.id)?.95:.05);
+    xg.attr("stroke-opacity",e=>set.has(e.s)||set.has(e.t)?.8:.03);
+    const on=new Set(set); X.forEach(e=>{if(set.has(e.s)||set.has(e.t)){on.add(e.s);on.add(e.t);}});
+    nd.style("opacity",l=>on.has(l.data.d.id)?1:.2);
+  }
+  nd=G0.append("g").selectAll("g").data(root.leaves()).join("g").attr("transform",l=>`translate(${pt(l.x,l.y)})`)
+    .style("cursor",l=>hasD(l.data.d.id)?"pointer":"default")
+    .on("click",(ev,l)=>{if(hasD(l.data.d.id)){hideTip();openAuthor(l.data.d.id);}})
+    .on("mouseover",(ev,l)=>hl(new Set([l.data.d.id])))
+    .on("mousemove",(ev,l)=>{const d=l.data.d;showTip(ev,`<b>${esc(d.nm)}</b><br>Micro ${d.mi} · weight ${d.w}${d.co?" · coauthor":""}<br>${hasD(d.id)?"Click to open":"<span style='color:#888'>No details available</span>"}`);})
+    .on("mouseout",()=>{hl(null);hideTip();});
+  const rs=d3.scaleSqrt().domain([0,wmax]).range([3,9]);
+  nd.append("circle").attr("r",l=>rs(l.data.d.w)).attr("fill",l=>gcol(gOf.get(l.data.d.id))).attr("fill-opacity",l=>hasD(l.data.d.id)?1:.3).attr("stroke","#fff").attr("stroke-width",1.2);
+  nd.append("text").text(l=>l.data.d.nm).attr("dy","0.32em").style("font-size","10px").style("fill",l=>hasD(l.data.d.id)?"#333":"#aaa")
+    .attr("transform",l=>{const deg=l.x*180/Math.PI-90,off=R+22-l.y;return `rotate(${deg}) translate(${off},0)${l.x>Math.PI?" rotate(180)":""}`;})
+    .attr("text-anchor",l=>l.x>Math.PI?"end":"start");
+  const c0=G0.append("g");
+  c0.append("circle").attr("r",12).attr("fill","#8b6cf0").attr("stroke","#fff").attr("stroke-width",2);
+  c0.append("text").text(a.n).attr("y",-18).attr("text-anchor","middle").style("font-weight","bold").style("font-size","12px").style("paint-order","stroke").style("stroke","#fff").style("stroke-width","3px");
+  d3.select("#egroups").html(`<span class="muted">${groups.length} groups:</span> `+groups.slice(0,20).map((G,k)=>`<span class="gchip" data-k="${k}" style="cursor:${G.k>=0?"pointer":"default"}"><i style="background:${gcol(G)}"></i>${esc(G.name)} <span class="muted">(${G.a.length})</span></span>`).join("")+(groups.length>20?` <span class="muted">+${groups.length-20} more</span>`:""));
+  d3.select("#egroups").selectAll(".gchip").on("mouseover",function(){hl(new Set(groups[+this.dataset.k].a.map(d=>d.id)));}).on("mouseout",()=>hl(null))
+    .on("click",function(){const G=groups[+this.dataset.k];if(G.k>=0)openComm("micro",G.k);});
+}
+
+/* ---------- Community map ---------- */
+let mapDone=false;
+const THR=0.9, LWK=2.2;
+function drawMap(){
+  if(mapDone) return; mapDone=true;
+  document.getElementById("mlinks").onchange=renderMap;
+  renderMap();
+}
+function renderMap(){
+  const svg=d3.select("#msvg"); svg.selectAll("*").remove();
+  const H=Math.max(520,window.innerHeight-svg.node().getBoundingClientRect().top-24); svg.attr("height",H);
+  const W=svg.node().clientWidth||1000, m=20; svg.node().dataset.w=W;
+  const N=META.macro.map(c=>({id:c.id,n:c.n,j:topJ(c),x:DATA.mpos[c.id][0],y:DATA.mpos[c.id][1]}));
+  const RMAX=Math.min(W,H)*0.085, PAD=m+RMAX;
+  const x=d3.scaleLinear().domain(d3.extent(N,d=>d.x)).range([PAD,W-PAD]), y=d3.scaleLinear().domain(d3.extent(N,d=>d.y)).range([H-PAD,PAD]);
+  const r=d3.scaleSqrt().domain([0,d3.max(N,d=>d.n)]).range([6,RMAX]);
+  const g=svg.append("g");
+  const zm=d3.zoom().scaleExtent([0.5,12]).clickDistance(6)
+    .filter(e=>(e.type==="mousedown"||e.type==="touchstart"||e.type==="pointerdown")&&!(e.target&&e.target.closest&&e.target.closest(".mb")))
+    .on("start",()=>svg.style("cursor","grabbing")).on("end",()=>svg.style("cursor","grab"))
+    .on("zoom",e=>g.attr("transform",e.transform));
+  svg.call(zm).on("wheel.zoom",null).on("dblclick.zoom",null);
+  document.getElementById("zin").onclick=()=>svg.transition().duration(250).call(zm.scaleBy,1.5);
+  document.getElementById("zout").onclick=()=>svg.transition().duration(250).call(zm.scaleBy,1/1.5);
+  document.getElementById("zfit").onclick=()=>svg.transition().duration(250).call(zm.transform,d3.zoomIdentity);
+  const byId=new Map(N.map(d=>[d.id,d]));
+  const AL=DATA.mall.filter(e=>byId.has(e[0])&&byId.has(e[1])).map(e=>({a:byId.get(e[0]),b:byId.get(e[1]),s:e[2]})).sort((p,q)=>p.s-q.s);
+  const T3=new Map(); N.forEach(d=>T3.set(d.id,new Set(AL.filter(e=>e.a===d||e.b===d).sort((p,q)=>q.s-p.s).slice(0,3))));
+  AL.forEach(e=>{e.top=T3.get(e.a.id).has(e)||T3.get(e.b.id).has(e);});
+  const keep=e=>e.s>THR||e.top;
+  const curve=e=>{const x1=x(e.a.x),y1=y(e.a.y),x2=x(e.b.x),y2=y(e.b.y),dx=x2-x1,dy=y2-y1,k=0.22;return `M${x1},${y1}Q${(x1+x2)/2-dy*k},${(y1+y2)/2+dx*k} ${x2},${y2}`;};
+  const lw=s=>LWK*s;
+  const on=document.getElementById("mlinks").checked, D=on?AL.filter(keep):[];
+  const pl=g.append("g").attr("fill","none").selectAll("path").data(D).join("path").attr("d",curve)
+    .attr("stroke","#777").attr("stroke-width",e=>lw(e.s)).attr("stroke-opacity",.55).attr("stroke-linecap","round")
+    .attr("stroke-dasharray",e=>e.s>THR?null:`0.1 ${lw(e.s)+5}`)
+    .on("mousemove",(ev,e)=>showTip(ev,`<b>Macro ${e.a.id} — Macro ${e.b.id}</b><br>${e.s.toFixed(2)}× the citation expected for their size${e.s>THR?"":"<br><span style='color:#888'>Top-3 neighbor link (below 0.9×)</span>"}`))
+    .on("mouseout",hideTip);
+  const ci=g.append("g").selectAll("circle").data(N.slice().sort((a,b)=>b.n-a.n)).join("circle").attr("class","mb")
+    .attr("cx",d=>x(d.x)).attr("cy",d=>y(d.y)).attr("r",d=>r(d.n)).attr("fill",d=>macroCol(d.id)).attr("fill-opacity",.72).attr("stroke","#fff").style("cursor","pointer")
+    .on("mouseover",(e,d)=>{
+      const nb=new Set([d.id]); D.forEach(l=>{if(l.a===d)nb.add(l.b.id);if(l.b===d)nb.add(l.a.id);});
+      pl.attr("stroke-opacity",l=>l.a===d||l.b===d?.85:.05).filter(l=>l.a===d||l.b===d).raise();
+      ci.attr("fill-opacity",o=>nb.has(o.id)?.9:.25);})
+    .on("mousemove",(e,d)=>showTip(e,`<b>Macro ${d.id}</b><br>${fmt(d.n)} authors<br>Top journal: ${esc(d.j)}`))
+    .on("mouseout",()=>{pl.attr("stroke-opacity",.55);ci.attr("fill-opacity",.72);hideTip();})
+    .on("click",(e,d)=>{e.stopPropagation();goComm("macro",d.id);});
+}
+
+window.addEventListener("error",e=>setStatus("Something went wrong: "+esc(e.message)+". Please send a screenshot of this message.",true));
+window.addEventListener("unhandledrejection",e=>setStatus("Something went wrong: "+esc(e.reason&&e.reason.message||e.reason)+". Please send a screenshot of this message.",true));
+loadData().then(()=>{setStatus("Drawing…");return new Promise(r=>setTimeout(r,20));}).then(init).then(()=>setStatus(null))
+  .catch(e=>setStatus("Data failed to load: "+esc(e&&e.message||e)+". Try a hard refresh (Ctrl+Shift+R).",true));
+</script>
+</body>
+</html>

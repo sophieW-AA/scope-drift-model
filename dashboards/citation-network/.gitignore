@@ -1,0 +1,6 @@
+# Built page and exported data contain researcher names and IDs: never commit them
+cn/
+*.part
+*.gz
+index.html
+page_nodata.html
