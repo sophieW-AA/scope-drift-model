@@ -64,6 +64,8 @@ svg text{font-size:9px;fill:#333;pointer-events:none}
 .mc button{padding:6px 12px;border:1px solid #0b3fd9;background:#fff;color:#0b3fd9;border-radius:5px;cursor:pointer;font-size:13px}
 .mc button.p{background:#0b3fd9;color:#fff}
 .mc.flash{box-shadow:0 0 0 3px #d79a1e}
+.nbar{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid #eef0f3;font-size:13px;color:#555}.nbar select{margin-left:6px;padding:7px;font-size:14px;border:1px solid #c8ccd4;border-radius:5px;min-width:220px}
+.hov{position:absolute;top:10px;left:24px;font-size:14px;color:#888;background:rgba(255,255,255,.9);padding:4px 8px;border-radius:5px;pointer-events:none}.hov b{color:#0a2a8a}
 .zb{width:34px;height:34px;font-size:20px;line-height:1;border:1px solid #cfd4dc;background:#fff;border-radius:6px;cursor:pointer;color:#0a2a8a;box-shadow:0 1px 3px rgba(0,0,0,.08)}.zb:hover{background:#f0f3fb}
 .dh{margin:20px 0 8px;font-size:17px;color:#0a2a8a}
 .qcard{border:1px solid #e3e5ea;border-radius:8px;padding:10px 12px;margin:10px 0;background:#fff}
@@ -117,29 +119,16 @@ svg text{font-size:9px;fill:#333;pointer-events:none}
 </div>
 
 <div class="view" id="net">
-  <div class="crumbs" id="crumbs"></div>
-  <div class="cols">
-    <div class="left">
-      <div class="filters">
-        <div class="flab">Large group (macro)</div>
-        <select id="fmacro"></select>
-        <div class="flab">Sub-group (meso)</div>
-        <select id="fmeso"></select>
-        <div class="fhelp">Large groups split into sub-groups, which split into small groups.</div>
-        <div class="lhead" id="lhead"></div>
-      </div>
-      <div class="list" id="list"></div>
-    </div>
-    <div class="right">
-      <div id="netpane">
-        <div class="info" id="cinfo"></div>
-        <div class="muted" id="cjr" style="font-size:13px"></div>
-        <div id="cgroups" style="font-size:13px;margin:4px 0"></div>
-        <svg id="csvg" width="100%" height="820"></svg>
-        <div class="legend"><i style="background:#0b3fd9"></i>Citation only &nbsp; <i style="background:#2a9d8f"></i>Also coauthors &nbsp; · Thickness = connection weight · Faded people have no details page</div>
-        <details style="margin-top:10px"><summary style="cursor:pointer;color:#0b3fd9">Show as a table</summary><table id="ctab"></table></details>
-      </div>
-    </div>
+  <div class="nbar">
+    <label>Large group (macro) <select id="fmacro"></select></label>
+    <label>Sub-group (meso) <select id="fmeso"></select></label>
+    <span class="muted" id="cinfo"></span>
+  </div>
+  <div style="position:relative;padding:4px 16px">
+    <div id="hov" class="hov">Hover a bubble to highlight its group</div>
+    <svg id="csvg" width="100%" height="820"></svg>
+    <div class="legend"><i style="background:#0b3fd9"></i>Citation only &nbsp; <i style="background:#2a9d8f"></i>Also coauthors &nbsp; · Colors = groups · Thickness = connection weight · Faded people have no details page</div>
+    <details style="margin:10px 0 16px"><summary style="cursor:pointer;color:#0b3fd9">Show as a table</summary><table id="ctab"></table></details>
   </div>
 </div>
 
@@ -229,76 +218,44 @@ function fillMeso(){
   fs.append("option").attr("value","").text("Whole large group");
   META.meso.filter(m=>m.macro==+mac).sort((a,b)=>b.n-a.n).forEach(m=>fs.append("option").attr("value",m.id).text(`Meso ${m.id} · ${fmt(m.n)} authors`));
 }
-function renderList(){
-  const mac=document.getElementById("fmacro").value, mes=document.getElementById("fmeso").value;
-  const lv=mes!==""?"micro":"meso";
-  let a=META[lv].filter(c=>lv==="meso"?c.macro==+mac:c.meso==+mes).slice().sort((x,y)=>y.n-x.n);
-  document.getElementById("lhead").textContent=lv==="meso"?`${a.length} sub-groups in Macro ${mac}`:`${a.length} small groups in Meso ${mes}`;
-  const mx=d3.max(a,c=>c.n)||1;
-  d3.select("#list").selectAll(".item").data(a,c=>lv+c.id).join("div").attr("class","item")
-    .classed("sel",c=>cur.lvl===lv&&cur.id===c.id).on("click",(e,c)=>openComm(lv,c.id,true))
-    .html(c=>`<div class="t">${L[lv]} ${c.id}</div><div class="s">${fmt(c.n)} authors · ${(100*c.n/META.total).toFixed(1)}%${topJ(c)?" · "+esc(topJ(c)):""}</div><div class="bar"><i style="width:${Math.max(2,100*c.n/mx)}%"></i></div>`);
-}
-function openComm(lv,id,keep){
+function openComm(lv,id){
+  let pin=null;
+  if(lv==="micro"){const m=META.micro.find(x=>x.id===id); if(!m) return; pin=id; lv="meso"; id=m.meso;}
   const c=META[lv].find(x=>x.id===id); if(!c) return;
   const fm=document.getElementById("fmacro"),fs=document.getElementById("fmeso");
-  if(lv==="macro"){fm.value=String(id);fillMeso();}
-  else if(lv==="meso"){fm.value=String(c.macro);fillMeso();fs.value=String(id);}
-  else {fm.value=String(c.macro);fillMeso();fs.value=String(c.meso);}
-  cur={lvl:lv,id}; renderList(); show("net");
-  const cr=[];
-  if(lv!=="macro") cr.push(`<a onclick="openComm('macro',${c.macro})">Macro ${c.macro}</a>`);
-  if(lv==="micro") cr.push(`<a onclick="openComm('meso',${c.meso})">Meso ${c.meso}</a>`);
-  cr.push(`<b>${L[lv]} ${id}</b>`);
-  document.getElementById("crumbs").innerHTML=cr.join('<span class="sep">/</span>');
-  document.getElementById("cjr").textContent="Top journals: "+c.j.map(j=>`${j[0]} (${fmt(j[1])})`).join(" · ");
+  fm.value=String(lv==="macro"?id:c.macro); fillMeso(); fs.value=lv==="meso"?String(id):"";
+  cur={lvl:lv,id}; show("net");
   if(lv==="macro"){
     const ms=META.micro.filter(m=>m.macro===id), nm=new Set(ms.map(m=>m.meso));
-    document.getElementById("cinfo").textContent=`Whole group: all ${ms.length} small groups (micro), ${fmt(c.n)} authors, in ${nm.size} sub-groups (meso). Bubble size = authors. Click a bubble to open that small group.`;
+    document.getElementById("cinfo").textContent=`${fmt(c.n)} authors · ${ms.length} small groups in ${nm.size} sub-groups. Click a bubble to open its sub-group.`;
     drawGrouped({
       nodes:ms.map(m=>({id:m.id,label:`Micro ${m.id}`,size:m.n,grp:m.meso,
-        tip:`<b>Micro ${m.id}</b> · Meso ${m.meso}<br>${fmt(m.n)} authors<br>${esc(topJ(m))}`,click:()=>openComm("micro",m.id)})),
+        tip:`<b>Micro ${m.id}</b><br>${fmt(m.n)} authors<br>${esc(topJ(m))}`,click:()=>openComm("micro",m.id)})),
       edges:((DATA.mnet||{})[id]||[]).map(e=>[e[0],e[1],e[2],0]),
       edgeTip:e=>`Micro ${e[0]} — Micro ${e[1]}<br>${e[2]}× the citation expected for their size`,
-      groupName:k=>`Meso ${k}`, groupClick:k=>openComm("meso",k), groupBy:"sub-group (meso)", unit:"small groups"});
-    d3.select("#ctab").html(`<tr><th>Small group</th><th>Sub-group</th><th>Authors</th><th>Top journal</th></tr>`+ms.sort((a,b)=>b.n-a.n).map(m=>`<tr><td><a onclick="openComm('micro',${m.id})">Micro ${m.id}</a></td><td><a onclick="openComm('meso',${m.meso})">Meso ${m.meso}</a></td><td>${fmt(m.n)}</td><td>${esc(topJ(m))}</td></tr>`).join(""));
+      groupName:k=>`Meso ${k}`, groupInfo:k=>{const m=META.meso.find(x=>x.id===k);return m?`${fmt(m.n)} authors · ${esc(topJ(m))}`:"";},
+      groupClick:k=>openComm("meso",k), unit:"small groups"});
+    d3.select("#ctab").html(`<tr><th>Small group</th><th>Sub-group</th><th>Authors</th><th>Top journal</th></tr>`+ms.sort((a,b)=>b.n-a.n).map(m=>`<tr><td>Micro ${m.id}</td><td><a onclick="openComm('meso',${m.meso})">Meso ${m.meso}</a></td><td>${fmt(m.n)}</td><td>${esc(topJ(m))}</td></tr>`).join(""));
     return;
   }
-  const g=DATA.comm2[`${lv}_${id}`]||{n:[],e:[]};
-  let grp={}, groupName=null, groupClick=null, groupBy;
-  if(lv==="meso"){
-    g.n.forEach(d=>grp[d[0]]=d[4]??-2); groupName=k=>k<0?"Other":`Micro ${k}`; groupClick=k=>openComm("micro",k); groupBy="small group (micro)";
-    const nsub=META.micro.filter(m=>m.meso===id).length, cov=new Set(g.n.map(d=>d[4])).size;
-    document.getElementById("cinfo").textContent=`Showing the ${g.n.length} most connected of ${fmt(c.n)} authors, covering ${cov} of ${nsub} small groups (the top 2 of each, then the strongest overall).`;
-  } else {
-    grp=louvain(g.n.map(d=>d[0]),g.e); groupBy="clustering these authors' links";
-    document.getElementById("cinfo").textContent=`Showing the ${g.n.length} most connected of ${fmt(c.n)} authors, grouped by who links to whom.`;
-  }
+  const g=DATA.comm2[`meso_${id}`]||{n:[],e:[]};
+  const grp={}; g.n.forEach(d=>grp[d[0]]=d[4]??-2);
+  const nsub=META.micro.filter(m=>m.meso===id).length;
+  document.getElementById("cinfo").textContent=`${fmt(c.n)} authors · showing the ${g.n.length} most connected, from ${new Set(g.n.map(d=>d[4])).size} of ${nsub} small groups. Click a person to open their details.`;
   drawGrouped({
     nodes:g.n.map(d=>({id:d[0],label:d[1],size:d[2],grp:grp[d[0]],dis:!hasD(d[0]),
-      tip:`<b>${esc(d[1])}</b><br>strength ${d[2]} · ${d[3]} links in this group${hasD(d[0])?"":"<br><span style='color:#888'>No details available</span>"}`,click:()=>openAuthor(d[0])})),
-    edges:g.e, edgeTip:null, groupName, groupClick, groupBy, unit:"authors", authors:true});
-  d3.select("#ctab").html(`<tr><th>#</th><th>Author</th><th>Strength in group</th><th>Links in group</th></tr>`+g.n.map((n,i)=>`<tr><td>${i+1}</td><td>${hasD(n[0])?`<a onclick="openAuthor(${n[0]})">${esc(n[1])}</a>`:`<span style="color:#aaa" title="No details available">${esc(n[1])}</span>`}</td><td>${n[2]}</td><td>${n[3]}</td></tr>`).join(""));
+      tip:`<b>${esc(d[1])}</b><br>strength ${d[2]} · ${d[3]} links in this sub-group${hasD(d[0])?"":"<br><span style='color:#888'>No details available</span>"}`,click:()=>openAuthor(d[0])})),
+    edges:g.e, edgeTip:null, groupName:k=>k<0?"Other":`Micro ${k}`,
+    groupInfo:k=>{const m=META.micro.find(x=>x.id===k);return m?`${fmt(m.n)} authors in total · ${esc(topJ(m))}`:"";},
+    groupClick:null, unit:"authors shown", authors:true, pin});
+  d3.select("#ctab").html(`<tr><th>#</th><th>Author</th><th>Small group</th><th>Strength in sub-group</th><th>Links in sub-group</th></tr>`+g.n.map((n,i)=>`<tr><td>${i+1}</td><td>${hasD(n[0])?`<a onclick="openAuthor(${n[0]})">${esc(n[1])}</a>`:`<span style="color:#aaa" title="No details available">${esc(n[1])}</span>`}</td><td>Micro ${n[4]}</td><td>${n[2]}</td><td>${n[3]}</td></tr>`).join(""));
 }
-function goComm(lv,id){hideTip();openComm(lv,id);window.scrollTo(0,0);const s=document.querySelector("#list .item.sel");if(s)s.scrollIntoView({block:"center"});}
+function goComm(lv,id){hideTip();openComm(lv,id);window.scrollTo(0,0);}
 
-function louvain(ids,E){
-  const n=ids.length, ix=new Map(ids.map((d,i)=>[d,i])), adj=ids.map(()=>new Map()); let m2=0;
-  E.forEach(([a,b,w])=>{const i=ix.get(a),j=ix.get(b); if(i==null||j==null||i===j) return;
-    adj[i].set(j,(adj[i].get(j)||0)+w); adj[j].set(i,(adj[j].get(i)||0)+w); m2+=2*w;});
-  const k=adj.map(m=>d3.sum([...m.values()])), c=ids.map((d,i)=>i), tot=k.slice();
-  for(let it=0;it<30;it++){ let mv=0;
-    for(let i=0;i<n;i++){ if(!k[i]) continue; const ci=c[i]; tot[ci]-=k[i]; const wc=new Map();
-      adj[i].forEach((w,j)=>wc.set(c[j],(wc.get(c[j])||0)+w));
-      let best=ci, bg=(wc.get(ci)||0)-tot[ci]*k[i]/m2;
-      wc.forEach((w,cc)=>{const gn=w-tot[cc]*k[i]/m2; if(gn>bg+1e-12){bg=gn;best=cc;}});
-      c[i]=best; tot[best]+=k[i]; if(best!==ci) mv++; }
-    if(!mv) break; }
-  const out={}; ids.forEach((d,i)=>out[d]=k[i]?c[i]:-1); return out;
-}
 const PAL=["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#86bcb6","#d37295","#a0cbe8","#8cd17d","#f1ce63","#499894","#e6a0c4","#79706e","#b6992d"];
 function drawGrouped(S){
-  const svg=d3.select("#csvg"); svg.selectAll("*").remove(); d3.select("#cgroups").html("");
+  const svg=d3.select("#csvg"); svg.selectAll("*").remove();
+  const hov=document.getElementById("hov"), HOV0="Hover a bubble to highlight its group"; hov.innerHTML=HOV0;
   if(!S.nodes.length) return;
   const N=S.nodes, many=N.length>120;
   svg.attr("height",many?900:820);
@@ -319,12 +276,12 @@ function drawGrouped(S){
   const pt=(a,r)=>[r*Math.sin(a),-r*Math.cos(a)];
   const G0=svg.append("g").attr("transform",`translate(${cx},${cy})`);
   const arc=d3.arc().innerRadius(R+14).outerRadius(R+20);
-  G0.append("g").selectAll("path").data(root.children).join("path")
-    .attr("d",c=>{const xs=c.leaves().map(l=>l.x);return arc({startAngle:d3.min(xs)-0.02,endAngle:d3.max(xs)+0.02});})
+  const arcs=G0.append("g").selectAll("path").data(root.children).join("path");
+  arcs.attr("d",c=>{const xs=c.leaves().map(l=>l.x);return arc({startAngle:d3.min(xs)-0.02,endAngle:d3.max(xs)+0.02});})
     .attr("fill",c=>gcol(c.data.G)).style("cursor",c=>S.groupClick&&c.data.G.k>=0?"pointer":"default")
-    .on("mouseover",(e,c)=>hl(new Set(c.data.G.a.map(d=>d.id))))
+    .on("mouseover",(e,c)=>hlG(c.data.G))
     .on("mousemove",(e,c)=>showTip(e,`<b>${esc(c.data.G.name)}</b><br>${c.data.G.a.length} ${S.unit}${S.groupClick&&c.data.G.k>=0?"<br>Click to open":""}`))
-    .on("mouseout",()=>{hl(null);hideTip();})
+    .on("mouseout",()=>{hlG(null);hideTip();})
     .on("click",(e,c)=>{if(S.groupClick&&c.data.G.k>=0){hideTip();S.groupClick(c.data.G.k);}});
   const line=d3.lineRadial().curve(d3.curveBundle.beta(0.85)).radius(d=>d.y).angle(d=>d.x);
   const op=many?.25:.4;
@@ -334,29 +291,29 @@ function drawGrouped(S){
     .on("mousemove",(ev,e)=>showTip(ev,S.edgeTip?S.edgeTip(e):`${esc(leaf.get(e[0]).data.d.label)} — ${esc(leaf.get(e[1]).data.d.label)}<br>weight ${e[2]}${e[3]?" · coauthors":""}`)).on("mouseout",hideTip);
   const lblSet=new Set(N.slice().sort((a,b)=>b.size-a.size).slice(0,S.authors?150:70).map(d=>d.id));
   let nd,tx;
-  function hl(set){
-    if(!set){ed.attr("stroke-opacity",op);nd.style("opacity",1);tx.style("display",l=>lblSet.has(l.data.d.id)?null:"none");return;}
-    ed.attr("stroke-opacity",e=>set.has(e[0])||set.has(e[1])?.95:.03);
-    const on=new Set(set); E.forEach(e=>{if(set.has(e[0])||set.has(e[1])){on.add(e[0]);on.add(e[1]);}});
-    nd.style("opacity",l=>on.has(l.data.d.id)?1:.2); tx.style("display",l=>on.has(l.data.d.id)||lblSet.has(l.data.d.id)?null:"none");
+  const pinG=S.pin!=null?groups.find(G=>G.k===S.pin):null;
+  function hlG(G){
+    if(!G&&pinG) G=pinG;
+    if(!G){ed.attr("stroke-opacity",op);nd.style("opacity",1);arcs.style("opacity",1);tx.style("display",l=>lblSet.has(l.data.d.id)?null:"none");hov.innerHTML=HOV0;return;}
+    const set=new Set(G.a.map(d=>d.id));
+    ed.attr("stroke-opacity",e=>set.has(e[0])&&set.has(e[1])?.95:set.has(e[0])||set.has(e[1])?.45:.03);
+    nd.style("opacity",l=>set.has(l.data.d.id)?1:.15); arcs.style("opacity",c=>c.data.G===G?1:.2);
+    tx.style("display",l=>set.has(l.data.d.id)?null:"none");
+    const info=S.groupInfo&&G.k>=0?S.groupInfo(G.k):"";
+    hov.innerHTML=`<b>${esc(G.name)}</b> · ${G.a.length} ${S.unit}${info?" · "+info:""}`;
   }
   nd=G0.append("g").selectAll("g").data(root.leaves()).join("g")
     .attr("transform",l=>`translate(${pt(l.x,l.y)})`).style("cursor",l=>l.data.d.dis?"default":"pointer")
     .on("click",(ev,l)=>{if(!l.data.d.dis){hideTip();l.data.d.click();}})
-    .on("mouseover",(ev,l)=>hl(new Set([l.data.d.id])))
+    .on("mouseover",(ev,l)=>hlG(gOf.get(l.data.d.id)))
     .on("mousemove",(ev,l)=>showTip(ev,l.data.d.tip+`<br><span style="color:#888">${esc(gOf.get(l.data.d.id).name)}</span>`))
-    .on("mouseout",()=>{hl(null);hideTip();});
+    .on("mouseout",()=>{hlG(null);hideTip();});
   nd.append("circle").attr("r",l=>rs(l.data.d.size)).attr("fill",l=>gcol(gOf.get(l.data.d.id))).attr("fill-opacity",l=>l.data.d.dis?.3:1).attr("stroke","#fff").attr("stroke-width",1);
   tx=nd.append("text").text(l=>l.data.d.label).attr("dy","0.32em").style("fill",l=>l.data.d.dis?"#aaa":null)
     .attr("transform",l=>{const deg=l.x*180/Math.PI-90, off=R+24-l.y; return `rotate(${deg}) translate(${off},0)${l.x>Math.PI?" rotate(180)":""}`;})
     .attr("text-anchor",l=>l.x>Math.PI?"end":"start").style("font-size",N.length>80?"8px":"10px")
     .style("display",l=>lblSet.has(l.data.d.id)?null:"none");
-  const shown=groups.slice(0,24);
-  d3.select("#cgroups").html(`<span class="muted">${groups.length} groups, by ${S.groupBy}:</span> `+
-      shown.map((G,i)=>`<span class="gchip" data-i="${i}" style="cursor:${S.groupClick&&G.k>=0?"pointer":"default"}"><i style="background:${gcol(G)}"></i>${esc(G.name)} <span class="muted">(${G.a.length})</span></span>`).join("")+
-      (groups.length>shown.length?` <span class="muted">+${groups.length-shown.length} smaller groups</span>`:""));
-  d3.select("#cgroups").selectAll(".gchip").on("mouseover",function(){hl(new Set(groups[+this.dataset.i].a.map(d=>d.id)));})
-    .on("mouseout",()=>hl(null)).on("click",function(){const G=groups[+this.dataset.i];if(S.groupClick&&G.k>=0)S.groupClick(G.k);});
+  if(pinG) hlG(null);
 }
 
 /* ---------- Details ---------- */
