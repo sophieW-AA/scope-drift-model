@@ -1,0 +1,178 @@
+<p>Column schema for the stakeholder views in <code>ocean-tech-adv-analytics-c-tfs.clean_views</code> (EU). The views are read-only. They are built by <code>scripts/build_clean_views.py</code> and do not change the source tables. The tables they read are documented on <ac:link><ri:page ri:content-title="Data Mapping" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Data Mapping]]></ac:plain-text-link-body></ac:link>.</p>
+
+<h2>Context</h2>
+
+<p>Two runs are published together. <code>run_type = 'paper'</code> is citation run <code>20260827_081311</code>, where a member is a paper. <code>run_type = 'person'</code> is author run <code>20261023_114612</code>, where a member is an author. The same column names are used for both. A filter works on every view:</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">sql</ac:parameter>
+  <ac:plain-text-body><![CDATA[SELECT *
+FROM `ocean-tech-adv-analytics-c-tfs.clean_views.members`
+WHERE run_type = 'person']]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>Objective / scope</h2>
+
+<p>Give stakeholders one place to read both runs without opening the pipeline tables. Detail that exists for only one run type lives in its own view, joined back on <code>member_key</code>.</p>
+
+<h2>Keys</h2>
+
+<table>
+  <tbody>
+    <tr><th>Key</th><th>Example</th><th>Joins</th></tr>
+    <tr><td><code>run_type</code> + <code>run_id</code></td><td><code>person</code>, <code>20261023_114612</code></td><td>Every view. <code>run_id</code> is the source-table timestamp.</td></tr>
+    <tr><td><code>member_key</code></td><td><code>person:43407</code></td><td><code>members</code> to <code>paper_details</code>, <code>author_details</code>, <code>paper_scope</code> and <code>author_papers</code>.</td></tr>
+    <tr><td><code>community_key</code></td><td><code>paper:meso:65</code></td><td><code>communities</code> to the scope verdict. Ids repeat across runs and levels, so the key includes both.</td></tr>
+  </tbody>
+</table>
+
+<h2>runs</h2>
+
+<p>One row per run. Start here to see which runs are loaded.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_type</code></td><td>STRING</td><td><code>paper</code> or <code>person</code>.</td></tr>
+    <tr><td><code>run_id</code></td><td>STRING</td><td>Run timestamp.</td></tr>
+    <tr><td><code>member_type</code></td><td>STRING</td><td><code>paper</code> or <code>author</code>.</td></tr>
+    <tr><td><code>description</code></td><td>STRING</td><td>What the run is.</td></tr>
+    <tr><td><code>network_mode</code></td><td>STRING</td><td>How the network was built. <code>global</code> for the paper run, <code>seed</code> for the person run.</td></tr>
+    <tr><td><code>start_year</code>, <code>end_year</code></td><td>INTEGER</td><td>Publication years included.</td></tr>
+    <tr><td><code>built_utc</code></td><td>STRING</td><td>When the network export finished.</td></tr>
+    <tr><td><code>n_links</code></td><td>INTEGER</td><td>Citation links recorded in the run metadata.</td></tr>
+    <tr><td><code>n_members</code></td><td>INTEGER</td><td>Members placed in a community.</td></tr>
+    <tr><td><code>n_macro_communities</code>, <code>n_meso_communities</code>, <code>n_micro_communities</code></td><td>INTEGER</td><td>Community counts at each level.</td></tr>
+  </tbody>
+</table>
+
+<h2>members</h2>
+
+<p>One row per clustered paper or author. Each member sits in one micro, one meso and one macro community. Papers that were exported but not clustered are not in this view.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_type</code>, <code>run_id</code>, <code>member_type</code></td><td>STRING</td><td>Run keys. <code>member_type</code> is <code>paper</code> or <code>author</code>.</td></tr>
+    <tr><td><code>member_key</code></td><td>STRING</td><td><code>&lt;run_type&gt;:&lt;member_id&gt;</code>.</td></tr>
+    <tr><td><code>member_id</code></td><td>INTEGER</td><td>Id inside the run. Unique only together with <code>run_type</code>.</td></tr>
+    <tr><td><code>display_name</code></td><td>STRING</td><td>Paper title, or author name.</td></tr>
+    <tr><td><code>micro_id</code>, <code>meso_id</code>, <code>macro_id</code></td><td>INTEGER</td><td>Community id at that level. The same number at two levels is not the same community.</td></tr>
+    <tr><td><code>micro_name</code>, <code>meso_name</code>, <code>macro_name</code></td><td>STRING</td><td>Community name. Unlabelled communities read <code>Unlabelled &lt;level&gt; community &lt;id&gt;</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2>communities</h2>
+
+<p>One row per community, level and run. Includes communities that have no taxonomy label.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_type</code>, <code>run_id</code>, <code>member_type</code></td><td>STRING</td><td>Run keys.</td></tr>
+    <tr><td><code>community_key</code></td><td>STRING</td><td><code>&lt;run_type&gt;:&lt;level&gt;:&lt;community_id&gt;</code>.</td></tr>
+    <tr><td><code>level</code></td><td>STRING</td><td><code>micro</code>, <code>meso</code> or <code>macro</code>.</td></tr>
+    <tr><td><code>community_id</code></td><td>INTEGER</td><td>Community id inside the run and level.</td></tr>
+    <tr><td><code>name</code></td><td>STRING</td><td>Taxonomy label, or an unlabelled placeholder.</td></tr>
+    <tr><td><code>is_labelled</code></td><td>BOOLEAN</td><td>True when the name came from taxonomy labelling.</td></tr>
+    <tr><td><code>n_members</code></td><td>INTEGER</td><td>Papers or authors in the community.</td></tr>
+    <tr><td><code>n_papers</code></td><td>INTEGER</td><td>Papers behind the community. Equal to <code>n_members</code> on a paper run. Distinct papers written by the authors on a person run.</td></tr>
+    <tr><td><code>keywords</code></td><td>STRING</td><td>Secondary taxonomy topics, separated by <code>; </code>.</td></tr>
+    <tr><td><code>summary</code></td><td>STRING</td><td>Why the community was given its name.</td></tr>
+    <tr><td><code>top_topics</code></td><td>STRING</td><td>Leading detailed topics, largest first, separated by <code>; </code>.</td></tr>
+    <tr><td><code>parent_level</code></td><td>STRING</td><td><code>meso</code> for a micro community, <code>macro</code> for a meso community. Empty for macro.</td></tr>
+    <tr><td><code>parent_key</code>, <code>parent_id</code>, <code>parent_name</code></td><td>STRING, INTEGER, STRING</td><td>The coarser community that most members sit in.</td></tr>
+    <tr><td><code>parent_share</code></td><td>FLOAT</td><td>Share of members in that parent. <code>1.0</code> means all of them.</td></tr>
+  </tbody>
+</table>
+
+<h2>paper_details</h2>
+
+<p>Paper-run attributes. Join to <code>members</code> on <code>member_key</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_type</code>, <code>run_id</code>, <code>member_key</code></td><td>STRING</td><td>Run and member keys.</td></tr>
+    <tr><td><code>pub_id</code></td><td>INTEGER</td><td>AIRAK <code>PublicationId</code>.</td></tr>
+    <tr><td><code>title</code></td><td>STRING</td><td>Paper title.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Journal name.</td></tr>
+    <tr><td><code>is_frontiers</code></td><td>BOOLEAN</td><td>True when the journal is a Frontiers journal.</td></tr>
+    <tr><td><code>publication_date</code></td><td>DATE</td><td>Publication date. Empty when the source text is not a date.</td></tr>
+    <tr><td><code>publication_year</code></td><td>INTEGER</td><td>Year of <code>publication_date</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2>author_details</h2>
+
+<p>Person-run attributes. Join to <code>members</code> on <code>member_key</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_type</code>, <code>run_id</code>, <code>member_key</code></td><td>STRING</td><td>Run and member keys.</td></tr>
+    <tr><td><code>author_id</code></td><td>INTEGER</td><td>AIRAK <code>AuthorId</code>.</td></tr>
+    <tr><td><code>name</code></td><td>STRING</td><td>Author name.</td></tr>
+    <tr><td><code>n_papers</code></td><td>INTEGER</td><td>Papers that link the author into the network.</td></tr>
+    <tr><td><code>n_first_last_or_sole_papers</code></td><td>INTEGER</td><td>Papers where the author is first, last or sole author.</td></tr>
+    <tr><td><code>n_middle_author_papers</code></td><td>INTEGER</td><td>Papers where the author is a middle author.</td></tr>
+  </tbody>
+</table>
+
+<h2>paper_scope</h2>
+
+<p>Scope verdict for paper runs. One paper can have more than one row when it is judged for more than one journal. Join to <code>members</code> on <code>member_key</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_type</code>, <code>run_id</code>, <code>member_key</code></td><td>STRING</td><td>Run and member keys.</td></tr>
+    <tr><td><code>journal</code></td><td>STRING</td><td>Journal the paper is judged against.</td></tr>
+    <tr><td><code>publication_year</code></td><td>INTEGER</td><td>Publication year.</td></tr>
+    <tr><td><code>scope_level</code></td><td>STRING</td><td>Community level used for the verdict.</td></tr>
+    <tr><td><code>community_key</code>, <code>community_id</code></td><td>STRING, INTEGER</td><td>Community the verdict used.</td></tr>
+    <tr><td><code>is_primary_community</code></td><td>BOOLEAN</td><td>True when that community is one of the journal's core communities.</td></tr>
+    <tr><td><code>scope</code></td><td>STRING</td><td><code>in_scope</code>, <code>borderline</code> or <code>out_of_scope</code>.</td></tr>
+    <tr><td><code>hard_negative</code></td><td>BOOLEAN</td><td>A journal title rule forced the paper out of scope.</td></tr>
+    <tr><td><code>hard_negative_pattern</code></td><td>STRING</td><td>The title rule that matched.</td></tr>
+    <tr><td><code>paper_demoted</code></td><td>BOOLEAN</td><td>The paper-level check moved it out of scope.</td></tr>
+    <tr><td><code>override_source</code>, <code>override_reason</code></td><td>STRING</td><td>What overrode the community verdict, and why.</td></tr>
+    <tr><td><code>paper_llm_verdict</code>, <code>paper_llm_reason</code></td><td>STRING</td><td>Verdict and reason from the paper-level check.</td></tr>
+  </tbody>
+</table>
+
+<h2>author_papers</h2>
+
+<p>Which papers link each author into the person network. Join to <code>members</code> on <code>member_key</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>run_type</code>, <code>run_id</code>, <code>member_key</code></td><td>STRING</td><td>Run and member keys.</td></tr>
+    <tr><td><code>author_id</code></td><td>INTEGER</td><td>AIRAK <code>AuthorId</code>.</td></tr>
+    <tr><td><code>publication_id</code></td><td>INTEGER</td><td>AIRAK <code>PublicationId</code>.</td></tr>
+    <tr><td><code>role_weight</code></td><td>FLOAT</td><td><code>1</code> for first, last or sole author. <code>0.25</code> for a middle author.</td></tr>
+    <tr><td><code>author_role</code></td><td>STRING</td><td><code>first_last_or_sole</code> or <code>middle</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2>Deliverables</h2>
+
+<ul>
+  <li>Seven views in <code>clean_views</code>, described above.</li>
+  <li>Source tables remain on <ac:link><ri:page ri:content-title="Data Mapping" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Data Mapping]]></ac:plain-text-link-body></ac:link>.</li>
+</ul>
+
+<h2>Owners</h2>
+
+<p>Sophie Wilson.</p>
+
+<h2>Dependencies / risks</h2>
+
+<ul>
+  <li>Community ids are not comparable across <code>run_type</code> or across <code>level</code>. Use <code>community_key</code>.</li>
+  <li>Rebuilding the views replaces the view definitions only. The source tables are not modified.</li>
+  <li>A community with no taxonomy label still appears, with <code>is_labelled = false</code>.</li>
+</ul>
+
+<p><em>Disclaimer: This page was created with AI assistance.</em></p>

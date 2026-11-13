@@ -109,6 +109,8 @@ TOPIC_AXIS = "CORE_TOPIC"
 # CWTS tables (constructed from timestamp / RUN_TIMESTAMP)
 TBL_CLASSIF = None  # Set in main()
 TBL_PUB_META = None  # Set in main()
+TBL_AUTHOR_PAPERS = None  # Set in main() for a person network
+PERSON_NETWORK = False
 RUN_TIMESTAMP = os.environ.get("RUN_TIMESTAMP", "")
 
 # Taxonomy labels land in a dedicated dataset; cluster_id joins
@@ -241,8 +243,34 @@ def _sample_cap_sql() -> str:
 
 def _ranked_cte(level: str) -> str:
     """Rank every paper within its cluster by a stable hash, so the sample below
-    is reproducible across runs without ordering the whole table."""
+    is reproducible across runs without ordering the whole table.
+
+    A person network clusters authors. Each community is described by the
+    distinct publications of its authors, from author_papers_person_{ts}.
+    """
     _check_level(level)
+    if PERSON_NETWORK:
+        return f"""
+    papers AS (
+        SELECT DISTINCT
+            CAST(c.{level} AS INT64) AS community_id,
+            CAST(ap.publication_id AS INT64) AS pub_id
+        FROM `{TBL_CLASSIF}` c
+        JOIN `{TBL_AUTHOR_PAPERS}` ap ON c.int_id = ap.int_id
+        WHERE c.{level} IS NOT NULL
+          AND ap.publication_id IS NOT NULL
+    ),
+    ranked AS (
+        SELECT
+            community_id,
+            pub_id,
+            ROW_NUMBER() OVER (
+                PARTITION BY community_id
+                ORDER BY FARM_FINGERPRINT(CAST(pub_id AS STRING))
+            ) AS rn,
+            COUNT(*) OVER (PARTITION BY community_id) AS n_cluster
+        FROM papers
+    )"""
     return f"""
     ranked AS (
         SELECT
@@ -1763,7 +1791,8 @@ def main(timestamp: str | None = None):
             cluster_labels_{level}_{timestamp}. If omitted, uses
             taxonomy_naming.RUN_TIMESTAMP or env RUN_TIMESTAMP.
     """
-    global TBL_CLASSIF, TBL_PUB_META, RUN_TIMESTAMP, LEIDEN_ONLY_SQL
+    global TBL_CLASSIF, TBL_PUB_META, TBL_AUTHOR_PAPERS, PERSON_NETWORK
+    global RUN_TIMESTAMP, LEIDEN_ONLY_SQL
 
     timestamp = resolve_timestamp(timestamp)
     RUN_TIMESTAMP = timestamp
@@ -1771,8 +1800,23 @@ def main(timestamp: str | None = None):
 
     log_path = setup_logging(timestamp)
 
-    TBL_CLASSIF = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.classification_raw_{timestamp}"
-    TBL_PUB_META = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.pub_metadata_raw_{timestamp}"
+    PERSON_NETWORK = os.environ.get("NETWORK_ENTITY", "").strip().lower() == "person"
+    if PERSON_NETWORK:
+        person_dataset = "raw_citation_network_data_person"
+        TBL_CLASSIF = (
+            f"{BQ_SRC_PROJECT}.{person_dataset}.classification_raw_person_{timestamp}"
+        )
+        TBL_AUTHOR_PAPERS = (
+            f"{BQ_SRC_PROJECT}.{person_dataset}.author_papers_person_{timestamp}"
+        )
+        TBL_PUB_META = None
+        log.info(
+            "Person network: communities are authors, labelled from their papers"
+        )
+    else:
+        TBL_CLASSIF = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.classification_raw_{timestamp}"
+        TBL_PUB_META = f"{BQ_SRC_PROJECT}.{BQ_SRC_DATASET}.pub_metadata_raw_{timestamp}"
+        TBL_AUTHOR_PAPERS = None
     LEIDEN_ONLY_SQL = ""
     try:
         probe = bigquery.Client(project=PROJECT_BILL, location=BQ_LOCATION)
