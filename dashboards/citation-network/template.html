@@ -218,8 +218,9 @@ function openComm(lv,id){
   const mac=lv==="macro"?id:c.macro;
   document.getElementById("fmacro").value=String(mac);
   const bk=document.getElementById("back");
-  if(lv==="meso"){bk.style.display="";bk.textContent=`← Back to Macro ${mac}`;bk.onclick=()=>openComm("macro",mac);}
-  else bk.style.display="none";
+  bk.style.display="";
+  if(lv==="meso"){bk.textContent=`← Back to Macro ${mac}`;bk.onclick=()=>openComm("macro",mac);}
+  else {bk.textContent="← Back to all large groups";bk.onclick=()=>show("map");}
   cur={lvl:lv,id}; show("net");
   if(lv==="macro"){
     const ms=META.micro.filter(m=>m.macro===id), nm=new Set(ms.map(m=>m.meso));

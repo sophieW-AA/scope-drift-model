@@ -13,17 +13,14 @@ const step=(n,f)=>{try{f();__log('OK',n);}catch(e){__log('FAIL',n,'->',String(e.
 const q=s=>document.querySelector(s), qa=s=>document.querySelectorAll(s);
 step('init',()=>init());
 step('open network tab',()=>show('net'));
-__log('  macro',q('#fmacro').value,'| meso dropdown present',!!q('#fmeso'),'| back visible',q('#back').style.display!=='none','| bubbles',qa('#csvg circle').length);
-step('click micro bubble -> sub-group',()=>{openComm('macro',2);[...qa('#csvg circle')][0].parentNode.dispatchEvent(new window.MouseEvent('click'));});
-__log('  info:',q('#cinfo').textContent.slice(0,40),'| back:',q('#back').textContent,'visible',q('#back').style.display!=='none','| authors',qa('#csvg circle').length,'| hover label:',q('#hov').textContent.slice(0,30));
-step('click back',()=>q('#back').onclick());
-__log('  macro',q('#fmacro').value,'| back visible',q('#back').style.display!=='none','| bubbles',qa('#csvg circle').length);
-step('switch macro 0',()=>{const s=q('#fmacro');s.value='0';s.onchange({target:s});});
-__log('  macro',q('#fmacro').value,'| bubbles',qa('#csvg circle').length);
-step('map click macro 2',()=>{show('map');[...qa('#msvg circle.mb')].find(x=>x.__data__.id===2).dispatchEvent(new window.MouseEvent('click',{bubbles:true}));});
-__log('  macro',q('#fmacro').value,'| bubbles',qa('#csvg circle').length);
-const lm=Object.keys(DATA.ego).find(k=>DATA.ego[k][0]==='Ludmila Müller');
-step('details meso chip',()=>{openAuthor(+lm);openComm('meso',DATA.ego[lm][3]);});
-__log('  info:',q('#cinfo').textContent.slice(0,40),'| back:',q('#back').textContent);
+__log('  macro view back:',q('#back').textContent,'visible',q('#back').style.display!=='none');
+step('click back from macro',()=>q('#back').onclick());
+__log('  views on:',[...qa('.view.on')].map(v=>v.id).join(','));
+step('map click macro 2 then sub-group',()=>{[...qa('#msvg circle.mb')].find(x=>x.__data__.id===2).dispatchEvent(new window.MouseEvent('click',{bubbles:true}));[...qa('#csvg circle')][0].parentNode.dispatchEvent(new window.MouseEvent('click'));});
+__log('  sub-group back:',q('#back').textContent);
+step('back to macro',()=>q('#back').onclick());
+__log('  macro',q('#fmacro').value,'| back:',q('#back').textContent,'| bubbles',qa('#csvg circle').length);
+step('back to map',()=>q('#back').onclick());
+__log('  views on:',[...qa('.view.on')].map(v=>v.id).join(','),'| map bubbles',qa('#msvg circle.mb').length);
 `;
 try{w.eval(code);}catch(e){console.log('TOP',e.stack.split('\n').slice(0,3).join(' | '));}
