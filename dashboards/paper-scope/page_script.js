@@ -226,7 +226,7 @@ function setYear(i) {
   const s = document.getElementById("yearSlider"); s.value = i;
   document.getElementById("yearLab").textContent = i ? String(YEARS[i - 1]) : "All years";
   if (selected != null) { renderDetail(selected); drawCommunities(J[selected]); renderYears(J[selected]); }
-  else { draw(); if (view === "market") renderMarket(); else if (spot != null) showSpot(spot); }
+  else { draw(); if (view !== "market" && spot != null) showSpot(spot); }
 }
 function setCommColor(m) {
   commColor = m;
@@ -429,7 +429,6 @@ function resetMarket() {
   detail.innerHTML = "<p class='empty'>Search for a journal, or click one, to see its topics.</p>";
   document.getElementById("search").value = ""; query = "";
   draw();
-  renderMarket();
 }
 
 document.getElementById("backBtn").addEventListener("click", () => clearSelection());
@@ -453,13 +452,25 @@ const INTRO = {
   scope: "The full report for this journal: headline figures, how its topic mix changed, and example papers.",
   data: "Every BigQuery query behind this page, and what the page works out itself."
 };
-function popGroup() { const g = document.getElementById("navGroup"); g.classList.remove("pop"); void g.offsetWidth; g.classList.add("pop"); }
+function popGroup() {}
+function renderTrail(v) {
+  const el = document.getElementById("trail"), nm = J[curJ].name.replace(/^Frontiers in /, "").replace(/[&<>]/g, "");
+  const step = (n, label, go, cur) => "<button type='button' class='tstep" + (cur ? " cur" : "") + "' data-go='" + go + "'><span class='tnum'>" + n + "</span>" + label + "</button>";
+  const sep = "<span class='tsep'>&#8250;</span>";
+  let h = "<span>You are here:</span>" + step(1, "All journals", "market", v === "market");
+  if (v === "journal" || v === "scope") h += sep + step(2, "Journal: " + nm, "journal", v === "journal");
+  if (v === "scope") h += sep + step(3, "Scope details", "scope", true);
+  if (v === "data") h += sep + "<span class='tstep cur'>Data &amp; queries</span>";
+  const hint = { market: "&rarr; Click a journal to open it", journal: "&rarr; Open Scope details for its full report", scope: "&larr; Click the journal name to go back to its map", data: "" }[v];
+  el.innerHTML = h + (hint ? "<span class='thint'>" + hint + "</span>" : "");
+  el.querySelectorAll("button.tstep:not(.cur)").forEach(b => b.addEventListener("click", () => goView(b.dataset.go)));
+}
 function goJournal(id) { curJ = id; goView("journal"); popGroup(); }
 function goView(v) {
   view = v;
   ["Market", "Journal", "Scope", "Data"].forEach(k => document.getElementById("nav" + k).classList.toggle("active", "nav" + k === "nav" + v.charAt(0).toUpperCase() + v.slice(1)));
   document.getElementById("navJName").textContent = ": " + J[curJ].name.replace(/^Frontiers in /, "");
-  document.getElementById("navGroup").classList.toggle("on", v === "journal" || v === "scope");
+  renderTrail(v);
   document.getElementById("viewIntro").textContent = INTRO[v];
   const map = v === "market" || v === "journal";
   document.getElementById("mainView").hidden = !map;
@@ -470,14 +481,9 @@ function goView(v) {
   results.hidden = true;
   if (v === "market") { resetMarket(); }
   else if (v === "journal") { select(curJ); }
-  else if (v === "scope") {
-    selected = curJ; openDetails(curJ);
-    const t = document.getElementById("ovTitle"), nm = J[curJ].name.replace(/^Frontiers in /, "");
-    t.innerHTML = "<button type='button' class='crumb' id='crumbJ' title='Back to this journal's map'>Journal: " + nm.replace(/[&<>]/g, "") + "</button><span class='crumbsep'>&#8250;</span>Scope details<span class='crumbsub'>how its topics changed, " + YEARS[0] + "&ndash;" + YEARS[YEARS.length - 1] + "</span>";
-    document.getElementById("crumbJ").addEventListener("click", () => goView("journal"));
-  }
+  else if (v === "scope") { selected = curJ; openDetails(curJ); }
   else if (v === "data") { selected = null; openData(); }
-  if (map) { setPanel(true); setTimeout(() => Plotly.Plots.resize("plot"), 60); }
+  if (map) { setPanel(v === "journal"); setTimeout(() => Plotly.Plots.resize("plot"), 60); }
   window.scrollTo(0, 0);
 }
 function renderMarket() {

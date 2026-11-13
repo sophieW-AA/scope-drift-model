@@ -190,34 +190,34 @@ table.rt td.r, table.rt th.r { text-align:right; font-variant-numeric:tabular-nu
 .mk-sel { font-size:0.75rem; margin-bottom:4px; }
 .legend-f { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:0.74rem; color:#3a4456; }
 .legend-f span { white-space:nowrap; }
-.navgroup { display:inline-flex; align-items:flex-end; border:1px dashed #9aa8c2; border-bottom:none; border-radius:10px 10px 0 0; padding:3px 3px 0; margin-bottom:-1px; background:#fafbfd; transition:border-color .2s, box-shadow .2s; }
-.navgroup .navtab { margin-bottom:0; }
-.navsub { font-size:0.8rem; font-weight:600; padding:6px 12px 7px; border-left:1px dotted #9aa8c2 !important; border-radius:0 8px 0 0; }
-.navsub .sublink { color:#9aa8c2; margin-right:5px; font-weight:400; }
-.navsub.active .sublink { color:#1a1f36; }
-.navgroup #navJournal { color:#1a1f36; }
-.navgroup .navtab.active { border-top:1.5px solid #1a1f36; border-right:1.5px solid #1a1f36; background:#fff; }
-.navgroup #navJournal.active { border-left:1.5px solid #1a1f36; }
-.navgroup .navsub.active { border-left:1px dotted #9aa8c2 !important; }
-.navgroup.pop { animation:navpop .9s ease; }
-.navgroup.pop .navsub { animation:subslide .5s ease; }
-@keyframes navpop { 0% { box-shadow:0 0 0 0 rgba(0,114,178,.55); } 70% { box-shadow:0 0 0 8px rgba(0,114,178,0); } 100% { box-shadow:none; } }
-@keyframes subslide { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:none; } }
 .crumb { border:none; background:none; padding:0; font:inherit; color:#0072B2; cursor:pointer; text-decoration:underline dotted; }
 .crumbsep { color:var(--muted); margin:0 6px; font-weight:400; }
 .crumbsub { font-weight:400; color:var(--muted); font-size:0.9rem; margin-left:8px; }
+.navtab { display:inline-flex; align-items:center; gap:8px; text-align:left; }
+.tt b { display:block; font-size:0.9rem; } .tt small { display:block; font-weight:400; font-size:0.72rem; color:var(--muted); margin-top:1px; }
+.tnum { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:#e8ecf5; color:#1a1f36; font-size:0.74rem; font-weight:700; flex:none; }
+.navtab.active .tnum { background:#1a1f36; color:#fff; }
+.chev { align-self:center; color:#9aa8c2; font-size:1.25rem; padding:0 6px; user-select:none; }
+.navdata { margin-left:auto; }
+.trail { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:0.82rem; color:var(--muted); margin-top:8px; }
+.tstep { border:none; background:none; padding:0; font:inherit; display:inline-flex; align-items:center; gap:5px; color:#0072B2; cursor:pointer; }
+.tstep .tnum { width:18px; height:18px; font-size:0.7rem; }
+.tstep.cur { color:#1a1f36; font-weight:700; cursor:default; }
+.tsep { color:#9aa8c2; }
+.thint { color:#8a5a00; margin-left:10px; }
 </style>
 </head>
 <body>
 <header>
   <div class="tophead"><h1>Frontiers journals: how their topics are changing</h1><span class="hint">209 journals · 282,689 Frontiers papers, 2023&ndash;2026</span></div>
+  <div class="trail" id="trail"></div>
   <nav class="nav" role="tablist">
-    <button type="button" class="navtab active" id="navMarket" role="tab">Frontiers view</button>
-    <span class="navgroup" id="navGroup" title="Linked tabs: Scope details always belongs to the journal shown in the Journal tab">
-      <button type="button" class="navtab" id="navJournal" role="tab">Journal<span class="navj" id="navJName"></span></button>
-      <button type="button" class="navtab navsub" id="navScope" role="tab"><span class="sublink" aria-hidden="true">&#8627;</span>Scope details</button>
-    </span>
-    <button type="button" class="navtab" id="navData" role="tab">Data &amp; queries</button>
+    <button type="button" class="navtab active" id="navMarket" role="tab"><span class="tnum">1</span><span class="tt"><b>Frontiers view</b><small>All journals on one map</small></span></button>
+    <span class="chev" aria-hidden="true">&#8250;</span>
+    <button type="button" class="navtab" id="navJournal" role="tab"><span class="tnum">2</span><span class="tt"><b>Journal<span class="navj" id="navJName"></span></b><small>Its topics on a map</small></span></button>
+    <span class="chev" aria-hidden="true">&#8250;</span>
+    <button type="button" class="navtab" id="navScope" role="tab"><span class="tnum">3</span><span class="tt"><b>Scope details</b><small>Full report for this journal</small></span></button>
+    <button type="button" class="navtab navdata" id="navData" role="tab"><span class="tt"><b>Data &amp; queries</b><small>Every query behind the page</small></span></button>
   </nav>
   <p class="intro" id="viewIntro"></p>
   <details class="howto" id="howto"><summary>How to read this</summary>
@@ -227,7 +227,7 @@ table.rt td.r, table.rt th.r { text-align:right; font-variant-numeric:tabular-nu
       <div><b>Colour: Core status</b><br><span class="sw" style="background:#0072B2"></span>Core: inside the journal's core fields. <span class="sw" style="background:#56B4E9"></span>Borderline: reviewed and judged close to the core. <span class="sw" style="background:#D55E00"></span>Outside the core. The share outside the core is the headline figure for each journal.</div>
       <div><b>Colour: Broad field</b><br>Each topic is coloured by the broad field it belongs to.</div>
       <div><b>Years</b><br>Use the year slider to see one year at a time. Years marked &#9888; have far fewer papers than the journal's busiest year, so changes look bigger than they are. The run is dated August 2026, so 2026 is a part year.</div>
-      <div><b>Tabs</b><br><b>Frontiers view</b> shows every journal. Click one to open it in the <b>Journal</b> tab. <b>Scope details</b> is joined to the Journal tab by a dotted outline: it is the full report for the same journal, and changes whenever the journal does. <b>Data &amp; queries</b> lists every BigQuery query behind the page.</div>
+      <div><b>Tabs</b><br>Work left to right: 1 &#8250; 2 &#8250; 3. <b>Frontiers view</b> shows every journal. Click one to open it in the <b>Journal</b> tab. <b>Scope details</b> is the full report for the same journal, and changes whenever the journal does. <b>Data &amp; queries</b> lists every BigQuery query behind the page.</div>
     </div>
   </details>
   <div class="toolbar" id="toolbar">
