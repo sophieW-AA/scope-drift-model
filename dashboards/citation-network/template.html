@@ -121,7 +121,7 @@ svg text{font-size:9px;fill:#333;pointer-events:none}
 <div class="view" id="net">
   <div class="nbar">
     <label>Large group (macro) <select id="fmacro"></select></label>
-    <label>Sub-group (meso) <select id="fmeso"></select></label>
+    <a id="back" style="display:none;font-size:14px"></a>
     <span class="muted" id="cinfo"></span>
   </div>
   <div style="position:relative;padding:4px 16px">
@@ -202,9 +202,7 @@ function init(){
   META=DATA.meta;
   const fm=d3.select("#fmacro");
   META.macro.slice().sort((a,b)=>a.id-b.id).forEach(m=>fm.append("option").attr("value",m.id).text(`Macro ${m.id} · ${fmt(m.n)} authors`));
-  fillMeso();
   document.getElementById("fmacro").onchange=e=>openComm("macro",+e.target.value);
-  document.getElementById("fmeso").onchange=e=>{const v=e.target.value,mac=document.getElementById("fmacro").value;if(v!=="")openComm("meso",+v);else openComm("macro",+mac);};
   document.getElementById("ecount").onchange=renderEgo;
   document.getElementById("ecross").onchange=renderEgo;
   document.getElementById("go").onclick=search;
@@ -213,17 +211,15 @@ function init(){
   openComm("macro",META.macro.slice().sort((a,b)=>b.n-a.n)[0].id);
   show("map");
 }
-function fillMeso(){
-  const mac=document.getElementById("fmacro").value, fs=d3.select("#fmeso"); fs.selectAll("*").remove();
-  fs.append("option").attr("value","").text("Whole large group");
-  META.meso.filter(m=>m.macro==+mac).sort((a,b)=>b.n-a.n).forEach(m=>fs.append("option").attr("value",m.id).text(`Meso ${m.id} · ${fmt(m.n)} authors`));
-}
 function openComm(lv,id){
   let pin=null;
   if(lv==="micro"){const m=META.micro.find(x=>x.id===id); if(!m) return; pin=id; lv="meso"; id=m.meso;}
   const c=META[lv].find(x=>x.id===id); if(!c) return;
-  const fm=document.getElementById("fmacro"),fs=document.getElementById("fmeso");
-  fm.value=String(lv==="macro"?id:c.macro); fillMeso(); fs.value=lv==="meso"?String(id):"";
+  const mac=lv==="macro"?id:c.macro;
+  document.getElementById("fmacro").value=String(mac);
+  const bk=document.getElementById("back");
+  if(lv==="meso"){bk.style.display="";bk.textContent=`← Back to Macro ${mac}`;bk.onclick=()=>openComm("macro",mac);}
+  else bk.style.display="none";
   cur={lvl:lv,id}; show("net");
   if(lv==="macro"){
     const ms=META.micro.filter(m=>m.macro===id), nm=new Set(ms.map(m=>m.meso));
@@ -241,7 +237,7 @@ function openComm(lv,id){
   const g=DATA.comm2[`meso_${id}`]||{n:[],e:[]};
   const grp={}; g.n.forEach(d=>grp[d[0]]=d[4]??-2);
   const nsub=META.micro.filter(m=>m.meso===id).length;
-  document.getElementById("cinfo").textContent=`${fmt(c.n)} authors · showing the ${g.n.length} most connected, from ${new Set(g.n.map(d=>d[4])).size} of ${nsub} small groups. Click a person to open their details.`;
+  document.getElementById("cinfo").textContent=`Meso ${id} · ${fmt(c.n)} authors · showing the ${g.n.length} most connected, from ${new Set(g.n.map(d=>d[4])).size} of ${nsub} small groups. Click a person to open their details.`;
   drawGrouped({
     nodes:g.n.map(d=>({id:d[0],label:d[1],size:d[2],grp:grp[d[0]],dis:!hasD(d[0]),
       tip:`<b>${esc(d[1])}</b><br>strength ${d[2]} · ${d[3]} links in this sub-group${hasD(d[0])?"":"<br><span style='color:#888'>No details available</span>"}`,click:()=>openAuthor(d[0])})),

@@ -4,7 +4,7 @@ Static, self-contained HTML dashboard of the person citation network, run `20261
 (Frontiers journals only, papers published 2023–2026; 817,257 authors, 27 macro / 250 meso / 777 micro communities).
 
 Tabs: **Community map** (27 macro communities, MDS layout from macro-to-macro links; solid lines > 0.9×,
-dotted lines = each macro's 3 strongest neighbours), **Network** (filter by macro or meso at the top; hovering highlights a whole sub-group),
+dotted lines = each macro's 3 strongest neighbours), **Network** (pick a macro at the top, click a bubble to open its sub-group; hovering highlights a whole sub-group),
 **Details** (author pages with their 50 strongest links), **Data** (every query used, with bytes scanned).
 
 ## Files
