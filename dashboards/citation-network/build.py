@@ -12,13 +12,13 @@ TABLES = [
     (f"{P}.airak_v2.Journal", "", "Journal names"),
 ]
 STEPS = [
-    ("Size-adjusted link strength (Python)", "Community map lines, Network macro view lines",
-     "For each pair of communities a and b: strength = w(a,b) / (s(a) × s(b)) × W, where w is the summed link weight between them, s is each community's total weight to other communities, and W is the total across all pairs. 3× means their authors cite each other three times as much as their sizes predict. Links inside a community are left out."),
+    ("Size-adjusted link strength (Python)", "Community map lines and positions",
+     "For each pair of communities a and b: strength = w(a,b) / (s(a) × s(b)) × 2W, where w is the summed link weight between them, s is each community's total weight to other communities, and W is the total across all pairs (2W is the sum of all communities' totals, the standard null model). 3× means their authors cite each other three times as much as their sizes predict. Links inside a community are left out."),
     ("Community map layout (Python)", "Community map positions",
-     f"The map shows the 27 macro communities. Bubbles are placed by metric MDS (scikit-learn, best of 8 seeds) on all 351 macro pairs, with distance = 1/sqrt(strength), so strongly linked macros sit closer. On a flat page this fits only roughly: distance and strength have a rank correlation of {small['rho']}. Solid lines are links above 0.9×; dotted lines are each macro's 3 strongest links when below 0.9×. Line thickness = 2.2 px per 1× of strength."),
-    ("Micro-view groups (browser)", "Network tab, small-group (micro) view",
-     "The 100 authors shown are grouped in the browser with a Louvain-style modularity method on the links among them, so the groups are numbered and not stored in BigQuery. With more than 14 groups, single-author groups merge into \"Other\"."),
-    ("Details-view groups (browser)", "Details tab",
+     f"The map shows the 27 macro communities. Bubbles are placed by metric MDS (scikit-learn, best of 8 seeds) on all 351 macro pairs, with distance = 1/sqrt(strength), so strongly linked macros sit closer. On a flat page this fits only roughly: distance and strength have a rank correlation of {small['rho']}. Solid lines are links above 1.8×; dotted lines are each macro's 3 strongest links when below 1.8×. Line thickness = 1.1 px per 1× of strength."),
+    ("Community map, sub-group layer (Python)", "Community map after clicking a large group",
+     f"For each macro, strength is computed among its own sub-groups only (same formula, with totals taken inside that macro), so 1x means as much as expected compared with the other sub-groups in that large group. Sub-groups are placed by metric MDS (best of 6 seeds) with distance = 1/sqrt(strength); pairs with no link get a long distance. Median rank correlation between distance and strength: {small['mesoRho']}. Each sub-group's 3 strongest links are drawn: solid above 1.8x, dotted below. Line thickness = 1.1 px per 1x, capped at 14 px."),
+    ("Author search groups (browser)", "Author search tab",
      "The people around an author are grouped by their micro community. With more than 16 groups, single-person groups merge into \"Other micros\"."),
 ]
 o = ['''<div class="view" id="data">
@@ -38,9 +38,12 @@ o.append("</div></div>")
 
 GZ = "/home/user/blob.gz"
 with gzip.open(GZ, "wt", compresslevel=9, encoding="utf-8") as z:
-    z.write(json.dumps({k: small[k] for k in ("meta", "mall", "mpos", "mstats", "mnet", "mtop")}, separators=(",", ":"), ensure_ascii=False)[:-1])
+    z.write(json.dumps({k: small[k] for k in ("meta", "mall", "mpos", "mstats", "mtop", "mesoL", "mesoP")}, separators=(",", ":"), ensure_ascii=False)[:-1])
     for key, fn in (("comm2", "comm2"), ("ego", "ego"), ("e50", "e50"), ("nb", "nb")):
         z.write(f',"{key}":{{')
+        if key == "comm2":
+            t = open(f"{B}/{fn}.part", encoding="utf-8").read(); k = t.find(',"micro_')
+            z.write(t if k < 0 else t[:k]); z.write("}"); del t; continue
         with open(f"{B}/{fn}.part", encoding="utf-8") as src:
             while True:
                 ch = src.read(1 << 20)

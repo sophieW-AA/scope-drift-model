@@ -55,7 +55,7 @@ mstats = {int(m): {"np": int(npm.get(m, 0)), "intra": round(100 * float(intra.ge
 X = E[E.a != E.b].copy(); X["p"] = X[["a", "b"]].min(1); X["q"] = X[["a", "b"]].max(1)
 U = X.groupby(["p", "q"]).w.sum().reset_index()
 s = pd.concat([U.groupby("p").w.sum(), U.groupby("q").w.sum()]).groupby(level=0).sum()
-U["s"] = U.w / (s.reindex(U.p).values * s.reindex(U.q).values) * U.w.sum()
+U["s"] = U.w / (s.reindex(U.p).values * s.reindex(U.q).values) * 2 * U.w.sum()
 mall = [[int(p), int(q), round(float(v), 3), round(float(w), 1)] for p, q, v, w in zip(U.p, U.q, U.s, U.w)]
 from sklearn.manifold import MDS
 ids = sorted(set(U.p) | set(U.q)); ix = {k: i for i, k in enumerate(ids)}; n = len(ids)
@@ -73,32 +73,10 @@ mpos = {int(k): [round(float(Pm[ix[k], 0]), 4), round(float(Pm[ix[k], 1]), 4)] f
 top18 = U.sort_values("s", ascending=False).head(1)
 log(f"macro pairs {len(mall)}, rank corr {rho:.2f}, strongest {top18.p.iloc[0]}-{top18.q.iloc[0]} {top18.s.iloc[0]:.2f}x")
 
-# 3 micro pairs -> lines inside each macro
-mac = {r["id"]: r["macro"] for r in meta["micro"]}
-Em = run("Citation between micro communities", "Network tab, macro view (lines between micro bubbles)",
-         "Python applies the size adjustment over all pairs, keeps pairs inside the same macro, then keeps each micro's 5 strongest.",
-         f"""
-WITH cl AS (SELECT int_id, micro FROM {C})
-SELECT LEAST(a.micro, b.micro) a, GREATEST(a.micro, b.micro) b, SUM(l.weight) w
-FROM {L} l JOIN cl a ON a.int_id = l.int_id1 JOIN cl b ON b.int_id = l.int_id2
-WHERE l.int_id1 < l.int_id2 AND a.micro != b.micro
-GROUP BY 1, 2""").to_dataframe()
-sm = pd.concat([Em.groupby("a").w.sum(), Em.groupby("b").w.sum()]).groupby(level=0).sum()
-Em["s"] = Em.w / (sm.reindex(Em.a).values * sm.reindex(Em.b).values) * Em.w.sum()
-Em["ma"] = Em.a.map(mac); Em["mb"] = Em.b.map(mac); Em = Em[Em.ma == Em.mb]
-both = pd.concat([Em.rename(columns={"a": "u", "b": "v"}), Em.rename(columns={"b": "u", "a": "v"})])
-both["r"] = both.groupby("u")["s"].rank(ascending=False, method="first")
-kp = both[both.r <= 5]; kp = kp.assign(a=kp[["u", "v"]].min(1), b=kp[["u", "v"]].max(1)).drop_duplicates(["a", "b"])
-mnet = {}
-for m_, g in kp.groupby("ma"):
-    mnet[int(m_)] = [[int(a), int(b), round(float(x), 2), round(float(w), 1)] for a, b, x, w in zip(g.a, g.b, g.s, g.w)]
-del Em, both, kp
-log(f"mnet {sum(len(v) for v in mnet.values())} lines")
-
 # 4 top-100 authors for each meso and micro
 with open(f"{OUT}/comm2.part", "w", encoding="utf-8") as f:
     first = True
-    for lv in ("meso", "micro"):
+    for lv in ("meso",):
         order = "(rs <= 2) DESC, s DESC" if lv == "meso" else "s DESC"
         sql = f"""
 WITH cl AS (SELECT int_id, {lv} cid, micro FROM {C}),
@@ -121,9 +99,9 @@ edc AS (SELECT ed.cid, STRING_AGG(FORMAT('[%d,%d,%.3g,%d]', ed.a, ed.b, ed.w, IF
 nd AS (SELECT s.cid, STRING_AGG(FORMAT('[%d,%s,%.4g,%d,%d]', s.int_id, TO_JSON_STRING(IFNULL(m.name, '')), s.s, s.k, s.sub), ',' ORDER BY s.s DESC) n
        FROM sel s JOIN {M} m USING(int_id) GROUP BY 1)
 SELECT nd.cid, nd.n, IFNULL(edc.e, '') e FROM nd LEFT JOIN edc USING(cid)"""
-        rows = run("Top 100 authors in each meso and micro community", "Network tab (meso and micro views, author table)",
-                   "Run twice, for meso and micro (this is the micro run). The meso run puts the top 2 authors of each micro first, then the strongest overall. Each author keeps their 6 strongest links to the others selected; coauthor pairs are flagged.",
-                   sql, page=100, record=(lv == "micro"))
+        rows = run("Top 100 authors in each meso community", "Network tab (people in a sub-group, author table)",
+                   "The top 2 authors of each micro come first, then the strongest overall, up to 100. Each author keeps their 6 strongest links to the others selected; coauthor pairs are flagged.",
+                   sql, page=100, record=True)
         cnt = 0
         for r in rows:
             f.write(("" if first else ",") + f'"{lv}_{r["cid"]}":{{"n":[{r["n"]}],"e":[{r["e"]}]}}'); first = False; cnt += 1
@@ -216,7 +194,7 @@ with open(f"{OUT}/nb.part", "w", encoding="utf-8") as f:
     for r in rows: f.write(("," if k else "") + r["s"]); k += 1
 log(f"linked people {k}")
 
-json.dump({"meta": meta, "mall": mall, "mpos": mpos, "mstats": mstats, "mnet": mnet, "mtop": mtop, "nemb": len(emb), "rho": round(float(rho), 2)},
+json.dump({"meta": meta, "mall": mall, "mpos": mpos, "mstats": mstats, "mtop": mtop, "doubled": True, "nemb": len(emb), "rho": round(float(rho), 2)},
           open(f"{OUT}/small.json", "w"), separators=(",", ":"), ensure_ascii=False)
 json.dump(QLOG, open(f"{OUT}/queries.json", "w"), ensure_ascii=False, indent=0)
 log(f"done, {GB[0]:.1f} GB billed")

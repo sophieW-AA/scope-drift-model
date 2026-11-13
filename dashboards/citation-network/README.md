@@ -3,9 +3,14 @@
 Static, self-contained HTML dashboard of the person citation network, run `20261016_150236`
 (Frontiers journals only, papers published 2023–2026; 817,257 authors, 27 macro / 250 meso / 777 micro communities).
 
-Tabs: **Community map** (27 macro communities, MDS layout from macro-to-macro links; solid lines > 0.9×,
-dotted lines = each macro's 3 strongest neighbours), **Network** (pick a macro at the top, click a bubble to open its sub-group; hovering highlights a whole sub-group),
-**Details** (author pages with their 50 strongest links), **Data** (every query used, with bytes scanned).
+Tabs, in the order you click through them:
+1. **Community map**: 27 large groups (macro), laid out by MDS from macro-to-macro links (solid lines > 1.8×, dotted = each macro's 3 strongest neighbours). Click a macro to zoom into its sub-groups (meso), laid out the same way.
+2. **Network**: the 100 most connected people in one sub-group, grouped by small group (micro); hovering highlights a whole small group.
+3. **Author search**: one author and their 50 strongest links.
+
+A "You are here" trail above the tabs shows the path and links back to each level. **Data** lists every query used, with bytes scanned.
+
+Link strength = w(a,b) / (s(a) × s(b)) × 2W (1× = what the groups' sizes predict).
 
 ## Files
 
@@ -13,6 +18,7 @@ dotted lines = each macro's 3 strongest neighbours), **Network** (pick a macro a
 |---|---|
 | `export.py` | Runs all BigQuery queries and writes the data to `/home/user/cn/` (about 35 GB billed, 1–2 minutes). Records each query in `cn/queries.json` for the Data tab. |
 | `template.html` | The dashboard page (HTML, CSS, D3 code) with placeholders for the data. |
+| `meso_layer.py` | Adds macro-internal meso links and layouts (the Community map's sub-group layer) to `cn/small.json`. |
 | `build.py` | Gzips the data, embeds it in the template and writes `artifacts/citation-network/index.html` (~25 MB). |
 | `make_sample.py` | Writes a small data sample (macros 0 and 2) so tests fit in memory. |
 | `test_dashboard.js` | Runs every view against the real data in jsdom (`npm install jsdom@24 d3@7`, then `node test_dashboard.js`). |
@@ -21,6 +27,7 @@ dotted lines = each macro's 3 strongest neighbours), **Network** (pick a macro a
 
 ```bash
 python3 export.py      # needs GOOGLE_APPLICATION_CREDENTIALS; billing project gcp-innovation-hub
+python3 meso_layer.py  # sub-group layer for the community map
 python3 build.py
 python3 make_sample.py
 node --max-old-space-size=400 test_dashboard.js

@@ -66,6 +66,14 @@ svg text{font-size:9px;fill:#333;pointer-events:none}
 .mc.flash{box-shadow:0 0 0 3px #d79a1e}
 .nbar{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid #eef0f3;font-size:13px;color:#555}.nbar select{margin-left:6px;padding:7px;font-size:14px;border:1px solid #c8ccd4;border-radius:5px;min-width:220px}
 .hov{position:absolute;top:10px;left:24px;font-size:14px;color:#888;background:rgba(255,255,255,.9);padding:4px 8px;border-radius:5px;pointer-events:none}.hov b{color:#0a2a8a}
+.mnav{position:absolute;top:16px;left:30px;background:rgba(255,255,255,.95);border:1px solid #e3e5ea;border-radius:6px;padding:6px 12px;font-size:14px;z-index:2}.mnav a{margin-right:14px}
+.tab small{display:block;font-size:11px;color:#888;font-weight:400;margin-top:1px}
+.tarr{align-self:center;color:#b5bac4;font-size:22px;padding:0 2px}
+.sn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#e3e8f7;color:#0a2a8a;font-size:11px;font-weight:700;margin-right:6px;vertical-align:1px}
+.tab.on .sn{background:#0a2a8a;color:#fff}
+.trail{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:#555;padding:2px 2px 8px}
+.trail .sep{color:#bbb}.trail .cur{font-weight:600;color:#0a2a8a}.trail .sn{width:16px;height:16px;font-size:10px;margin-right:4px}
+.trail .next{color:#8a6d1e;margin-left:6px}
 .zb{width:34px;height:34px;font-size:20px;line-height:1;border:1px solid #cfd4dc;background:#fff;border-radius:6px;cursor:pointer;color:#0a2a8a;box-shadow:0 1px 3px rgba(0,0,0,.08)}.zb:hover{background:#f0f3fb}
 .dh{margin:20px 0 8px;font-size:17px;color:#0a2a8a}
 .qcard{border:1px solid #e3e5ea;border-radius:8px;padding:10px 12px;margin:10px 0;background:#fff}
@@ -87,30 +95,34 @@ svg text{font-size:9px;fill:#333;pointer-events:none}
     <li><b>Links:</b> two authors are linked when one's paper cites the other's and <i>both</i> papers are in this set. Citations to or from other publishers, or before 2023, are ignored. A link is citation-based, not coauthorship; teal lines mark pairs who are also coauthors.</li>
     <li><b>Weights:</b> first and last authors count 1.0, middle authors 0.25. Older citations count for less (temporal decay, τ = 5 years). Link counts depend on how often a person's papers are cited, not on how many they wrote.</li>
     <li><b>Communities:</b> Leiden clustering of the author network into 27 macro, 250 meso and 777 micro communities. They have no topic labels; the top journal is shown instead.</li>
-    <li><b>Community map:</b> positions come only from citation between macro communities. Use the lines, not the gaps, to judge how related two groups are.</li>
-    <li><b>Details:</b> __NEMB__ authors (anyone in the top 40 of their micro, meso or macro community) have a details page with their 50 strongest links. Other people appear greyed out and cannot be opened.</li>
+    <li><b>Community map:</b> positions come only from citation between macro communities. Click a large group to see its sub-groups (meso), laid out the same way from citation between them. Use the lines, not the gaps, to judge how related two groups are.</li>
+    <li><b>Author search:</b> __NEMB__ authors (anyone in the top 40 of their micro, meso or macro community) have a details page with their 50 strongest links. Other people appear greyed out and cannot be opened.</li>
   </ul></div>
 </div>
 <div id="status">Loading data…</div>
+<div class="trail" id="trail"></div>
 <div class="tabs">
-  <div class="tab on" data-v="map">Community map</div>
-  <div class="tab" data-v="net">Network</div>
-  <div class="tab" data-v="det">Details</div>
-  <div class="tab" data-v="data">Data</div>
+  <div class="tab on" data-v="map"><span class="sn">1</span>Community map<small>Large groups and their sub-groups</small></div>
+  <span class="tarr">›</span>
+  <div class="tab" data-v="net"><span class="sn">2</span>Network<small>People in one sub-group</small></div>
+  <span class="tarr">›</span>
+  <div class="tab" data-v="det"><span class="sn">3</span>Author search<small>One author and their links</small></div>
+  <div class="tab" data-v="data" style="margin-left:auto">Data<small>Sources and queries</small></div>
 </div>
 
 <div class="view on" id="map">
-  <div class="crumbs"><b>Communities of Frontiers authors</b> (papers in Frontiers journals, 2023–2026). Each bubble is one of 27 groups of authors who cite each other. Linked groups sit closer together, but use the lines, not the gaps, to judge how related they are.</div>
+  <div class="crumbs" id="mcap"><b>Communities of Frontiers authors</b> (papers in Frontiers journals, 2023–2026). Each bubble is one of 27 groups of authors who cite each other. Linked groups sit closer together, but use the lines, not the gaps, to judge how related they are.</div>
   <div style="padding:10px 18px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <label style="font-size:13px"><input type="checkbox" id="mlinks" checked> Show links</label>
     <span style="font-size:13px;display:inline-flex;gap:14px;align-items:center;border:1px solid #e3e5ea;border-radius:6px;padding:3px 10px;background:#fff">
-      <span><svg width="30" height="8" style="vertical-align:middle"><line x1="2" y1="4" x2="28" y2="4" stroke="#777" stroke-width="3" stroke-linecap="round"/></svg> Above 0.9×</span>
-      <span><svg width="30" height="8" style="vertical-align:middle"><line x1="2" y1="4" x2="28" y2="4" stroke="#777" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 7"/></svg> Top 3 neighbors</span>
+      <span><svg width="30" height="8" style="vertical-align:middle"><line x1="2" y1="4" x2="28" y2="4" stroke="#777" stroke-width="3" stroke-linecap="round"/></svg> <span id="ksol">Above 1.8×</span></span>
+      <span><svg width="30" height="8" style="vertical-align:middle"><line x1="2" y1="4" x2="28" y2="4" stroke="#777" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 7"/></svg> <span id="kdot">Top 3 neighbors</span></span>
       <span class="muted">Thickness = strength · Size = authors</span>
     </span>
-    <span class="muted">Hover a bubble to highlight its links. Click to open its network. Drag to pan; use + / − to zoom.</span>
+    <span class="muted" id="mhelp">Hover a bubble to highlight its links. Click a large group to see its sub-groups. Drag to pan; use + / − to zoom.</span>
   </div>
   <div style="position:relative;padding:6px 18px">
+    <div id="mnav" class="mnav" style="display:none"></div>
     <svg id="msvg" width="100%" height="760" style="display:block;cursor:grab;border:1px solid #eef0f3;border-radius:6px;background:#fff"></svg>
     <div style="position:absolute;top:16px;right:28px;display:flex;flex-direction:column;gap:4px">
       <button class="zb" id="zin" title="Zoom in">+</button><button class="zb" id="zout" title="Zoom out">−</button><button class="zb" id="zfit" title="Reset view" style="font-size:12px">Fit</button>
@@ -120,7 +132,7 @@ svg text{font-size:9px;fill:#333;pointer-events:none}
 
 <div class="view" id="net">
   <div class="nbar">
-    <label>Large group (macro) <select id="fmacro"></select></label>
+    <label>Sub-group (meso) <select id="fmeso"></select></label>
     <a id="back" style="display:none;font-size:14px"></a>
     <span class="muted" id="cinfo"></span>
   </div>
@@ -192,49 +204,62 @@ function show(v){
   document.querySelectorAll(".view").forEach(x=>x.classList.toggle("on",x.id===v));
   hideTip();
   if(v==="map"){if(!mapDone)drawMap();else{const s=document.getElementById("msvg");if(s.clientWidth!==+s.dataset.w)renderMap();}}
+  updTrail();
 }
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>show(t.dataset.v));
+
+/* ---------- Where you are ---------- */
+function updTrail(){
+  const t=document.getElementById("trail"); if(!t||!META) return;
+  const v=(document.querySelector(".view.on")||{}).id;
+  if(v==="data"){t.style.display="none";return;} t.style.display="";
+  const it=[], sn=n=>`<span class="sn">${n}</span>`;
+  const add=(n,label,fn,here)=>it.push(here?`<span class="cur">${sn(n)}${esc(label)}</span>`:`<a onclick="${fn}">${sn(n)}${esc(label)}</a>`);
+  let hint="";
+  if(v==="map"){
+    add(1,"All large groups","mapAll()",MAPM==null);
+    if(MAPM!=null){add(1,`Macro ${MAPM}`,"",true); hint="Click a sub-group to see its people in step 2";}
+    else hint="Click a large group to see its sub-groups";
+  } else if(v==="net"){
+    const c=META.meso.find(x=>x.id===cur.id);
+    add(1,"All large groups","mapAll()",false);
+    if(c){add(1,`Macro ${c.macro}`,`openComm('macro',${c.macro})`,false); add(2,`Meso ${c.id}`,"",true);}
+    hint="Click a person to see their links in step 3";
+  } else if(v==="det"){
+    add(1,"All large groups","mapAll()",false);
+    if(EGO){add(1,`Macro ${EGO.ma}`,`openComm('macro',${EGO.ma})`,false); add(2,`Meso ${EGO.me}`,`openComm('meso',${EGO.me})`,false); add(3,EGO.n,"",true); hint="Click a linked person to move to them";}
+    else add(3,"Search for an author","",true);
+  }
+  t.innerHTML=`<span class="muted">You are here:</span>`+it.join('<span class="sep">›</span>')+(hint?`<span class="next">→ ${hint}</span>`:"");
+}
 
 /* ---------- Network tab ---------- */
 const L={macro:"Macro",meso:"Meso",micro:"Micro"};
 let cur={lvl:"macro",id:null};
 function init(){
   META=DATA.meta;
-  const fm=d3.select("#fmacro");
-  META.macro.slice().sort((a,b)=>a.id-b.id).forEach(m=>fm.append("option").attr("value",m.id).text(`Macro ${m.id} · ${fmt(m.n)} authors`));
-  document.getElementById("fmacro").onchange=e=>openComm("macro",+e.target.value);
+  const fs=d3.select("#fmeso");
+  META.macro.slice().sort((a,b)=>a.id-b.id).forEach(m=>{const og=fs.append("optgroup").attr("label",`Macro ${m.id}`);
+    META.meso.filter(x=>x.macro===m.id).sort((a,b)=>b.n-a.n).forEach(x=>og.append("option").attr("value",x.id).text(`Meso ${x.id} · ${fmt(x.n)} authors`));});
+  document.getElementById("fmeso").onchange=e=>openComm("meso",+e.target.value);
   document.getElementById("ecount").onchange=renderEgo;
   document.getElementById("ecross").onchange=renderEgo;
   document.getElementById("go").onclick=search;
   document.getElementById("q").onkeydown=e=>{if(e.key==="Enter")search();};
   document.querySelectorAll(".qcopy").forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(document.getElementById(b.dataset.q).textContent).then(()=>{b.textContent="Copied";setTimeout(()=>b.textContent="Copy SQL",1200);});});
-  openComm("macro",META.macro.slice().sort((a,b)=>b.n-a.n)[0].id);
+  openComm("meso",META.meso.slice().sort((a,b)=>b.n-a.n)[0].id);
   show("map");
 }
 function openComm(lv,id){
   let pin=null;
   if(lv==="micro"){const m=META.micro.find(x=>x.id===id); if(!m) return; pin=id; lv="meso"; id=m.meso;}
-  const c=META[lv].find(x=>x.id===id); if(!c) return;
-  const mac=lv==="macro"?id:c.macro;
-  document.getElementById("fmacro").value=String(mac);
+  if(lv==="macro"){hideTip();show("map");zoomMap(id,false);window.scrollTo(0,0);return;}
+  const c=META.meso.find(x=>x.id===id); if(!c) return;
+  const mac=c.macro;
+  document.getElementById("fmeso").value=String(id);
   const bk=document.getElementById("back");
-  bk.style.display="";
-  if(lv==="meso"){bk.textContent=`← Back to Macro ${mac}`;bk.onclick=()=>openComm("macro",mac);}
-  else {bk.textContent="← Back to all large groups";bk.onclick=()=>show("map");}
+  bk.style.display=""; bk.textContent=`← Back to Macro ${mac} on the map`; bk.onclick=()=>openComm("macro",mac);
   cur={lvl:lv,id}; show("net");
-  if(lv==="macro"){
-    const ms=META.micro.filter(m=>m.macro===id), nm=new Set(ms.map(m=>m.meso));
-    document.getElementById("cinfo").textContent=`${fmt(c.n)} authors · ${ms.length} small groups in ${nm.size} sub-groups. Click a bubble to open its sub-group.`;
-    drawGrouped({
-      nodes:ms.map(m=>({id:m.id,label:`Micro ${m.id}`,size:m.n,grp:m.meso,
-        tip:`<b>Micro ${m.id}</b><br>${fmt(m.n)} authors<br>${esc(topJ(m))}`,click:()=>openComm("micro",m.id)})),
-      edges:((DATA.mnet||{})[id]||[]).map(e=>[e[0],e[1],e[2],0]),
-      edgeTip:e=>`Micro ${e[0]} — Micro ${e[1]}<br>${e[2]}× the citation expected for their size`,
-      groupName:k=>`Meso ${k}`, groupInfo:k=>{const m=META.meso.find(x=>x.id===k);return m?`${fmt(m.n)} authors · ${esc(topJ(m))}`:"";},
-      groupClick:k=>openComm("meso",k), unit:"small groups"});
-    d3.select("#ctab").html(`<tr><th>Small group</th><th>Sub-group</th><th>Authors</th><th>Top journal</th></tr>`+ms.sort((a,b)=>b.n-a.n).map(m=>`<tr><td>Micro ${m.id}</td><td><a onclick="openComm('meso',${m.meso})">Meso ${m.meso}</a></td><td>${fmt(m.n)}</td><td>${esc(topJ(m))}</td></tr>`).join(""));
-    return;
-  }
   const g=DATA.comm2[`meso_${id}`]||{n:[],e:[]};
   const grp={}; g.n.forEach(d=>grp[d[0]]=d[4]??-2);
   const nsub=META.micro.filter(m=>m.meso===id).length;
@@ -246,6 +271,7 @@ function openComm(lv,id){
     groupInfo:k=>{const m=META.micro.find(x=>x.id===k);return m?`${fmt(m.n)} authors in total · ${esc(topJ(m))}`:"";},
     groupClick:null, unit:"authors shown", authors:true, pin});
   d3.select("#ctab").html(`<tr><th>#</th><th>Author</th><th>Small group</th><th>Strength in sub-group</th><th>Links in sub-group</th></tr>`+g.n.map((n,i)=>`<tr><td>${i+1}</td><td>${hasD(n[0])?`<a onclick="openAuthor(${n[0]})">${esc(n[1])}</a>`:`<span style="color:#aaa" title="No details available">${esc(n[1])}</span>`}</td><td>Micro ${n[4]}</td><td>${n[2]}</td><td>${n[3]}</td></tr>`).join(""));
+  updTrail();
 }
 function goComm(lv,id){hideTip();openComm(lv,id);window.scrollTo(0,0);}
 
@@ -337,6 +363,7 @@ function openAuthor(i){
    <div class="sech">STRONGEST ${a.l.length} LINKS</div>
    <div style="max-height:520px;overflow-y:auto"><table><tr><th>#</th><th>Author</th><th>Micro</th><th>Weight</th></tr>
    ${a.l.map((x,k)=>`<tr><td>${k+1}</td><td>${hasD(x.id)?`<a onclick="openAuthor(${x.id})">${esc(x.nm)}</a>`:`<span style="color:#aaa" title="No details available">${esc(x.nm)}</span>`}${x.co?' <span title="also coauthors" style="color:#2a9d8f">●</span>':""}</td><td>${x.mi>=0?`<a onclick="openComm('micro',${x.mi})">${x.mi}</a>`:"–"}</td><td>${x.w}</td></tr>`).join("")}</table></div>`;
+  updTrail();
   window.scrollTo(0,0);
 }
 function renderEgo(){
@@ -407,21 +434,49 @@ function renderEgo(){
 }
 
 /* ---------- Community map ---------- */
-let mapDone=false;
-const THR=0.9, LWK=2.2;
+let mapDone=false, MAPM=null;
+const THR=1.8, LWK=1.1;
+const CAP0=document.getElementById("mcap").innerHTML;
 function drawMap(){
   if(mapDone) return; mapDone=true;
-  document.getElementById("mlinks").onchange=renderMap;
+  document.getElementById("mlinks").onchange=()=>renderMap();
   renderMap();
 }
-function renderMap(){
-  const svg=d3.select("#msvg"); svg.selectAll("*").remove();
+function mapAll(){MAPM=null; show("map"); renderMap();}
+function zoomMap(id,anim){
+  hideTip();
+  const go=()=>{MAPM=id; renderMap(anim);};
+  if(!anim||!window.__mapZoom) return go();
+  window.__mapZoom(id).then(go,go);
+}
+function renderMap(fade){
+  const svg=d3.select("#msvg"); svg.selectAll("*").remove(); svg.interrupt();
   const H=Math.max(520,window.innerHeight-svg.node().getBoundingClientRect().top-24); svg.attr("height",H);
   const W=svg.node().clientWidth||1000, m=20; svg.node().dataset.w=W;
-  const N=META.macro.map(c=>({id:c.id,n:c.n,j:topJ(c),x:DATA.mpos[c.id][0],y:DATA.mpos[c.id][1]}));
-  const RMAX=Math.min(W,H)*0.085, PAD=m+RMAX;
-  const x=d3.scaleLinear().domain(d3.extent(N,d=>d.x)).range([PAD,W-PAD]), y=d3.scaleLinear().domain(d3.extent(N,d=>d.y)).range([H-PAD,PAD]);
-  const r=d3.scaleSqrt().domain([0,d3.max(N,d=>d.n)]).range([6,RMAX]);
+  const inM=MAPM!=null, mac=inM?META.macro.find(c=>c.id===MAPM):null;
+  const N=inM
+    ? META.meso.filter(c=>c.macro===MAPM&&DATA.mesoP[MAPM]&&DATA.mesoP[MAPM][c.id]).map((c,k)=>({id:c.id,n:c.n,j:topJ(c),x:DATA.mesoP[MAPM][c.id][0],y:DATA.mesoP[MAPM][c.id][1]}))
+    : META.macro.map(c=>({id:c.id,n:c.n,j:topJ(c),x:DATA.mpos[c.id][0],y:DATA.mpos[c.id][1]}));
+  const nav=document.getElementById("mnav");
+  if(inM){
+    nav.style.display="";
+    nav.innerHTML=`<a onclick="mapAll()">← All large groups</a><b>Macro ${MAPM}</b> · ${N.length} sub-groups · ${fmt(mac.n)} authors`;
+    document.getElementById("mcap").innerHTML=`<b>Sub-groups of Macro ${MAPM}</b> (Frontiers authors, 2023–2026). Each bubble is a sub-group (meso) of this large group. Linked sub-groups sit closer together, but use the lines, not the gaps, to judge how related they are.`;
+    document.getElementById("ksol").textContent="Top 3 neighbors, above 1.8×";
+    document.getElementById("kdot").textContent="Top 3 neighbors, below 1.8×";
+    document.getElementById("mhelp").textContent="Hover a bubble to highlight its links. Click a sub-group to open its network. Drag to pan; use + / − to zoom.";
+  } else {
+    nav.style.display="none";
+    document.getElementById("mcap").innerHTML=CAP0;
+    document.getElementById("ksol").textContent="Above 1.8×";
+    document.getElementById("kdot").textContent="Top 3 neighbors";
+    document.getElementById("mhelp").textContent="Hover a bubble to highlight its links. Click a large group to see its sub-groups. Drag to pan; use + / − to zoom.";
+  }
+  const RMAX=Math.min(W,H)*(inM?(N.length>40?0.045:N.length>15?0.06:0.08):0.085), PAD=m+RMAX+(inM?40:0);
+  const ext=(f)=>{const e=d3.extent(N,f);return e[0]===e[1]?[e[0]-1,e[1]+1]:e;};
+  const x=d3.scaleLinear().domain(ext(d=>d.x)).range([PAD,W-PAD]), y=d3.scaleLinear().domain(ext(d=>d.y)).range([H-PAD,PAD+(inM?30:0)]);
+  const r=d3.scaleSqrt().domain([0,d3.max(N,d=>d.n)||1]).range([inM?4:6,RMAX]);
+  const col=inM?(d=>PAL[N.indexOf(d)%PAL.length]):(d=>macroCol(d.id));
   const g=svg.append("g");
   const zm=d3.zoom().scaleExtent([0.5,12]).clickDistance(6)
     .filter(e=>(e.type==="mousedown"||e.type==="touchstart"||e.type==="pointerdown")&&!(e.target&&e.target.closest&&e.target.closest(".mb")))
@@ -432,27 +487,34 @@ function renderMap(){
   document.getElementById("zout").onclick=()=>svg.transition().duration(250).call(zm.scaleBy,1/1.5);
   document.getElementById("zfit").onclick=()=>svg.transition().duration(250).call(zm.transform,d3.zoomIdentity);
   const byId=new Map(N.map(d=>[d.id,d]));
-  const AL=DATA.mall.filter(e=>byId.has(e[0])&&byId.has(e[1])).map(e=>({a:byId.get(e[0]),b:byId.get(e[1]),s:e[2]})).sort((p,q)=>p.s-q.s);
+  const RAW=inM?(DATA.mesoL[MAPM]||[]):DATA.mall;
+  const AL=RAW.filter(e=>byId.has(e[0])&&byId.has(e[1])).map(e=>({a:byId.get(e[0]),b:byId.get(e[1]),s:e[2]})).sort((p,q)=>p.s-q.s);
   const T3=new Map(); N.forEach(d=>T3.set(d.id,new Set(AL.filter(e=>e.a===d||e.b===d).sort((p,q)=>q.s-p.s).slice(0,3))));
   AL.forEach(e=>{e.top=T3.get(e.a.id).has(e)||T3.get(e.b.id).has(e);});
-  const keep=e=>e.s>THR||e.top;
+  const keep=inM?(e=>e.top):(e=>e.s>THR||e.top);
   const curve=e=>{const x1=x(e.a.x),y1=y(e.a.y),x2=x(e.b.x),y2=y(e.b.y),dx=x2-x1,dy=y2-y1,k=0.22;return `M${x1},${y1}Q${(x1+x2)/2-dy*k},${(y1+y2)/2+dx*k} ${x2},${y2}`;};
-  const lw=s=>LWK*s;
+  const lw=s=>Math.min(14,LWK*s);
+  const LV=inM?"Meso":"Macro";
   const on=document.getElementById("mlinks").checked, D=on?AL.filter(keep):[];
   const pl=g.append("g").attr("fill","none").selectAll("path").data(D).join("path").attr("d",curve)
     .attr("stroke","#777").attr("stroke-width",e=>lw(e.s)).attr("stroke-opacity",.55).attr("stroke-linecap","round")
     .attr("stroke-dasharray",e=>e.s>THR?null:`0.1 ${lw(e.s)+5}`)
-    .on("mousemove",(ev,e)=>showTip(ev,`<b>Macro ${e.a.id} — Macro ${e.b.id}</b><br>${e.s.toFixed(2)}× the citation expected for their size${e.s>THR?"":"<br><span style='color:#888'>Top-3 neighbor link (below 0.9×)</span>"}`))
+    .on("mousemove",(ev,e)=>showTip(ev,`<b>${LV} ${e.a.id} — ${LV} ${e.b.id}</b><br>${e.s.toFixed(2)}× the citation expected for their size${inM?"<br><span style='color:#888'>Compared with other sub-groups in this large group</span>":e.s>THR?"":"<br><span style='color:#888'>Top-3 neighbor link (below 1.8×)</span>"}`))
     .on("mouseout",hideTip);
   const ci=g.append("g").selectAll("circle").data(N.slice().sort((a,b)=>b.n-a.n)).join("circle").attr("class","mb")
-    .attr("cx",d=>x(d.x)).attr("cy",d=>y(d.y)).attr("r",d=>r(d.n)).attr("fill",d=>macroCol(d.id)).attr("fill-opacity",.72).attr("stroke","#fff").style("cursor","pointer")
+    .attr("cx",d=>x(d.x)).attr("cy",d=>y(d.y)).attr("r",d=>r(d.n)).attr("fill",col).attr("fill-opacity",.72).attr("stroke","#fff").style("cursor","pointer")
     .on("mouseover",(e,d)=>{
       const nb=new Set([d.id]); D.forEach(l=>{if(l.a===d)nb.add(l.b.id);if(l.b===d)nb.add(l.a.id);});
       pl.attr("stroke-opacity",l=>l.a===d||l.b===d?.85:.05).filter(l=>l.a===d||l.b===d).raise();
       ci.attr("fill-opacity",o=>nb.has(o.id)?.9:.25);})
-    .on("mousemove",(e,d)=>showTip(e,`<b>Macro ${d.id}</b><br>${fmt(d.n)} authors<br>Top journal: ${esc(d.j)}`))
+    .on("mousemove",(e,d)=>showTip(e,`<b>${LV} ${d.id}</b><br>${fmt(d.n)} authors<br>Top journal: ${esc(d.j)}<br><span style="color:#888">${inM?"Click to open its network":"Click to see its sub-groups"}</span>`))
     .on("mouseout",()=>{pl.attr("stroke-opacity",.55);ci.attr("fill-opacity",.72);hideTip();})
-    .on("click",(e,d)=>{e.stopPropagation();goComm("macro",d.id);});
+    .on("click",(e,d)=>{e.stopPropagation(); if(inM) goComm("meso",d.id); else zoomMap(d.id,true);});
+  window.__mapZoom=id=>{const d=byId.get(id); if(!d||inM) return Promise.resolve();
+    ci.filter(o=>o!==d).transition().duration(250).style("opacity",0); pl.transition().duration(200).style("opacity",0);
+    return g.transition().duration(450).attr("transform",`translate(${W/2},${H/2}) scale(${Math.min(8,Math.min(W,H)/(2.2*r(d.n)))}) translate(${-x(d.x)},${-y(d.y)})`).end();};
+  if(fade){g.style("opacity",0).transition().duration(350).style("opacity",1);}
+  updTrail();
 }
 
 window.addEventListener("error",e=>setStatus("Something went wrong: "+esc(e.message)+". Please send a screenshot of this message.",true));
