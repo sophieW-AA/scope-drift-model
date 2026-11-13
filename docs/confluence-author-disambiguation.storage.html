@@ -1,0 +1,245 @@
+<p>This page explains a proof of concept for <strong>author disambiguation</strong>: working out when two author records in our citation data belong to the same researcher. It sits under <ac:link><ri:page ri:content-title="Citation Network" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Citation Network]]></ac:plain-text-link-body></ac:link>, which explains the network this work supports. The source data (AIRAK) is not changed.</p>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">Summary</ac:parameter>
+  <ac:rich-text-body>
+    <ul>
+      <li><strong>The problem:</strong> one researcher can appear as several author records. Their work is split, and author counts are inflated.</li>
+      <li><strong>The test:</strong> simple, explainable rules applied to one network of 86,355 author records.</li>
+      <li><strong>The result:</strong> the rules would reduce the network to 85,674 people, removing 681 duplicate records (0.8%). Among names that appear more than once, the reduction is 16.8%.</li>
+      <li><strong>Safety:</strong> no merged group contains a pair the data marks as different people. Unclear cases are left alone.</li>
+      <li><strong>The gap:</strong> the rules miss some clear matches. Five records for Daniel H. Robinson are an example.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<hr />
+
+<h2>Key terms</h2>
+
+<table>
+  <tbody>
+    <tr><th>Term</th><th>What it means</th></tr>
+    <tr><td><strong>Author record (AuthorId)</strong></td><td>The ID AIRAK assigns to an author. One researcher can have several.</td></tr>
+    <tr><td><strong>Profile</strong></td><td>Our name for one author record, with its papers, career years and coauthors.</td></tr>
+    <tr><td><strong>Person</strong></td><td>What profiles become once the ones that belong together are joined.</td></tr>
+    <tr><td><strong>ORCID</strong></td><td>A public researcher ID. Two profiles with different ORCIDs are different people.</td></tr>
+    <tr><td><strong>Person network</strong></td><td>The citation network where each node is an author, and a link means one author's paper cites another's.</td></tr>
+    <tr><td><strong>Uncertain</strong></td><td>The rules could not decide. The profiles stay separate.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Why this matters</h2>
+
+<p>In the person network, each author is a node. A citation from one author's paper to another's creates a link. Leiden then groups authors who cite each other closely. That only works if each researcher is one node.</p>
+
+<p>When one researcher has several author records, the network is distorted in three ways:</p>
+
+<ul>
+  <li><strong>Split careers.</strong> A book, a chapter and a paper under three IDs look like three short careers.</li>
+  <li><strong>Inflated counts.</strong> The network reports more authors than there are.</li>
+  <li><strong>Broken links.</strong> A researcher's citations are spread across several nodes, which can change which group they fall into.</li>
+</ul>
+
+<p>This proof asks one question: can simple rules find these matches safely, without editing the source data?</p>
+
+<hr />
+
+<h2>How the method works</h2>
+
+<ol>
+  <li><strong>Find repeated names.</strong> Only names that appear on two or more profiles are compared. Matching is exact, ignoring capitals and extra spaces. Spelling variants are not matched.</li>
+  <li><strong>Gather evidence for each pair.</strong> See the table below.</li>
+  <li><strong>Decide each pair.</strong> The rules below are applied in order. The first rule that fits wins.</li>
+  <li><strong>Join matches into one person.</strong> If A matches B and B matches C, then A, B and C become one person. Uncertain pairs are never joined.</li>
+</ol>
+
+<h3>Evidence used</h3>
+
+<table>
+  <tbody>
+    <tr><th>Evidence</th><th>What we check</th></tr>
+    <tr><td>ORCID</td><td>Whether each profile carries an ORCID, and whether the ORCIDs match.</td></tr>
+    <tr><td>Shared paper</td><td>Whether both profiles are listed on the same paper.</td></tr>
+    <tr><td>Citations</td><td>Whether papers from one profile cite papers from the other, in either direction.</td></tr>
+    <tr><td>Shared coauthors</td><td>How many coauthors the two careers have in common.</td></tr>
+    <tr><td>Career years</td><td>The first and last year of each career. Coauthor matches need the years to overlap.</td></tr>
+  </tbody>
+</table>
+
+<h3>Decision rules</h3>
+
+<p>The rules are applied top to bottom. "Larger" means the profile with more papers. "Short" means 3 papers or fewer.</p>
+
+<ol>
+  <li>Different ORCIDs: <strong>different people</strong> (strong).</li>
+  <li>Same ORCID: <strong>same person</strong> (strong).</li>
+  <li>Both profiles are on one paper: <strong>same person</strong> (strong).</li>
+  <li>The larger profile cites a short profile: <strong>same person</strong> (strong).</li>
+  <li>A short profile cites the larger one, they share 3 or more coauthors, and their career years overlap: <strong>same person</strong> (medium).</li>
+  <li>A short profile shares 3 or more coauthors with the other, and their career years overlap: <strong>same person</strong> (medium).</li>
+  <li>Both profiles have 10 or more papers, and they share no paper, coauthor or citation: <strong>different people</strong> (medium).</li>
+  <li>Anything else: <strong>uncertain</strong>. The profiles stay separate.</li>
+</ol>
+
+<h3>Safety settings</h3>
+
+<table>
+  <tbody>
+    <tr><th>Setting</th><th>Value</th><th>What it protects against</th></tr>
+    <tr><td>Short profile limit</td><td>3 papers</td><td>A single citation absorbing a long career. Only very short profiles can be absorbed this way.</td></tr>
+    <tr><td>Coauthor threshold</td><td>3 coauthors</td><td>Two researchers who happen to share a name and one or two collaborators.</td></tr>
+    <tr><td>Substantial career</td><td>10 papers</td><td>Calling two profiles different people when one is only a short record.</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Proof of concept</h2>
+
+<h3>What we tested</h3>
+
+<ul>
+  <li><strong>Network:</strong> person-network run <code>20261023_114612</code>, built around four researchers: Axel Cleeremans, Daniel H. Robinson, Pietro Cipresso and Miguel Angel Gomez-Ruano. It includes one step of citations out from their papers.</li>
+  <li><strong>Scope:</strong> 86,355 profiles in total. Only names with more than one profile can merge. That is 1,745 names and 4,051 profiles, so only those were scored.</li>
+</ul>
+
+<h3>Headline results</h3>
+
+<table>
+  <tbody>
+    <tr><th>Measure</th><th>Result</th></tr>
+    <tr><td>Profiles in the network</td><td>86,355</td></tr>
+    <tr><td>People after the rules</td><td>85,674</td></tr>
+    <tr><td>Duplicate records removed</td><td>681 (0.8% of the network)</td></tr>
+    <tr><td>Repeated names: profiles to people</td><td>4,051 to 3,370 (16.8% fewer)</td></tr>
+    <tr><td>Profiles joined into people</td><td>1,241 profiles form 560 people</td></tr>
+    <tr><td>Profiles kept separate</td><td>2,810</td></tr>
+    <tr><td>Pairs compared</td><td>3,533</td></tr>
+    <tr><td>Merged groups with a conflict</td><td>0</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>What the rules decided</h2>
+
+<h3>Pairs</h3>
+
+<table>
+  <tbody>
+    <tr><th>Outcome</th><th>Pairs</th><th>What it means</th></tr>
+    <tr><td><strong>Same person</strong></td><td>717</td><td>Joined into one person.</td></tr>
+    <tr><td><strong>Different people</strong></td><td>289</td><td>Kept apart. 13 are strong (different ORCIDs). 276 are medium (two long careers with nothing in common).</td></tr>
+    <tr><td><strong>Uncertain</strong></td><td>2,527</td><td>Kept apart, because the rules could not decide.</td></tr>
+  </tbody>
+</table>
+
+<ac:structured-macro ac:name="note">
+  <ac:parameter ac:name="title">Most uncertain pairs are not missed matches</ac:parameter>
+  <ac:rich-text-body>
+    <p>In 2,203 of the 2,527 uncertain pairs, the smaller profile has 1 to 3 papers. Most have no shared paper, citation or coauthor, so there is little evidence that they are the same person.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>The 560 people formed</h3>
+
+<ul>
+  <li><strong>423</strong> are one long career (10+ papers) plus only short profiles. This is the usual case: a long career absorbs short records.</li>
+  <li><strong>118</strong> are short or mid-size profiles.</li>
+  <li><strong>19</strong> join two or more long careers. Sixteen of these share a paper. Three need a closer look: Albert A. Rizzo, Berthold Langguth and Kiyoshi Kiyokawa, whose long profiles cite the same short record.</li>
+</ul>
+
+<p>Most merged records are small. 686 of the 1,241 have a single paper, and 466 have 10 or more. The largest is Luigi Ferrucci, with 2,558 papers.</p>
+
+<h3>The four seed researchers</h3>
+
+<table>
+  <tbody>
+    <tr><th>Researcher</th><th>Profiles before</th><th>People after</th><th>What happened</th></tr>
+    <tr><td>Axel Cleeremans</td><td>5</td><td>1</td><td>Fully merged. The main profile (309 papers) absorbs four short records. Three are works it cites. The fourth is a 2018 paper that cites it and shares 6 coauthors.</td></tr>
+    <tr><td>Daniel H. Robinson</td><td>9</td><td>6</td><td>Partly merged. The main profile (124 papers) absorbs three records. Five others stay separate. See the callout below.</td></tr>
+    <tr><td>Pietro Cipresso</td><td>2</td><td>1</td><td>Fully merged. Both records are listed on one paper.</td></tr>
+    <tr><td>Miguel Angel Gomez-Ruano</td><td>1</td><td>1</td><td>Nothing to merge under the exact-name rule. Other spellings of his name are not compared.</td></tr>
+  </tbody>
+</table>
+
+<ac:structured-macro ac:name="warning">
+  <ac:parameter ac:name="title">Daniel H. Robinson: a known miss</ac:parameter>
+  <ac:rich-text-body>
+    <p>Five of his records stay separate. Each one cites his main profile once and shares fewer than 3 coauthors with it, so the rules do not join them. Reading the papers shows they are his: the titles are in his field, three are listed at the University of Texas at Arlington, and they cite his earlier work. The rules need to handle this case before the result is used.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>Profiles kept separate</h3>
+
+<p>Each of the 2,810 profiles is counted once, under the closest reason it was not joined. 434 long careers (100+ papers) were kept separate, compared with 265 of that size that were merged.</p>
+
+<table>
+  <tbody>
+    <tr><th>Profiles</th><th>Why they were kept separate</th></tr>
+    <tr><td>1,313</td><td>Nothing in common with other profiles of the same name, and one career has fewer than 10 papers.</td></tr>
+    <tr><td>402</td><td>Two long careers (10+ papers each) with no shared paper, citation or coauthor.</td></tr>
+    <tr><td>330</td><td>A short profile cites a longer one, but they share fewer than 3 coauthors.</td></tr>
+    <tr><td>235</td><td>A citation exists, but the smaller profile has more than 3 papers, so one citation is not enough.</td></tr>
+    <tr><td>230</td><td>The longer profile on the other side of the 330 above.</td></tr>
+    <tr><td>149</td><td>They share 1 or 2 coauthors, with no citations.</td></tr>
+    <tr><td>102</td><td>They share 3 or more coauthors, but their career years do not overlap.</td></tr>
+    <tr><td>21</td><td>Different ORCIDs.</td></tr>
+    <tr><td>17</td><td>A citation exists, but no rule accepts it.</td></tr>
+    <tr><td>11</td><td>They share 3 or more coauthors, with no citation, and the smaller profile has more than 3 papers.</td></tr>
+  </tbody>
+</table>
+
+<p>Examples the rules keep apart, shown for illustration. These were not audited one by one:</p>
+
+<table>
+  <tbody>
+    <tr><th>Name</th><th>AuthorId</th><th>Papers</th><th>Field and institution</th></tr>
+    <tr><td>Robert West</td><td><code>652835113368</code></td><td>861</td><td>Psychiatry and medicine, University College London</td></tr>
+    <tr><td>Robert West</td><td><code>42950262108</code></td><td>246</td><td>Artificial intelligence and the web, EPFL</td></tr>
+    <tr><td>Yang Liu</td><td><code>11277604923230865</code></td><td>1,187</td><td>Computer science and AI, Tsinghua University and others</td></tr>
+    <tr><td>Yang Liu</td><td><code>277644</code></td><td>166</td><td>Computer science, geometry and AI, Microsoft Research Asia and UT Dallas</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2>Limits</h2>
+
+<ul>
+  <li><strong>Exact names only.</strong> Spelling variants, initials and hyphens are not matched. Gomez-Ruano's other spellings stay separate, even where they share a paper with his main record.</li>
+  <li><strong>One direction is strict.</strong> A long career citing a short one is enough. The reverse needs 3 shared coauthors. This is the cause of the Robinson miss.</li>
+  <li><strong>One network.</strong> The 0.8% figure describes this network of 86,355 records. It is not a rate for all of AIRAK.</li>
+  <li><strong>Chained joins.</strong> Rizzo, Langguth and Kiyokawa are joined only because their long profiles cite the same short record. Check this before using the groups.</li>
+  <li><strong>No changes to source data.</strong> AIRAK IDs are unchanged. Leiden on this run still sees the separate records.</li>
+</ul>
+
+<hr />
+
+<h2>Next steps</h2>
+
+<ol>
+  <li><strong>Store person groups separately.</strong> Save a table that links each record to a person group, without editing AIRAK. Unjoined records stay as they are. The person network can then combine groups before clustering, and a bad group can be dropped without touching the source.</li>
+  <li><strong>Review the 19 long-career joins.</strong> Start with Rizzo, Langguth and Kiyokawa, which join through one shared short record.</li>
+  <li><strong>Sample the 386 short-cites-long pairs.</strong> This is where the Robinson miss sits. A reviewed sample will show whether the 3-coauthor threshold should stay, or whether affiliation and cited papers should be allowed to support a join.</li>
+  <li><strong>Allow spelling variants only where records already connect.</strong> For example, when two records share a paper or an ORCID. Do not fuzzy-match common names.</li>
+  <li><strong>Repeat on the next person network.</strong> Report the same measures: profiles before, people after, pair outcomes and conflicts. Recalculate before quoting 0.8% as the size of the problem.</li>
+</ol>
+
+<hr />
+
+<h2>Where the work lives</h2>
+
+<table>
+  <tbody>
+    <tr><th>Item</th><th>Location</th></tr>
+    <tr><td>Decision rules and checks</td><td><code>src/author_identity.py</code></td></tr>
+    <tr><td>Page source</td><td><code>docs/confluence-author-disambiguation.storage.html</code></td></tr>
+    <tr><td>Page publisher</td><td><code>scripts/create_author_disambiguation_confluence.py</code></td></tr>
+  </tbody>
+</table>
+
+<p><em>Disclaimer: This page was created with AI assistance.</em></p>

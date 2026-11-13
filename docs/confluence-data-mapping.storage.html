@@ -1,6 +1,57 @@
 <p>BigQuery reference for the scope-drift opportunity pipeline. For every table: its columns, the script that writes it, the scripts that read it, and its join keys. How the citation graph is built lives on <ac:link><ri:page ri:content-title="Citation Network" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Citation Network]]></ac:plain-text-link-body></ac:link>. How we judge in-scope vs out-of-scope for a journal lives on <ac:link><ri:page ri:content-title="Journal Scope Drift" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Journal Scope Drift]]></ac:plain-text-link-body></ac:link>.</p>
 
-<p>Table names are written as <code>&lt;run&gt;</code> throughout, because the pipeline writes a fresh set of tables on every citation run. <strong>The V1 tables</strong> section below resolves <code>&lt;run&gt;</code> to the actual names behind the current V1 slate.</p>
+<p>Table names are written as <code>&lt;run&gt;</code> throughout, because the pipeline writes a fresh set of tables on every citation run. <strong>The V1 tables</strong> section below resolves <code>&lt;run&gt;</code> to the actual names behind the current V1 slate. The stakeholder-facing views, and the column schema for each one, are on <ac:link><ri:page ri:content-title="Stakeholder view schema" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Stakeholder view schema]]></ac:plain-text-link-body></ac:link>.</p>
+
+<h2>Tables the current scripts write</h2>
+
+<p>Project <code>ocean-tech-adv-analytics-c-tfs</code>, location <code>EU</code>. <code>&lt;run&gt;</code> is the run timestamp, for example <code>20260827_081311</code>. A person run uses the same timestamp with <code>_person_</code> in the table name, and its ids do not join to a paper run.</p>
+
+<table>
+  <tbody>
+    <tr><th>Script</th><th>Dataset</th><th>Table</th><th>What it holds</th></tr>
+    <tr><td rowspan="4"><code>src/cwts_export.py</code></td><td rowspan="4"><code>raw_citation_network_data</code></td><td><code>pubs_raw_&lt;run&gt;</code></td><td>Paper nodes</td></tr>
+    <tr><td><code>pub_metadata_raw_&lt;run&gt;</code></td><td>Title, journal, year, publication id</td></tr>
+    <tr><td><code>cit_links_raw_&lt;run&gt;</code></td><td>Citation edges</td></tr>
+    <tr><td><code>run_metadata_&lt;run&gt;</code></td><td>Export settings</td></tr>
+    <tr><td><code>src/subprocess_leiden.py</code></td><td><code>raw_citation_network_data</code></td><td><code>classification_raw_&lt;run&gt;</code></td><td>One row per clustered paper: <code>micro</code>, <code>meso</code>, <code>macro</code></td></tr>
+    <tr><td rowspan="2"><code>src/build_unified_dashboard.py</code></td><td rowspan="2"><code>raw_citation_network_data</code></td><td><code>paper_scope_&lt;run&gt;</code></td><td>Scope verdict per scored paper and journal</td></tr>
+    <tr><td><code>journal_summary_&lt;run&gt;</code></td><td>One row per scored journal</td></tr>
+    <tr><td rowspan="3"><code>src/taxonomy_naming.py</code></td><td rowspan="3"><code>taxonomy_labelling</code></td><td><code>cluster_labels_&lt;level&gt;_&lt;run&gt;</code></td><td>One name per community. <code>&lt;level&gt;</code> is <code>macro</code>, <code>meso</code> or <code>micro</code></td></tr>
+    <tr><td><code>cluster_taxonomy_labels_&lt;level&gt;_&lt;run&gt;</code></td><td>Core and bleed taxonomy assignments</td></tr>
+    <tr><td><code>cluster_l2_topics_&lt;level&gt;_&lt;run&gt;</code></td><td>Top L2 topics and the L1 rollup</td></tr>
+    <tr><td rowspan="3"><code>src/read_model.py</code></td><td rowspan="3"><code>leiden_output</code></td><td><code>papers</code></td><td>Stable table. One row per paper per <code>run_timestamp</code></td></tr>
+    <tr><td><code>communities</code></td><td>Stable table. One row per community, level and run</td></tr>
+    <tr><td><code>journals</code></td><td>Stable table. One row per scored journal and run</td></tr>
+    <tr><td rowspan="6"><code>src/person_network_export.py</code> and <code>src/subprocess_leiden.py</code> with <code>NETWORK_ENTITY=person</code></td><td rowspan="6"><code>raw_citation_network_data_person</code></td><td><code>pubs_raw_person_&lt;run&gt;</code></td><td>Author nodes</td></tr>
+    <tr><td><code>pub_metadata_raw_person_&lt;run&gt;</code></td><td>Author id and name</td></tr>
+    <tr><td><code>cit_links_raw_person_&lt;run&gt;</code></td><td>Author citation edges</td></tr>
+    <tr><td><code>author_papers_person_&lt;run&gt;</code></td><td>Papers that put each author in the network</td></tr>
+    <tr><td><code>run_metadata_person_&lt;run&gt;</code></td><td>Export settings</td></tr>
+    <tr><td><code>classification_raw_person_&lt;run&gt;</code></td><td>One row per clustered author: <code>micro</code>, <code>meso</code>, <code>macro</code></td></tr>
+    <tr><td><code>src/taxonomy_naming.py</code> with <code>NETWORK_ENTITY=person</code></td><td><code>taxonomy_labelling</code></td><td>The same three label tables, suffixed with the person run id</td><td>Names author communities from the papers those authors wrote</td></tr>
+  </tbody>
+</table>
+
+<p><code>src/opportunities/</code> still writes the <code>opportunity_mapping</code> tables listed under <strong>The V1 tables</strong>. Those names keep the paper-run suffix.</p>
+
+<h2>Stakeholder views</h2>
+
+<p><code>scripts/build_clean_views.py</code> publishes read-only views in <code>clean_views</code>. They do not copy or change the tables above. Every view starts with <code>run_type</code> (<code>paper</code> or <code>person</code>) and <code>run_id</code>.</p>
+
+<table>
+  <tbody>
+    <tr><th>View</th><th>One row per</th></tr>
+    <tr><td><code>clean_views.runs</code></td><td>Run</td></tr>
+    <tr><td><code>clean_views.members</code></td><td>Clustered paper or author</td></tr>
+    <tr><td><code>clean_views.communities</code></td><td>Community, level and run</td></tr>
+    <tr><td><code>clean_views.paper_details</code></td><td>Clustered paper</td></tr>
+    <tr><td><code>clean_views.author_details</code></td><td>Clustered author</td></tr>
+    <tr><td><code>clean_views.paper_scope</code></td><td>Paper and journal scope verdict</td></tr>
+    <tr><td><code>clean_views.author_papers</code></td><td>Author on a paper in the person network</td></tr>
+  </tbody>
+</table>
+
+<p>Column definitions, keys and example filters are on <ac:link><ri:page ri:content-title="Stakeholder view schema" ri:space-key="DA" /><ac:plain-text-link-body><![CDATA[Stakeholder view schema]]></ac:plain-text-link-body></ac:link>.</p>
 
 <h2>Conventions</h2>
 
@@ -186,12 +237,13 @@ separate commands, not part of --phase all:
 <table>
   <tbody>
     <tr><th>Dataset</th><th>Table</th><th>Rows</th></tr>
-    <tr><td rowspan="6"><code>raw_citation_network_data</code></td><td><code>pubs_raw_20260827_081311</code></td><td>17,136,717</td></tr>
+    <tr><td rowspan="7"><code>raw_citation_network_data</code></td><td><code>pubs_raw_20260827_081311</code></td><td>17,136,717</td></tr>
     <tr><td><code>cit_links_raw_20260827_081311</code></td><td>190,644,060</td></tr>
     <tr><td><code>pub_metadata_raw_20260827_081311</code></td><td>17,136,717</td></tr>
     <tr><td><code>classification_raw_20260827_081311</code></td><td>16,683,447</td></tr>
     <tr><td><code>run_metadata_20260827_081311</code></td><td>1</td></tr>
-    <tr><td><code>paper_scope_20260827_081311</code></td><td>17,768</td></tr>
+    <tr><td><code>paper_scope_20260827_081311</code></td><td>565,378</td></tr>
+    <tr><td><code>journal_summary_20260827_081311</code></td><td>418</td></tr>
     <tr><td rowspan="8"><code>taxonomy_labelling</code></td><td><code>cluster_labels_macro_20260827_081311</code></td><td>19</td></tr>
     <tr><td><code>cluster_labels_meso_20260827_081311</code></td><td>402</td></tr>
     <tr><td><code>cluster_labels_micro_20260827_081311</code></td><td>2,988</td></tr>
@@ -1226,7 +1278,7 @@ ORDER BY f.shortlist_rank]]></ac:plain-text-body>
     <tr><td><code>core_pub</code> is constant</td><td>Set to <code>1</code> on every <code>pubs_raw</code> row, so it cannot separate seed from neighbour papers. Use <code>pub_metadata_raw.is_frontiers</code>.</td></tr>
     <tr><td><code>persist_ok</code> is two different columns</td><td><code>volume.persist_ok</code> means the community appears across enough years. <code>decisions.persist_ok</code> means the same launch call was made in the previous run.</td></tr>
     <tr><td><code>launches</code> filters on <code>call</code></td><td>Not <code>call_effective</code>, so unconfirmed proposals are included. Check <code>pending_persist</code>.</td></tr>
-    <tr><td><code>paper_scope</code> is partial</td><td>17,768 rows against 282,689 papers. Unassessed papers default to in scope, so <code>oos_pct</code> understates drift for journals the dashboard does not cover.</td></tr>
+    <tr><td><code>paper_scope</code> is partial</td><td>565,378 rows on run <code>20260827_081311</code>. It covers the journals the dashboard scored, and one paper can have more than one row. Unassessed papers are absent, not marked in scope.</td></tr>
     <tr><td>Growth is fragile</td><td>The run spans 2023&ndash;2026, so community growth is a three-step ratio. Check <code>growth_reliable</code> before quoting a CAGR.</td></tr>
     <tr><td>Leiden IDs are run-local</td><td>Community IDs carry no meaning across runs. Join through <code>community_matches</code>.</td></tr>
     <tr><td>Missing table means no rows</td><td><code>bq.write_table</code> deletes rather than writing an empty table.</td></tr>
