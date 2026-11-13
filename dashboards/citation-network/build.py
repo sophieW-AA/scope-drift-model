@@ -12,7 +12,7 @@ TABLES = [
     (f"{P}.airak_v2.Journal", "", "Journal names"),
 ]
 STEPS = [
-    ("Size-adjusted link strength (Python)", "Community map lines, Network macro view lines, macro cards' \"most linked groups\"",
+    ("Size-adjusted link strength (Python)", "Community map lines, Network macro view lines",
      "For each pair of communities a and b: strength = w(a,b) / (s(a) × s(b)) × W, where w is the summed link weight between them, s is each community's total weight to other communities, and W is the total across all pairs. 3× means their authors cite each other three times as much as their sizes predict. Links inside a community are left out."),
     ("Community map layout (Python)", "Community map positions",
      f"The map shows the 27 macro communities. Bubbles are placed by metric MDS (scikit-learn, best of 8 seeds) on all 351 macro pairs, with distance = 1/sqrt(strength), so strongly linked macros sit closer. On a flat page this fits only roughly: distance and strength have a rank correlation of {small['rho']}. Solid lines are links above 0.9×; dotted lines are each macro's 3 strongest links when below 0.9×. Line thickness = 2.2 px per 1× of strength."),

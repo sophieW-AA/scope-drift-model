@@ -14,6 +14,7 @@ dotted lines = each macro's 3 strongest neighbours), **Network** (macro → meso
 | `export.py` | Runs all BigQuery queries and writes the data to `/home/user/cn/` (about 35 GB billed, 1–2 minutes). Records each query in `cn/queries.json` for the Data tab. |
 | `template.html` | The dashboard page (HTML, CSS, D3 code) with placeholders for the data. |
 | `build.py` | Gzips the data, embeds it in the template and writes `artifacts/citation-network/index.html` (~25 MB). |
+| `make_sample.py` | Writes a small data sample (macros 0 and 2) so tests fit in memory. |
 | `test_dashboard.js` | Runs every view against the real data in jsdom (`npm install jsdom@24 d3@7`, then `node test_dashboard.js`). |
 
 ## Rebuild
@@ -21,7 +22,8 @@ dotted lines = each macro's 3 strongest neighbours), **Network** (macro → meso
 ```bash
 python3 export.py      # needs GOOGLE_APPLICATION_CREDENTIALS; billing project gcp-innovation-hub
 python3 build.py
-node --max-old-space-size=650 test_dashboard.js
+python3 make_sample.py
+node --max-old-space-size=400 test_dashboard.js
 ```
 
 Run each step as its own process, not inside a long-lived notebook kernel: a 1 GB workspace runs out of

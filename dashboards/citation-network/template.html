@@ -125,29 +125,19 @@ svg text{font-size:9px;fill:#333;pointer-events:none}
         <select id="fmacro"></select>
         <div class="flab">Sub-group (meso)</div>
         <select id="fmeso"></select>
-        <div class="fhelp">Authors are grouped in 3 levels: 27 large groups (macro) split into 250 sub-groups (meso), which split into 777 small groups (micro). Pick a group to see what's inside it.</div>
+        <div class="fhelp">Large groups split into sub-groups, which split into small groups.</div>
         <div class="lhead" id="lhead"></div>
       </div>
       <div class="list" id="list"></div>
     </div>
     <div class="right">
-      <div id="macov" style="display:none">
-        <div class="info">The 27 large groups (macro) of Frontiers authors. Click a card's <b>Open network</b>, or a group in the list, to see inside it.</div>
-        <div style="padding:6px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <select id="msort" style="padding:7px;font-size:14px"><option value="n">Sort by authors</option><option value="np">Sort by papers</option><option value="intra">Sort by internal citation share</option><option value="id">Sort by macro number</option></select>
-          <input id="mfilt" placeholder="Filter by journal, e.g. psychology" style="padding:7px;font-size:14px;width:260px;border:1px solid #bbb;border-radius:5px">
-          <span class="muted" id="msum"></span>
-        </div>
-        <svg id="mbar" width="100%" height="230"></svg>
-        <div id="mcards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;padding:12px 0 24px"></div>
-      </div>
       <div id="netpane">
         <div class="info" id="cinfo"></div>
         <div class="muted" id="cjr" style="font-size:13px"></div>
         <div id="cgroups" style="font-size:13px;margin:4px 0"></div>
         <svg id="csvg" width="100%" height="820"></svg>
-        <div class="legend"><i style="background:#0b3fd9"></i>Citation only &nbsp; <i style="background:#2a9d8f"></i>Citation and coauthorship<br>Macro: every small group (micro), grouped by sub-group. Sub-group: top authors grouped by small group. Small group: top authors grouped by who links to whom. Links are bundled between groups; thickness is connection weight. Faded, grey-labeled authors have no details page.</div>
-        <table id="ctab"></table>
+        <div class="legend"><i style="background:#0b3fd9"></i>Citation only &nbsp; <i style="background:#2a9d8f"></i>Also coauthors &nbsp; · Thickness = connection weight · Faded people have no details page</div>
+        <details style="margin-top:10px"><summary style="cursor:pointer;color:#0b3fd9">Show as a table</summary><table id="ctab"></table></details>
       </div>
     </div>
   </div>
@@ -221,45 +211,33 @@ const L={macro:"Macro",meso:"Meso",micro:"Micro"};
 let cur={lvl:"macro",id:null};
 function init(){
   META=DATA.meta;
-  const fm=d3.select("#fmacro"); fm.append("option").attr("value","").text("All 27 large groups");
+  const fm=d3.select("#fmacro");
   META.macro.slice().sort((a,b)=>a.id-b.id).forEach(m=>fm.append("option").attr("value",m.id).text(`Macro ${m.id} · ${fmt(m.n)} authors`));
   fillMeso();
-  document.getElementById("fmacro").onchange=e=>{fillMeso();const v=e.target.value;if(v!=="")openComm("macro",+v,true);else resetComm();};
-  document.getElementById("fmeso").onchange=e=>{const v=e.target.value,mac=document.getElementById("fmacro").value;if(v!=="")openComm("meso",+v,true);else if(mac!=="")openComm("macro",+mac,true);};
-  document.getElementById("msort").onchange=renderMacros;
-  document.getElementById("mfilt").oninput=renderMacros;
+  document.getElementById("fmacro").onchange=e=>openComm("macro",+e.target.value);
+  document.getElementById("fmeso").onchange=e=>{const v=e.target.value,mac=document.getElementById("fmacro").value;if(v!=="")openComm("meso",+v);else openComm("macro",+mac);};
   document.getElementById("ecount").onchange=renderEgo;
   document.getElementById("ecross").onchange=renderEgo;
   document.getElementById("go").onclick=search;
   document.getElementById("q").onkeydown=e=>{if(e.key==="Enter")search();};
   document.querySelectorAll(".qcopy").forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(document.getElementById(b.dataset.q).textContent).then(()=>{b.textContent="Copied";setTimeout(()=>b.textContent="Copy SQL",1200);});});
-  showMacroOverview();
+  openComm("macro",META.macro.slice().sort((a,b)=>b.n-a.n)[0].id);
   show("map");
 }
 function fillMeso(){
   const mac=document.getElementById("fmacro").value, fs=d3.select("#fmeso"); fs.selectAll("*").remove();
-  fs.property("disabled",mac==="");
-  fs.append("option").attr("value","").text(mac===""?"Pick a large group first":"All sub-groups in this macro");
-  META.meso.filter(m=>mac!==""&&m.macro==+mac).sort((a,b)=>b.n-a.n).forEach(m=>fs.append("option").attr("value",m.id).text(`Meso ${m.id} · ${fmt(m.n)} authors`));
+  fs.append("option").attr("value","").text("Whole large group");
+  META.meso.filter(m=>m.macro==+mac).sort((a,b)=>b.n-a.n).forEach(m=>fs.append("option").attr("value",m.id).text(`Meso ${m.id} · ${fmt(m.n)} authors`));
 }
 function renderList(){
   const mac=document.getElementById("fmacro").value, mes=document.getElementById("fmeso").value;
-  const lv=mes!==""?"micro":mac!==""?"meso":"macro";
-  let a=META[lv].filter(c=>lv==="macro"||(lv==="meso"?c.macro==+mac:c.meso==+mes)).slice().sort((x,y)=>y.n-x.n);
-  document.getElementById("lhead").textContent=lv==="macro"?`All ${a.length} large groups (macro), biggest first`:lv==="meso"?`${a.length} sub-groups (meso) in Macro ${mac}`:`${a.length} small groups (micro) in Meso ${mes}`;
+  const lv=mes!==""?"micro":"meso";
+  let a=META[lv].filter(c=>lv==="meso"?c.macro==+mac:c.meso==+mes).slice().sort((x,y)=>y.n-x.n);
+  document.getElementById("lhead").textContent=lv==="meso"?`${a.length} sub-groups in Macro ${mac}`:`${a.length} small groups in Meso ${mes}`;
   const mx=d3.max(a,c=>c.n)||1;
   d3.select("#list").selectAll(".item").data(a,c=>lv+c.id).join("div").attr("class","item")
     .classed("sel",c=>cur.lvl===lv&&cur.id===c.id).on("click",(e,c)=>openComm(lv,c.id,true))
     .html(c=>`<div class="t">${L[lv]} ${c.id}</div><div class="s">${fmt(c.n)} authors · ${(100*c.n/META.total).toFixed(1)}%${topJ(c)?" · "+esc(topJ(c)):""}</div><div class="bar"><i style="width:${Math.max(2,100*c.n/mx)}%"></i></div>`);
-}
-function paneNet(){document.getElementById("macov").style.display="none";document.getElementById("netpane").style.display="";}
-function resetComm(){document.getElementById("fmacro").value="";fillMeso();showMacroOverview();}
-function showMacroOverview(){
-  document.getElementById("fmacro").value=""; fillMeso();
-  cur={lvl:"macro",id:null}; renderList();
-  document.getElementById("crumbs").innerHTML='<a onclick="resetComm()">All large groups</a>';
-  document.getElementById("netpane").style.display="none"; document.getElementById("macov").style.display="";
-  renderMacros();
 }
 function openComm(lv,id,keep){
   const c=META[lv].find(x=>x.id===id); if(!c) return;
@@ -267,8 +245,8 @@ function openComm(lv,id,keep){
   if(lv==="macro"){fm.value=String(id);fillMeso();}
   else if(lv==="meso"){fm.value=String(c.macro);fillMeso();fs.value=String(id);}
   else {fm.value=String(c.macro);fillMeso();fs.value=String(c.meso);}
-  cur={lvl:lv,id}; renderList(); show("net"); paneNet();
-  const cr=[`<a onclick="resetComm()">All large groups</a>`];
+  cur={lvl:lv,id}; renderList(); show("net");
+  const cr=[];
   if(lv!=="macro") cr.push(`<a onclick="openComm('macro',${c.macro})">Macro ${c.macro}</a>`);
   if(lv==="micro") cr.push(`<a onclick="openComm('meso',${c.meso})">Meso ${c.meso}</a>`);
   cr.push(`<b>${L[lv]} ${id}</b>`);
@@ -379,57 +357,6 @@ function drawGrouped(S){
       (groups.length>shown.length?` <span class="muted">+${groups.length-shown.length} smaller groups</span>`:""));
   d3.select("#cgroups").selectAll(".gchip").on("mouseover",function(){hl(new Set(groups[+this.dataset.i].a.map(d=>d.id)));})
     .on("mouseout",()=>hl(null)).on("click",function(){const G=groups[+this.dataset.i];if(S.groupClick&&G.k>=0)S.groupClick(G.k);});
-}
-
-/* ---------- Macro overview ---------- */
-function macroRows(){
-  const S=DATA.mstats, links={};
-  DATA.mall.forEach(([a,b,s])=>{(links[a]=links[a]||[]).push([b,s]);(links[b]=links[b]||[]).push([a,s]);});
-  return META.macro.map(m=>({id:m.id,n:m.n,j:m.j,np:(S[m.id]||{}).np||0,intra:(S[m.id]||{}).intra||0,
-    nmeso:META.meso.filter(x=>x.macro===m.id).length,nmicro:META.micro.filter(x=>x.macro===m.id).length,
-    top:(DATA.mtop[m.id]||[]),lk:(links[m.id]||[]).sort((x,y)=>y[1]-x[1])}));
-}
-function renderMacros(){
-  const so=document.getElementById("msort").value, f=document.getElementById("mfilt").value.trim().toLowerCase();
-  let rows=macroRows();
-  if(f) rows=rows.filter(r=>r.j.some(j=>j[0].toLowerCase().includes(f)));
-  rows.sort((a,b)=>so==="id"?a.id-b.id:b[so]-a[so]);
-  document.getElementById("msum").textContent=`${rows.length} of ${META.macro.length} groups · ${fmt(d3.sum(rows,r=>r.n))} authors`;
-  const svg=d3.select("#mbar"); svg.selectAll("*").remove();
-  const W=svg.node().clientWidth||1000,H=230,m={l:44,r:10,t:10,b:40};
-  const x=d3.scaleBand().domain(rows.map(r=>r.id)).range([m.l,W-m.r]).padding(.15);
-  const key=so==="id"?"n":so, y=d3.scaleLinear().domain([0,d3.max(rows,r=>r[key])||1]).nice().range([H-m.b,m.t]);
-  svg.append("g").attr("transform",`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(key==="intra"?d=>d+"%":d3.format("~s")));
-  svg.append("g").attr("transform",`translate(0,${H-m.b})`).call(d3.axisBottom(x).tickFormat(d=>d)).selectAll("text").style("font-size","10px");
-  svg.append("text").attr("x",m.l).attr("y",H-6).style("font-size","11px").attr("fill","#666").text(`Macro number · bar = ${key==="np"?"papers":key==="intra"?"internal citation share":"authors"}`);
-  svg.append("g").selectAll("rect").data(rows).join("rect").attr("x",r=>x(r.id)).attr("width",x.bandwidth())
-    .attr("y",r=>y(r[key])).attr("height",r=>y(0)-y(r[key])).attr("fill",r=>macroCol(r.id)).style("cursor","pointer")
-    .on("mousemove",(e,r)=>showTip(e,`<b>Macro ${r.id}</b> · ${esc(r.j[0]?r.j[0][0]:"")}<br>${fmt(r.n)} authors · ${fmt(r.np)} papers<br>${r.intra}% of citation stays inside`))
-    .on("mouseout",hideTip).on("click",(e,r)=>flashCard(r.id));
-  d3.select("#mcards").selectAll(".mc").data(rows,r=>r.id).join("div").attr("class","mc").attr("id",r=>"mc"+r.id).html(r=>`
-    <h3><i style="background:${macroCol(r.id)}"></i>Macro ${r.id}</h3>
-    <div class="sub">${esc(r.j[0]?r.j[0][0]:"No journal data")}</div>
-    <div class="stats">
-      <div><b>${fmt(r.n)}</b><small>authors · ${(100*r.n/META.total).toFixed(1)}%</small></div>
-      <div><b>${fmt(r.np)}</b><small>papers</small></div>
-      <div><b>${r.intra}%</b><small>citation kept inside</small></div>
-      <div><b>${r.nmeso}</b><small>sub-groups (meso)</small></div>
-      <div><b>${r.nmicro}</b><small>small groups (micro)</small></div>
-      <div><b>${(r.np/Math.max(r.n,1)).toFixed(2)}</b><small>papers per author</small></div>
-    </div>
-    <div class="sec">Top journals</div>
-    <div>${r.j.map(j=>`${esc(j[0])} <span class="muted">(${fmt(j[1])})</span>`).join("<br>")}</div>
-    <div class="sec">Most connected authors</div>
-    <div>${r.top.map(i=>hasD(i)?`<a onclick="openAuthor(${i})">${esc(nbName(i))}</a>`:esc(nbName(i))).join(" · ")||'<span class="muted">none</span>'}</div>
-    <div class="sec">Most linked groups (size-adjusted)</div>
-    <div>${r.lk.slice(0,5).map(t=>`<a onclick="flashCard(${t[0]})">Macro ${t[0]}</a> <span class="muted">${t[1]}×</span>`).join(" · ")}</div>
-    <div class="btns"><button class="p" onclick="openComm('macro',${r.id})">Open network</button><button onclick="show('map')">Show on map</button></div>`);
-}
-function flashCard(id){
-  let el=document.getElementById("mc"+id);
-  if(!el){document.getElementById("mfilt").value="";renderMacros();el=document.getElementById("mc"+id);}
-  if(!el) return;
-  el.scrollIntoView({behavior:"smooth",block:"center"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),1500);
 }
 
 /* ---------- Details ---------- */
