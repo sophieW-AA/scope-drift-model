@@ -1,0 +1,35 @@
+const fs=require('fs'),zlib=require('zlib'),{JSDOM}=require('jsdom');
+const h=fs.readFileSync('process.env.PAGE||'/home/user/page_nodata.html'','utf8');
+const html=h.replace(/<script src="https:\/\/cdn[^>]*><\/script>/,'').replace(/<script>window\.__BLOB=[\s\S]*?<\/script>/,'');
+const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+const dom=new JSDOM(html.replace(/<script>[\s\S]*?<\/script>/g,''),{runScripts:'outside-only',pretendToBeVisual:true});
+const w=dom.window; w.eval(fs.readFileSync('node_modules/d3/dist/d3.min.js','utf8'));
+w.__DATA=JSON.parse(zlib.gunzipSync(fs.readFileSync(process.env.BLOB||'/home/user/sample.gz')).toString());
+w.__log=(...a)=>console.log(...a);
+let code=scripts.join('\n').replace(/loadData\(\)\.then\([\s\S]*$/,'');
+code+=`
+DATA=window.__DATA;
+const step=(n,f)=>{try{f();__log('OK',n);}catch(e){__log('FAIL',n,'->',String(e.stack).split('\\n').slice(0,3).join(' | '));}};
+const q=s=>document.querySelector(s), qa=s=>document.querySelectorAll(s);
+step('init',()=>init());
+const tr=()=>q('#trail').textContent.split(String.fromCharCode(10)).join(' ').trim(), on=()=>[...qa('.view.on')].map(v=>v.id).join(',');
+__log('  tabs:',[...qa('.tab')].map(x=>x.textContent).join(' | '));
+__log('  ['+on()+'] '+tr());
+step('click macro 2 on map',()=>zoomMap(2,false));
+__log('  ['+on()+'] '+tr());
+step('click a sub-group',()=>q('#msvg circle.mb').dispatchEvent(new window.MouseEvent('click',{bubbles:true})));
+__log('  ['+on()+'] '+tr(),'| greyed',[...qa('#csvg circle')].filter(c=>c.getAttribute('fill-opacity')=='0.3').length,'of',qa('#csvg circle').length);
+step('click a person',()=>{const n=[...qa('#csvg circle')].find(c=>c.getAttribute('fill-opacity')!='0.3').parentNode;n.dispatchEvent(new window.MouseEvent('click'));});
+__log('  ['+on()+'] '+tr());
+step('trail: click Meso crumb',()=>eval([...qa('#trail a')].find(a=>/Meso/.test(a.textContent)).getAttribute('onclick')));
+__log('  ['+on()+'] '+tr());
+step('trail: click Macro crumb',()=>eval([...qa('#trail a')].find(a=>/Macro/.test(a.textContent)).getAttribute('onclick')));
+__log('  ['+on()+'] '+tr());
+step('trail: click All',()=>eval([...qa('#trail a')].find(a=>/All/.test(a.textContent)).getAttribute('onclick')));
+__log('  ['+on()+'] '+tr());
+step('author tab empty',()=>{EGO=null;show('det');});
+__log('  ['+on()+'] '+tr());
+step('data tab hides trail',()=>show('data'));
+__log('  trail display:',q('#trail').style.display,'| query titles:',[...qa('.qcard .qh b')].map(b=>b.textContent.slice(3,40)).join(' / '));
+`;
+try{w.eval(code);}catch(e){console.log('TOP',e.stack.split('\n').slice(0,3).join(' | '));}

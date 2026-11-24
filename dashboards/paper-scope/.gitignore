@@ -1,0 +1,7 @@
+# Built pages and data contain journal-level results and paper titles: never commit them (this repo is public).
+out/
+cache_*/
+*.parquet
+*.pkl
+network_bubbles_*.html
+node_modules/
