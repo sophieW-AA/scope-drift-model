@@ -159,6 +159,12 @@ L1_DEPTH_FULL = 0.35
 L1_DEPTH_PARTIAL = 0.10
 L1_ARTICLE_SHARE_FLOOR = 0.010
 
+# Below this lead, a broad L0 field is offered alongside the L1s. The model
+# uses the L0 only when the L1s do not describe the community. Fields under
+# L0_SHARE_FLOOR are left out, so a retry cannot fall back to a tiny field.
+L1_LEAD_MARGIN = 0.01
+L0_SHARE_FLOOR = 0.10
+
 # L2 topics kept per community. The v6 CORE_TOPIC spine has ~47.8k L2 terms
 # under 2,272 L1 terms, so the L1 name alone is reused across many clusters
 # ("Cardiology" lands on many separate micro clusters). L2 is the level at
@@ -788,6 +794,59 @@ def aggregate_to_higher_levels(df_l2_counts: pd.DataFrame):
 # ══════════════════════════════════════════════════════════════════════════════
 # 7. BUILD CANDIDATE HIERARCHY
 # ══════════════════════════════════════════════════════════════════════════════
+def _l1_lead_margin(journal_id: int) -> float:
+    """How far the leading L1 sits ahead of the runner-up, as a share of mass."""
+    if df_l2_raw is None or df_l2_raw.empty or "community_id" not in df_l2_raw.columns:
+        return 0.0
+    rows = df_l2_raw[df_l2_raw["community_id"] == journal_id]
+    if rows.empty:
+        return 0.0
+    by_l1 = rows.groupby("l1_taxref")["n_articles"].sum().sort_values(ascending=False)
+    total = float(by_l1.sum())
+    if total <= 0 or by_l1.empty:
+        return 0.0
+    top = float(by_l1.iloc[0]) / total
+    second = float(by_l1.iloc[1]) / total if len(by_l1) > 1 else 0.0
+    return round(top - second, 4)
+
+
+def _l0_candidates_by_papers(journal_id: int) -> list:
+    """L0 fields for one community, ranked by taxonomy-assignment mass."""
+    if df_l2_raw is None or df_l2_raw.empty:
+        return []
+    rows = df_l2_raw[df_l2_raw["community_id"] == journal_id].dropna(subset=["l0_taxref"])
+    if rows.empty:
+        return []
+    by_l0 = (
+        rows.groupby(["l0_taxref", "l0_name"], dropna=False)["n_articles"]
+        .sum()
+        .reset_index()
+        .sort_values(["n_articles", "l0_taxref"], ascending=[False, True])
+    )
+    total = float(by_l0["n_articles"].sum())
+    candidates = []
+    for _, lr in by_l0.iterrows():
+        n_articles = int(lr["n_articles"])
+        share = (n_articles / total) if total > 0 else 0.0
+        if n_articles <= 0 or share < L0_SHARE_FLOOR:
+            continue
+        candidates.append(
+            {
+                "level": "l0_domain",
+                "key": f"l0_{int(lr['l0_taxref'])}",
+                "name": str(lr["l0_name"]),
+                "n_l1s_total": 0,
+                "n_active_l1s": 0,
+                "n_full_l1s": 0,
+                "frac_active": None,
+                "paper_share": round(share, 4),
+                "n_articles": n_articles,
+                "clusters": [],
+            }
+        )
+    return candidates
+
+
 def build_candidates(journal_id: int) -> dict:
     """Build non-overlapping candidate hierarchy for one community."""
     profile = profiles.get(journal_id, {})
@@ -872,6 +931,29 @@ def build_candidates(journal_id: int) -> dict:
             }
         )
 
+    # A wide community never clears the gate above, so its brief has no broad
+    # field and the model is left naming it from a single L1. When no L1
+    # actually leads, replace that list with every L0 ranked by paper mass.
+    lead_margin = _l1_lead_margin(journal_id)
+    prefer_l0 = lead_margin < L1_LEAD_MARGIN
+    if prefer_l0:
+        by_papers = _l0_candidates_by_papers(journal_id)
+        if by_papers:
+            surfaced_l0s = by_papers
+            log.info(
+                "Community %s: L1 lead margin %.4f < %.2f, offering %d L0 fields with share >= %.0f%% (%s)",
+                journal_id,
+                lead_margin,
+                L1_LEAD_MARGIN,
+                len(by_papers),
+                L0_SHARE_FLOOR * 100,
+                ", ".join(
+                    f"{c['name']} {c['paper_share']:.0%}" for c in by_papers[:5]
+                ),
+            )
+        else:
+            prefer_l0 = False
+
     # Step D: L2 cluster fallback for niche communities
     is_niche = (
         not surfaced_l0s
@@ -928,6 +1010,8 @@ def build_candidates(journal_id: int) -> dict:
             df_scope[df_scope["journal_id"] == journal_id].shape[0]
         ),
         "_l2_fallback": l2_fallback,
+        "prefer_l0": prefer_l0,
+        "l1_lead_margin": lead_margin,
     }
 
 
@@ -981,6 +1065,18 @@ def format_brief(brief: dict, journal_name: str, used_labels: set = None) -> str
         "",
     ]
 
+    if brief.get("prefer_l0") and brief.get("l0_domains"):
+        lines.append(
+            "The leading L1 is only "
+            f"{brief.get('l1_lead_margin')} ahead of the next, so one discipline "
+            "may not name this community. L0 fields listed below each hold at least "
+            f"{L0_SHARE_FLOOR:.0%} of its papers. "
+            "Put an L0 first in core only when the L1 candidates do not describe "
+            "the community as a whole. When an L1 does describe it, put that L1 first. "
+            "Do not name the community with a field that holds few of its papers."
+        )
+        lines.append("")
+
     # Option 1: Add warning about already-used labels
     if used_labels:
         used_names = sorted(set(name for _, name in used_labels))
@@ -997,8 +1093,10 @@ def format_brief(brief: dict, journal_name: str, used_labels: set = None) -> str
     if brief["l0_domains"]:
         lines.append("### L0 Domain candidates")
         for d in sorted(brief["l0_domains"], key=lambda x: -x["n_articles"]):
+            share = d.get("paper_share")
+            share_txt = f"  share={share:.1%}" if isinstance(share, float) else ""
             lines.append(
-                f"  key={d['key']}  name='{d['name']}'  articles={d['n_articles']:,}"
+                f"  key={d['key']}  name='{d['name']}'  articles={d['n_articles']:,}{share_txt}"
             )
         lines.append("")
 
@@ -1067,7 +1165,17 @@ def call_llm(
     # Option 4: Stronger uniqueness instruction for retry pass
     if force_unique and used_labels:
         used_names = [name for _, name in used_labels]
-        system += f"\n\nIMPORTANT: The following labels are ALREADY ASSIGNED to other communities and must NOT be used: {', '.join(used_names[:20])}. Choose more specific alternatives."
+        system += (
+            "\n\nIMPORTANT: The following labels are ALREADY ASSIGNED to other "
+            f"communities and must NOT be used: {', '.join(used_names[:20])}. "
+        )
+        if brief.get("prefer_l0"):
+            system += (
+                "Name this community with the L1 that best describes it. "
+                "Do not replace a taken broad field with a different broad field."
+            )
+        else:
+            system += "Choose more specific alternatives."
 
     try:
         resp = oai.chat.completions.create(
